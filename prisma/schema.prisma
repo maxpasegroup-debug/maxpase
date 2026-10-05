@@ -1,0 +1,1619 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model SecurityRateBucket {
+  id          String   @id @default(cuid())
+  key         String
+  windowStart DateTime
+  expiresAt   DateTime
+  count       Int      @default(0)
+
+  @@unique([key, windowStart])
+  @@index([expiresAt])
+}
+
+model Integration {
+  id                  String                 @id @default(cuid())
+  organizationId      String
+  organization        Organization           @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  creatorUserId       String
+  creator             User                   @relation(fields: [creatorUserId], references: [id], onDelete: Restrict)
+  name                String
+  channel             String
+  provider            String
+  status              String                 @default("NOT_CONFIGURED")
+  enabled             Boolean                @default(false)
+  configuration       String
+  credentialReference String?
+  version             Int                    @default(0)
+  messages            CommunicationMessage[]
+  events              IntegrationEvent[]
+  threads             CommunicationThread[]
+  createdAt           DateTime               @default(now())
+  updatedAt           DateTime               @updatedAt
+
+  @@index([organizationId, channel, status])
+}
+
+model CommunicationPolicy {
+  projectId      String?
+  project        Project?               @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  controlPoint   ControlPoint           @relation(fields: [controlPointId], references: [id], onDelete: Restrict)
+  id             String                 @id @default(cuid())
+  organizationId String
+  organization   Organization           @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  name           String
+  status         String                 @default("ACTIVE")
+  configuration  String
+  controlPointId String
+  messages       CommunicationMessage[]
+  createdAt      DateTime               @default(now())
+  updatedAt      DateTime               @updatedAt
+
+  @@index([organizationId, status])
+}
+
+model CommunicationConsent {
+  id             String                 @id @default(cuid())
+  organizationId String
+  organization   Organization           @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  personId       String
+  person         Person                 @relation(fields: [personId], references: [id], onDelete: Restrict)
+  channel        String
+  address        String
+  status         String
+  source         String
+  recordedAt     DateTime               @default(now())
+  version        Int                    @default(0)
+  messages       CommunicationMessage[]
+  createdAt      DateTime               @default(now())
+  updatedAt      DateTime               @updatedAt
+
+  @@unique([organizationId, personId, channel])
+  @@unique([organizationId, channel, address])
+}
+
+model CommunicationTemplate {
+  id             String                 @id @default(cuid())
+  organizationId String
+  organization   Organization           @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  ownerPersonId  String
+  owner          Person                 @relation(fields: [ownerPersonId], references: [id], onDelete: Restrict)
+  key            String
+  name           String
+  purpose        String
+  channel        String
+  subject        String?
+  body           String
+  variables      String
+  status         String                 @default("ACTIVE")
+  version        Int
+  messages       CommunicationMessage[]
+  createdAt      DateTime               @default(now())
+  updatedAt      DateTime               @updatedAt
+
+  @@unique([organizationId, key, version])
+}
+
+model CommunicationThread {
+  id             String                 @id @default(cuid())
+  organizationId String
+  organization   Organization           @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  projectId      String?
+  project        Project?               @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  integrationId  String
+  integration    Integration            @relation(fields: [integrationId], references: [id], onDelete: Restrict)
+  resourceType   String
+  resourceId     String
+  channel        String
+  participants   String
+  reference      String                 @unique
+  status         String                 @default("OPEN")
+  priority       String                 @default("NORMAL")
+  lastActivityAt DateTime               @default(now())
+  metadata       String?
+  messages       CommunicationMessage[]
+  createdAt      DateTime               @default(now())
+  updatedAt      DateTime               @updatedAt
+
+  @@index([organizationId, projectId, lastActivityAt])
+}
+
+model CommunicationMessage {
+  creatorPerson     Person?                @relation(fields: [creatorPersonId], references: [id], onDelete: Restrict)
+  sia               SiaIdentity?           @relation(fields: [siaId], references: [id], onDelete: Restrict)
+  id                String                 @id @default(cuid())
+  organizationId    String
+  organization      Organization           @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  projectId         String?
+  project           Project?               @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  threadId          String
+  thread            CommunicationThread    @relation(fields: [threadId], references: [id], onDelete: Restrict)
+  integrationId     String
+  integration       Integration            @relation(fields: [integrationId], references: [id], onDelete: Restrict)
+  policyId          String?
+  policy            CommunicationPolicy?   @relation(fields: [policyId], references: [id], onDelete: Restrict)
+  consentId         String
+  consent           CommunicationConsent   @relation(fields: [consentId], references: [id], onDelete: Restrict)
+  templateId        String?
+  template          CommunicationTemplate? @relation(fields: [templateId], references: [id], onDelete: Restrict)
+  requestId         String?                @unique
+  request           OperationalRequest?    @relation(fields: [requestId], references: [id], onDelete: Restrict)
+  creatorUserId     String?
+  creator           User?                  @relation(fields: [creatorUserId], references: [id], onDelete: Restrict)
+  creatorPersonId   String?
+  siaId             String?
+  channel           String
+  direction         String
+  type              String                 @default("TEXT")
+  sender            String
+  recipient         String
+  subject           String?
+  content           String
+  purpose           String
+  category          String
+  sensitivity       String                 @default("NORMAL")
+  status            String                 @default("APPROVAL_REQUIRED")
+  externalReference String?
+  reference         String                 @unique
+  fingerprint       String
+  approvalBinding   String?
+  attempts          Int                    @default(0)
+  maxAttempts       Int                    @default(3)
+  nextRetryAt       DateTime?
+  retryable         Boolean                @default(false)
+  failureCode       String?
+  simulated         Boolean                @default(false)
+  confirmedAt       DateTime?
+  sentAt            DateTime?
+  deliveredAt       DateTime?
+  readAt            DateTime?
+  version           Int                    @default(0)
+  createdAt         DateTime               @default(now())
+  updatedAt         DateTime               @updatedAt
+
+  @@unique([integrationId, externalReference])
+  @@index([organizationId, projectId, status])
+  @@index([status, nextRetryAt])
+  @@index([organizationId, status, createdAt])
+}
+
+model IntegrationEvent {
+  operationalEvent   OperationalEvent? @relation(fields: [operationalEventId], references: [id], onDelete: Restrict)
+  id                 String            @id @default(cuid())
+  organizationId     String
+  organization       Organization      @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  integrationId      String
+  integration        Integration       @relation(fields: [integrationId], references: [id], onDelete: Restrict)
+  externalEventId    String
+  type               String
+  fingerprint        String
+  status             String
+  failureCode        String?
+  operationalEventId String?
+  receivedAt         DateTime          @default(now())
+  occurredAt         DateTime
+
+  @@unique([integrationId, externalEventId])
+  @@index([organizationId, status, receivedAt])
+}
+
+model AutomationRule {
+  ownerPerson    Person          @relation(fields: [ownerPersonId], references: [id], onDelete: Restrict)
+  id             String          @id @default(cuid())
+  organizationId String
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  ownerUserId    String
+  owner          User            @relation(fields: [ownerUserId], references: [id], onDelete: Restrict)
+  ownerPersonId  String
+  name           String
+  enabled        Boolean         @default(false)
+  trigger        String
+  action         String
+  condition      String
+  version        Int             @default(0)
+  jobs           ScheduledJob[]
+  runs           AutomationRun[]
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  @@index([organizationId, enabled])
+}
+
+model ScheduledJob {
+  id              String         @id @default(cuid())
+  organizationId  String
+  organization    Organization   @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  ruleId          String
+  rule            AutomationRule @relation(fields: [ruleId], references: [id], onDelete: Restrict)
+  type            String         @default("AUTOMATION_SCAN")
+  timezone        String         @default("UTC")
+  intervalMinutes Int
+  maxRuns         Int
+  runs            Int            @default(0)
+  enabled         Boolean        @default(true)
+  status          String         @default("PENDING")
+  nextRunAt       DateTime
+  lastRunAt       DateTime?
+  scanCursor      String?
+  scanStartedAt   DateTime?
+  scanRuleVersion Int?
+  attempts        Int            @default(0)
+  maxAttempts     Int            @default(3)
+  failureCode     String?
+  version         Int            @default(0)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  @@index([organizationId, enabled, nextRunAt])
+}
+
+model AutomationRun {
+  id          String         @id @default(cuid())
+  ruleId      String
+  rule        AutomationRule @relation(fields: [ruleId], references: [id], onDelete: Restrict)
+  reference   String         @unique
+  fingerprint String
+  status      String
+  resultId    String?
+  failureCode String?
+  createdAt   DateTime       @default(now())
+}
+
+model CommunicationRateBucket {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  key            String       @unique
+  count          Int          @default(0)
+  expiresAt      DateTime
+
+  @@index([expiresAt])
+}
+
+enum OrganizationType {
+  GROUP
+  COMPANY
+  DIVISION
+  BUSINESS_UNIT
+  DEPARTMENT
+  TEAM
+  OTHER
+}
+
+enum LifecycleStatus {
+  ACTIVE
+  SUSPENDED
+  INACTIVE
+  ARCHIVED
+}
+
+enum MembershipStatus {
+  INVITED
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+  ENDED
+}
+
+enum PermissionScope {
+  GLOBAL
+  GROUP
+  COMPANY
+  DIVISION
+  DEPARTMENT
+  TEAM
+  PROJECT
+}
+
+enum AuditResult {
+  SUCCESS
+  FAILURE
+  DENIED
+}
+
+enum TaskStatus {
+  BACKLOG
+  TODO
+  IN_PROGRESS
+  BLOCKED
+  COMPLETED
+  CANCELLED
+}
+
+enum ProjectStatus {
+  PLANNED
+  ACTIVE
+  PAUSED
+  BLOCKED
+  COMPLETED
+  CANCELLED
+  ARCHIVED
+}
+
+enum GoalStatus {
+  DRAFT
+  ACTIVE
+  PAUSED
+  AT_RISK
+  MISSED
+  ARCHIVED
+  ACHIEVED
+  CANCELLED
+}
+
+model User {
+  integrations            Integration[]
+  communicationMessages   CommunicationMessage[]
+  automationRules         AutomationRule[]
+  siaRuns                 SiaRun[]
+  siaActions              SiaAction[]
+  executiveHistory        ExecutiveHistory[]
+  id                      String                   @id @default(cuid())
+  email                   String                   @unique
+  passwordHash            String?
+  status                  LifecycleStatus          @default(ACTIVE)
+  personId                String?
+  person                  Person?                  @relation(fields: [personId], references: [id], onDelete: SetNull)
+  sessions                Session[]
+  auditEvents             AuditEvent[]             @relation("AuditActor")
+  operationalEvents       OperationalEvent[]
+  requests                OperationalRequest[]
+  decisions               SiaApproval[]            @relation("ApprovalDecider")
+  approvalAssignments     SiaApproval[]            @relation("ApprovalAssignee")
+  approvalRules           ApprovalRule[]
+  workflowInstances       WorkflowInstance[]
+  workflowHistory         WorkflowHistory[]
+  notifications           Notification[]
+  notificationPreferences NotificationPreference[]
+  reminders               Reminder[]
+  recurringWork           RecurringWork[]
+  escalations             Escalation[]
+  controlChecks           ControlCheck[]
+  createdAt               DateTime                 @default(now())
+  updatedAt               DateTime                 @updatedAt
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model Person {
+  communicationMessages  CommunicationMessage[]
+  automationRules        AutomationRule[]
+  communicationConsents  CommunicationConsent[]
+  communicationTemplates CommunicationTemplate[]
+  siaMemories            SiaContext[]
+  siaActions             SiaAction[]
+  executiveRecords       ExecutiveRecord[]
+  id                     String                  @id @default(cuid())
+  displayName            String
+  legalName              String?
+  email                  String?                 @unique
+  phone                  String?
+  status                 LifecycleStatus         @default(ACTIVE)
+  profile                String?
+  reportsFrom            ReportingRelationship[] @relation("ReportPerson")
+  reportsTo              ReportingRelationship[] @relation("ReportManager")
+  responsibilities       Responsibility[]
+  batchParticipation     BatchParticipant[]
+  metadata               String?
+  users                  User[]
+  projects               Project[]               @relation("ProjectOwner")
+  accountableProjects    Project[]               @relation("ProjectAccountable")
+  goals                  Goal[]                  @relation("GoalOwner")
+  accountableGoals       Goal[]                  @relation("GoalAccountable")
+  ownedTasks             Task[]                  @relation("TaskOwner")
+  assignedTasks          Task[]                  @relation("TaskAssignee")
+  createdTasks           Task[]                  @relation("TaskCreator")
+  milestones             Milestone[]
+  blockers               ExecutionBlocker[]
+  progressUpdates        ProgressUpdate[]
+  memberships            Membership[]
+  ownerships             OwnershipRelationship[]
+  auditEvents            AuditEvent[]            @relation("AuditPerson")
+  createdAt              DateTime                @default(now())
+  updatedAt              DateTime                @updatedAt
+}
+
+model Organization {
+  integrations             Integration[]
+  communicationPolicies    CommunicationPolicy[]
+  communicationConsents    CommunicationConsent[]
+  communicationTemplates   CommunicationTemplate[]
+  communicationThreads     CommunicationThread[]
+  communicationMessages    CommunicationMessage[]
+  integrationEvents        IntegrationEvent[]
+  automationRules          AutomationRule[]
+  scheduledJobs            ScheduledJob[]
+  communicationRateBuckets CommunicationRateBucket[]
+  siaRuns                  SiaRun[]
+  siaActions               SiaAction[]
+  executiveRecords         ExecutiveRecord[]
+  id                       String                    @id @default(cuid())
+  type                     OrganizationType
+  name                     String
+  slug                     String                    @unique
+  description              String?
+  status                   LifecycleStatus           @default(ACTIVE)
+  parentId                 String?
+  parent                   Organization?             @relation("OrganizationTree", fields: [parentId], references: [id], onDelete: Restrict)
+  children                 Organization[]            @relation("OrganizationTree")
+  metadata                 String?
+  group                    GroupProfile?
+  company                  CompanyProfile?
+  department               DepartmentProfile?
+  team                     TeamProfile?
+  memberships              Membership[]
+  reporting                ReportingRelationship[]
+  responsibilities         Responsibility[]
+  siaRoles                 SiaRoleAssignment[]
+  roles                    Role[]
+  brands                   Brand[]
+  products                 Product[]
+  projects                 Project[]
+  goals                    Goal[]
+  tasks                    Task[]
+  blockers                 ExecutionBlocker[]
+  ownershipsAsOwner        OwnershipRelationship[]
+  auditEvents              AuditEvent[]
+  siaContexts              SiaContext[]
+  operationalEvents        OperationalEvent[]
+  workflowDefinitions      WorkflowDefinition[]
+  workflowInstances        WorkflowInstance[]
+  operationalRequests      OperationalRequest[]
+  notifications            Notification[]
+  reminders                Reminder[]
+  recurringWork            RecurringWork[]
+  escalations              Escalation[]
+  controlPoints            ControlPoint[]
+  companyPrograms          Program[]                 @relation("ProgramCompany")
+  programs                 Program[]                 @relation("ProgramScope")
+  companyLocations         Location[]                @relation("LocationCompany")
+  locations                Location[]                @relation("LocationScope")
+  divisionProducts         Product[]                 @relation("ProductDivision")
+  responsibleTeams         Responsibility[]          @relation("ResponsibleTeam")
+  createdAt                DateTime                  @default(now())
+  updatedAt                DateTime                  @updatedAt
+
+  @@index([type])
+  @@index([parentId])
+}
+
+model GroupProfile {
+  id             String           @id @default(cuid())
+  organizationId String           @unique
+  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name           String
+  description    String?
+  status         LifecycleStatus  @default(ACTIVE)
+  metadata       String?
+  companies      CompanyProfile[]
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+}
+
+model CompanyProfile {
+  id                String                  @id @default(cuid())
+  organizationId    String                  @unique
+  organization      Organization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  groupId           String?
+  group             GroupProfile?           @relation(fields: [groupId], references: [id], onDelete: Restrict)
+  legalName         String?
+  displayName       String
+  shortName         String?
+  companyType       String?
+  country           String?
+  region            String?
+  description       String?
+  identifiers       String?
+  status            LifecycleStatus         @default(ACTIVE)
+  metadata          String?
+  relationshipsFrom CompanyRelationship[]   @relation("CompanyRelationshipFrom")
+  relationshipsTo   CompanyRelationship[]   @relation("CompanyRelationshipTo")
+  ownerships        OwnershipRelationship[]
+  createdAt         DateTime                @default(now())
+  updatedAt         DateTime                @updatedAt
+
+  @@index([groupId])
+}
+
+model CompanyRelationship {
+  id            String          @id @default(cuid())
+  fromCompanyId String
+  toCompanyId   String
+  relationship  String
+  status        LifecycleStatus @default(ACTIVE)
+  metadata      String?
+  fromCompany   CompanyProfile  @relation("CompanyRelationshipFrom", fields: [fromCompanyId], references: [id], onDelete: Restrict)
+  toCompany     CompanyProfile  @relation("CompanyRelationshipTo", fields: [toCompanyId], references: [id], onDelete: Restrict)
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  @@unique([fromCompanyId, toCompanyId, relationship])
+}
+
+model OwnershipRelationship {
+  id            String          @id @default(cuid())
+  companyId     String
+  ownerPersonId String?
+  ownerOrgId    String?
+  percentage    Float?
+  ownershipType String          @default("UNSPECIFIED")
+  notes         String?
+  status        LifecycleStatus @default(ACTIVE)
+  effectiveFrom DateTime?
+  effectiveTo   DateTime?
+  metadata      String?
+  company       CompanyProfile  @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  ownerPerson   Person?         @relation(fields: [ownerPersonId], references: [id], onDelete: Restrict)
+  ownerOrg      Organization?   @relation(fields: [ownerOrgId], references: [id], onDelete: Restrict)
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  @@index([companyId])
+  @@index([ownerPersonId])
+  @@index([ownerOrgId])
+}
+
+model DepartmentProfile {
+  id             String       @id @default(cuid())
+  organizationId String       @unique
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+}
+
+model TeamProfile {
+  id             String       @id @default(cuid())
+  organizationId String       @unique
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+}
+
+model Brand {
+  id             String          @id @default(cuid())
+  organizationId String
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  name           String
+  slug           String
+  description    String?
+  status         LifecycleStatus @default(ACTIVE)
+  metadata       String?
+  products       Product[]
+  website        String?
+  projects       Project[]
+  programs       Program[]
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  @@unique([organizationId, slug])
+}
+
+model Product {
+  id               String           @id @default(cuid())
+  organizationId   String
+  divisionId       String?
+  division         Organization?    @relation("ProductDivision", fields: [divisionId], references: [id], onDelete: Restrict)
+  brandId          String?
+  organization     Organization     @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  brand            Brand?           @relation(fields: [brandId], references: [id], onDelete: SetNull)
+  name             String
+  slug             String
+  description      String?
+  type             String           @default("PRODUCT")
+  lifecycle        String           @default("CONCEPT")
+  status           LifecycleStatus  @default(ACTIVE)
+  metadata         String?
+  projects         Project[]
+  goals            Goal[]
+  responsibilities Responsibility[]
+  programs         Program[]
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  @@unique([organizationId, slug])
+}
+
+model Project {
+  communicationPolicies CommunicationPolicy[]
+  communicationThreads  CommunicationThread[]
+  communicationMessages CommunicationMessage[]
+  siaMemories           SiaContext[]
+  siaRuns               SiaRun[]
+  siaActions            SiaAction[]
+  executiveRecords      ExecutiveRecord[]
+  id                    String                 @id @default(cuid())
+  organizationId        String
+  programId             String?
+  program               Program?               @relation(fields: [programId], references: [id], onDelete: Restrict)
+  productId             String?
+  brandId               String?
+  brand                 Brand?                 @relation(fields: [brandId], references: [id], onDelete: SetNull)
+  ownerPersonId         String?
+  owner                 Person?                @relation("ProjectOwner", fields: [ownerPersonId], references: [id], onDelete: Restrict)
+  accountablePersonId   String?
+  accountable           Person?                @relation("ProjectAccountable", fields: [accountablePersonId], references: [id], onDelete: Restrict)
+  completionDate        DateTime?
+  health                String                 @default("UNKNOWN")
+  priority              String                 @default("NORMAL")
+  startDate             DateTime?
+  targetDate            DateTime?
+  organization          Organization           @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  product               Product?               @relation(fields: [productId], references: [id], onDelete: SetNull)
+  name                  String
+  slug                  String
+  description           String?
+  status                ProjectStatus          @default(ACTIVE)
+  metadata              String?
+  goals                 Goal[]
+  memberships           Membership[]
+  responsibilities      Responsibility[]
+  tasks                 Task[]
+  milestones            Milestone[]
+  blockers              ExecutionBlocker[]
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
+
+  @@unique([organizationId, slug])
+}
+
+// Discriminated executive records. Payload contracts are validated server-side.
+model ExecutiveRecord {
+  id             String             @id @default(cuid())
+  kind           String
+  organizationId String
+  organization   Organization       @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  projectId      String?
+  project        Project?           @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  ownerPersonId  String
+  owner          Person             @relation(fields: [ownerPersonId], references: [id], onDelete: Restrict)
+  title          String
+  status         String
+  payload        String
+  sourceKey      String             @unique
+  version        Int                @default(0)
+  dueAt          DateTime?
+  history        ExecutiveHistory[]
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  @@index([organizationId, kind, status])
+  @@index([projectId, kind, status])
+  @@index([dueAt])
+}
+
+model ExecutiveHistory {
+  id          String          @id @default(cuid())
+  recordId    String
+  record      ExecutiveRecord @relation(fields: [recordId], references: [id], onDelete: Restrict)
+  actorUserId String
+  actor       User            @relation(fields: [actorUserId], references: [id], onDelete: Restrict)
+  fromStatus  String?
+  toStatus    String
+  reason      String
+  observation Float?
+  createdAt   DateTime        @default(now())
+
+  @@index([recordId, createdAt])
+}
+
+model Goal {
+  id                  String             @id @default(cuid())
+  organizationId      String
+  programId           String?
+  program             Program?           @relation(fields: [programId], references: [id], onDelete: Restrict)
+  projectId           String?
+  productId           String?
+  product             Product?           @relation(fields: [productId], references: [id], onDelete: SetNull)
+  ownerPersonId       String?
+  owner               Person?            @relation("GoalOwner", fields: [ownerPersonId], references: [id], onDelete: Restrict)
+  accountablePersonId String?
+  accountable         Person?            @relation("GoalAccountable", fields: [accountablePersonId], references: [id], onDelete: Restrict)
+  parentGoalId        String?
+  parentGoal          Goal?              @relation("GoalHierarchy", fields: [parentGoalId], references: [id], onDelete: Restrict)
+  childGoals          Goal[]             @relation("GoalHierarchy")
+  startDate           DateTime?
+  completionDate      DateTime?
+  progressMode        String             @default("MANUAL")
+  progressUpdates     ProgressUpdate[]
+  blockers            ExecutionBlocker[]
+  description         String?
+  priority            String             @default("NORMAL")
+  targetDate          DateTime?
+  progress            Float              @default(0)
+  organization        Organization       @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  project             Project?           @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  title               String
+  status              GoalStatus         @default(DRAFT)
+  metadata            String?
+  tasks               Task[]
+  responsibilities    Responsibility[]
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+}
+
+model Task {
+  id               String             @id @default(cuid())
+  organizationId   String
+  projectId        String?
+  goalId           String?
+  milestoneId      String?
+  milestone        Milestone?         @relation(fields: [milestoneId], references: [id], onDelete: Restrict)
+  description      String?
+  priority         String             @default("NORMAL")
+  ownerPersonId    String?
+  owner            Person?            @relation("TaskOwner", fields: [ownerPersonId], references: [id], onDelete: Restrict)
+  assigneePersonId String?
+  assignee         Person?            @relation("TaskAssignee", fields: [assigneePersonId], references: [id], onDelete: Restrict)
+  creatorPersonId  String?
+  creator          Person?            @relation("TaskCreator", fields: [creatorPersonId], references: [id], onDelete: Restrict)
+  startDate        DateTime?
+  dueDate          DateTime?
+  completionDate   DateTime?
+  estimatedHours   Float?
+  prerequisites    TaskDependency[]   @relation("DependentTask")
+  dependents       TaskDependency[]   @relation("PrerequisiteTask")
+  blockers         ExecutionBlocker[] @relation("BlockedTask")
+  blockingRecords  ExecutionBlocker[] @relation("BlockerDependency")
+  responsibilities Responsibility[]
+  organization     Organization       @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  project          Project?           @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  goal             Goal?              @relation(fields: [goalId], references: [id], onDelete: SetNull)
+  title            String
+  status           TaskStatus         @default(TODO)
+  metadata         String?
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+
+  @@index([organizationId, projectId])
+  @@index([assigneePersonId, dueDate])
+  @@index([organizationId, status, dueDate])
+}
+
+model Milestone {
+  id               String           @id @default(cuid())
+  projectId        String
+  project          Project          @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  name             String
+  description      String?
+  status           ProjectStatus    @default(PLANNED)
+  priority         String           @default("NORMAL")
+  ownerPersonId    String?
+  owner            Person?          @relation(fields: [ownerPersonId], references: [id], onDelete: Restrict)
+  targetDate       DateTime?
+  completionDate   DateTime?
+  sequence         Int              @default(0)
+  metadata         String?
+  tasks            Task[]
+  responsibilities Responsibility[]
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  @@index([projectId, sequence])
+}
+
+model TaskDependency {
+  id             String   @id @default(cuid())
+  taskId         String
+  prerequisiteId String
+  task           Task     @relation("DependentTask", fields: [taskId], references: [id], onDelete: Restrict)
+  prerequisite   Task     @relation("PrerequisiteTask", fields: [prerequisiteId], references: [id], onDelete: Restrict)
+  createdAt      DateTime @default(now())
+
+  @@unique([taskId, prerequisiteId])
+  @@index([prerequisiteId])
+}
+
+model ProgressUpdate {
+  id            String   @id @default(cuid())
+  goalId        String
+  goal          Goal     @relation(fields: [goalId], references: [id], onDelete: Restrict)
+  value         Float
+  actorPersonId String
+  actor         Person   @relation(fields: [actorPersonId], references: [id], onDelete: Restrict)
+  reason        String?
+  createdAt     DateTime @default(now())
+
+  @@index([goalId, createdAt])
+}
+
+model ExecutionBlocker {
+  id                 String       @id @default(cuid())
+  organizationId     String
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  projectId          String?
+  project            Project?     @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  taskId             String?
+  task               Task?        @relation("BlockedTask", fields: [taskId], references: [id], onDelete: Restrict)
+  goalId             String?
+  goal               Goal?        @relation(fields: [goalId], references: [id], onDelete: Restrict)
+  description        String
+  ownerPersonId      String?
+  owner              Person?      @relation(fields: [ownerPersonId], references: [id], onDelete: Restrict)
+  dependencyTaskId   String?
+  dependency         Task?        @relation("BlockerDependency", fields: [dependencyTaskId], references: [id], onDelete: Restrict)
+  expectedResolution DateTime?
+  status             String       @default("OPEN")
+  resolvedAt         DateTime?
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+
+  @@index([organizationId, status])
+}
+
+model Membership {
+  id             String           @id @default(cuid())
+  personId       String
+  organizationId String
+  projectId      String?
+  project        Project?         @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  scopeKey       String           @default("organization")
+  title          String?
+  startDate      DateTime?
+  endDate        DateTime?
+  scope          String           @default("ORGANIZATION")
+  status         MembershipStatus @default(ACTIVE)
+  metadata       String?
+  person         Person           @relation(fields: [personId], references: [id], onDelete: Cascade)
+  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  roles          MembershipRole[]
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  @@unique([personId, organizationId, scopeKey])
+  @@index([projectId])
+  @@index([organizationId])
+}
+
+model Role {
+  id             String              @id @default(cuid())
+  organizationId String?
+  organization   Organization?       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  key            String
+  name           String
+  description    String?
+  system         Boolean             @default(false)
+  canonical      Boolean             @default(false)
+  category       String?
+  principalType  String              @default("HUMAN")
+  status         LifecycleStatus     @default(ACTIVE)
+  siaAssignments SiaRoleAssignment[]
+  permissions    RolePermission[]
+  memberships    MembershipRole[]
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+
+  @@unique([organizationId, key])
+}
+
+model Permission {
+  id          String           @id @default(cuid())
+  key         String           @unique
+  name        String
+  description String?
+  scope       PermissionScope
+  roles       RolePermission[]
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+}
+
+model RolePermission {
+  id           String     @id @default(cuid())
+  roleId       String
+  permissionId String
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  createdAt    DateTime   @default(now())
+
+  @@unique([roleId, permissionId])
+}
+
+model MembershipRole {
+  id           String     @id @default(cuid())
+  membershipId String
+  roleId       String
+  membership   Membership @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  createdAt    DateTime   @default(now())
+
+  @@unique([membershipId, roleId])
+}
+
+model AuditEvent {
+  siaRuns          SiaRun[]
+  siaActions       SiaAction[]
+  id               String            @id @default(cuid())
+  actorUserId      String?
+  actorPersonId    String?
+  organizationId   String?
+  action           String
+  entityType       String
+  entityId         String?
+  result           AuditResult
+  ipAddress        String?
+  userAgent        String?
+  metadata         String?
+  actorUser        User?             @relation("AuditActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+  actorPerson      Person?           @relation("AuditPerson", fields: [actorPersonId], references: [id], onDelete: SetNull)
+  organization     Organization?     @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  createdAt        DateTime          @default(now())
+  operationalEvent OperationalEvent?
+
+  @@index([actorUserId])
+  @@index([organizationId])
+  @@index([entityType, entityId])
+  @@index([createdAt])
+}
+
+model SystemConfiguration {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  value       String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model SiaIdentity {
+  communicationMessages CommunicationMessage[]
+  id                    String                 @id @default(cuid())
+  name                  String                 @default("SIA")
+  title                 String                 @default("MAXPASE GROUP Virtual CEO")
+  status                LifecycleStatus        @default(ACTIVE)
+  metadata              String?
+  description           String?
+  configuration         String?
+  configurationVersion  Int                    @default(0)
+  runs                  SiaRun[]
+  actions               SiaAction[]
+  contexts              SiaContext[]
+  goals                 SiaGoal[]
+  tools                 SiaTool[]
+  approvals             SiaApproval[]
+  roleAssignments       SiaRoleAssignment[]
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
+}
+
+model ReportingRelationship {
+  id              String          @id @default(cuid())
+  organizationId  String
+  organization    Organization    @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  personId        String
+  managerPersonId String
+  person          Person          @relation("ReportPerson", fields: [personId], references: [id], onDelete: Restrict)
+  manager         Person          @relation("ReportManager", fields: [managerPersonId], references: [id], onDelete: Restrict)
+  status          LifecycleStatus @default(ACTIVE)
+  startDate       DateTime?
+  endDate         DateTime?
+  metadata        String?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  @@unique([organizationId, personId, managerPersonId])
+  @@index([organizationId])
+}
+
+model Responsibility {
+  id             String          @id @default(cuid())
+  organizationId String
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  personId       String
+  person         Person          @relation(fields: [personId], references: [id], onDelete: Restrict)
+  projectId      String?
+  project        Project?        @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  productId      String?
+  product        Product?        @relation(fields: [productId], references: [id], onDelete: Restrict)
+  goalId         String?
+  goal           Goal?           @relation(fields: [goalId], references: [id], onDelete: Restrict)
+  taskId         String?
+  task           Task?           @relation(fields: [taskId], references: [id], onDelete: Restrict)
+  milestoneId    String?
+  milestone      Milestone?      @relation(fields: [milestoneId], references: [id], onDelete: Restrict)
+  programId      String?
+  program        Program?        @relation(fields: [programId], references: [id], onDelete: Restrict)
+  batchId        String?
+  batch          Batch?          @relation(fields: [batchId], references: [id], onDelete: Restrict)
+  locationId     String?
+  location       Location?       @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  teamId         String?
+  team           Organization?   @relation("ResponsibleTeam", fields: [teamId], references: [id], onDelete: Restrict)
+  kind           String          @default("RESPONSIBLE")
+  title          String
+  status         LifecycleStatus @default(ACTIVE)
+  metadata       String?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  @@index([organizationId])
+  @@index([personId])
+}
+
+model Program {
+  id                    String           @id @default(cuid())
+  companyOrganizationId String
+  company               Organization     @relation("ProgramCompany", fields: [companyOrganizationId], references: [id], onDelete: Restrict)
+  organizationId        String
+  division              Organization     @relation("ProgramScope", fields: [organizationId], references: [id], onDelete: Restrict)
+  name                  String
+  slug                  String
+  description           String?
+  kind                  String           @default("PROGRAM")
+  status                String           @default("DRAFT")
+  durationDays          Int?
+  capacity              Int?
+  priceMinor            Int?
+  currency              String?
+  brandId               String?
+  brand                 Brand?           @relation(fields: [brandId], references: [id], onDelete: Restrict)
+  productId             String?
+  product               Product?         @relation(fields: [productId], references: [id], onDelete: Restrict)
+  metadata              String?
+  batches               Batch[]
+  responsibilities      Responsibility[]
+  projects              Project[]
+  goals                 Goal[]
+  createdAt             DateTime         @default(now())
+  updatedAt             DateTime         @updatedAt
+
+  @@unique([companyOrganizationId, slug])
+  @@index([organizationId, status])
+}
+
+model Batch {
+  id               String             @id @default(cuid())
+  programId        String
+  program          Program            @relation(fields: [programId], references: [id], onDelete: Restrict)
+  name             String
+  status           String             @default("PLANNED")
+  startDate        DateTime?
+  endDate          DateTime?
+  capacity         Int?
+  locationId       String?
+  location         Location?          @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  metadata         String?
+  participants     BatchParticipant[]
+  responsibilities Responsibility[]
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+
+  @@index([programId, status, startDate])
+}
+
+model Location {
+  id                    String           @id @default(cuid())
+  companyOrganizationId String
+  company               Organization     @relation("LocationCompany", fields: [companyOrganizationId], references: [id], onDelete: Restrict)
+  organizationId        String
+  organization          Organization     @relation("LocationScope", fields: [organizationId], references: [id], onDelete: Restrict)
+  name                  String
+  type                  String           @default("OTHER")
+  status                String           @default("PLANNED")
+  address               String?
+  city                  String?
+  region                String?
+  country               String?
+  postalCode            String?
+  metadata              String?
+  batches               Batch[]
+  responsibilities      Responsibility[]
+  createdAt             DateTime         @default(now())
+  updatedAt             DateTime         @updatedAt
+
+  @@index([companyOrganizationId, organizationId, status])
+}
+
+model BatchParticipant {
+  id        String   @id @default(cuid())
+  batchId   String
+  batch     Batch    @relation(fields: [batchId], references: [id], onDelete: Restrict)
+  personId  String
+  person    Person   @relation(fields: [personId], references: [id], onDelete: Restrict)
+  status    String   @default("PLANNED")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([batchId, personId])
+}
+
+model SiaRoleAssignment {
+  id                 String       @id @default(cuid())
+  siaId              String
+  sia                SiaIdentity  @relation(fields: [siaId], references: [id], onDelete: Restrict)
+  organizationId     String
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  roleId             String
+  role               Role         @relation(fields: [roleId], references: [id], onDelete: Restrict)
+  includeDescendants Boolean      @default(false)
+  createdAt          DateTime     @default(now())
+
+  @@unique([siaId, organizationId, roleId])
+}
+
+model SiaContext {
+  id             String        @id @default(cuid())
+  siaId          String
+  organizationId String?
+  sia            SiaIdentity   @relation(fields: [siaId], references: [id], onDelete: Cascade)
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  key            String
+  value          String
+  category       String        @default("LEGACY")
+  status         String        @default("DRAFT")
+  projectId      String?
+  project        Project?      @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  sourceType     String?
+  sourceId       String?
+  ownerPersonId  String?
+  owner          Person?       @relation(fields: [ownerPersonId], references: [id], onDelete: Restrict)
+  confidence     Float?
+  reviewAt       DateTime?
+  expiresAt      DateTime?
+  version        Int           @default(0)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  @@unique([siaId, organizationId, key])
+  @@index([siaId, organizationId, category, status])
+  @@index([siaId, organizationId, status, updatedAt])
+}
+
+model SiaRun {
+  id             String       @id @default(cuid())
+  siaId          String
+  sia            SiaIdentity  @relation(fields: [siaId], references: [id], onDelete: Restrict)
+  userId         String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Restrict)
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  projectId      String?
+  project        Project?     @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  idempotencyKey String
+  fingerprint    String
+  intent         String
+  toolKey        String?
+  provider       String
+  model          String?
+  status         String       @default("PENDING")
+  failureCode    String?
+  latencyMs      Int?
+  inputTokens    Int?
+  outputTokens   Int?
+  estimatedCost  Float?
+  rationale      String?
+  auditId        String?
+  audit          AuditEvent?  @relation(fields: [auditId], references: [id], onDelete: Restrict)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([userId, siaId, idempotencyKey])
+  @@index([siaId, organizationId, createdAt])
+}
+
+model SiaAction {
+  id                 String              @id @default(cuid())
+  siaId              String
+  sia                SiaIdentity         @relation(fields: [siaId], references: [id], onDelete: Restrict)
+  requesterUserId    String
+  requester          User                @relation(fields: [requesterUserId], references: [id], onDelete: Restrict)
+  requesterPersonId  String
+  requesterPerson    Person              @relation(fields: [requesterPersonId], references: [id], onDelete: Restrict)
+  organizationId     String
+  organization       Organization        @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  projectId          String?
+  project            Project?            @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  toolKey            String
+  parameters         String
+  reason             String
+  risk               String
+  status             String              @default("PROPOSED")
+  authorization      String              @default("PENDING")
+  approvalRequired   Boolean             @default(true)
+  requestId          String?             @unique
+  request            OperationalRequest? @relation(fields: [requestId], references: [id], onDelete: Restrict)
+  resultId           String?
+  verificationStatus String              @default("NOT_RUN")
+  failureCode        String?
+  idempotencyKey     String
+  fingerprint        String
+  version            Int                 @default(0)
+  auditId            String?
+  audit              AuditEvent?         @relation(fields: [auditId], references: [id], onDelete: Restrict)
+  executedAt         DateTime?
+  verifiedAt         DateTime?
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+
+  @@unique([requesterUserId, siaId, idempotencyKey])
+  @@index([siaId, organizationId, status])
+}
+
+model SiaGoal {
+  id        String      @id @default(cuid())
+  siaId     String
+  sia       SiaIdentity @relation(fields: [siaId], references: [id], onDelete: Cascade)
+  title     String
+  status    GoalStatus  @default(DRAFT)
+  metadata  String?
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+}
+
+model SiaTool {
+  id            String      @id @default(cuid())
+  siaId         String
+  sia           SiaIdentity @relation(fields: [siaId], references: [id], onDelete: Cascade)
+  key           String
+  name          String
+  description   String?
+  permissionKey String?
+  enabled       Boolean     @default(false)
+  metadata      String?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  @@unique([siaId, key])
+}
+
+model SiaApproval {
+  id                 String              @id @default(cuid())
+  siaId              String?
+  sia                SiaIdentity?        @relation(fields: [siaId], references: [id], onDelete: Restrict)
+  requestId          String?
+  request            OperationalRequest? @relation(fields: [requestId], references: [id], onDelete: Restrict)
+  stageIndex         Int                 @default(0)
+  approverUserId     String?
+  approver           User?               @relation("ApprovalAssignee", fields: [approverUserId], references: [id], onDelete: Restrict)
+  decidedByUserId    String?
+  decider            User?               @relation("ApprovalDecider", fields: [decidedByUserId], references: [id], onDelete: Restrict)
+  requiredPermission String              @default("approval.decide")
+  comment            String?
+  decidedAt          DateTime?
+  requestedByUserId  String?
+  action             String
+  status             String              @default("PENDING")
+  metadata           String?
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+
+  @@unique([requestId, stageIndex, approverUserId])
+  @@index([approverUserId, status])
+}
+
+model OperationalEvent {
+  integrationEvents IntegrationEvent[]
+  id                String             @id @default(cuid())
+  eventType         String
+  actorUserId       String?
+  actor             User?              @relation(fields: [actorUserId], references: [id], onDelete: Restrict)
+  organizationId    String
+  organization      Organization       @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  projectId         String?
+  entityType        String
+  entityId          String
+  status            String             @default("SUCCEEDED")
+  reference         String             @unique
+  correlationId     String?
+  metadata          String?
+  auditId           String             @unique
+  audit             AuditEvent         @relation(fields: [auditId], references: [id], onDelete: Restrict)
+  createdAt         DateTime           @default(now())
+
+  @@index([organizationId, projectId, createdAt])
+  @@index([organizationId, status, createdAt])
+}
+
+model WorkflowDefinition {
+  id             String               @id @default(cuid())
+  organizationId String
+  organization   Organization         @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  projectId      String?
+  scopeKey       String
+  key            String
+  version        Int
+  name           String
+  description    String?
+  status         String               @default("DRAFT")
+  states         WorkflowState[]
+  transitions    WorkflowTransition[]
+  instances      WorkflowInstance[]
+  recurringWork  RecurringWork[]
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+
+  @@unique([organizationId, scopeKey, key, version])
+}
+
+model WorkflowState {
+  id              String               @id @default(cuid())
+  definitionId    String
+  definition      WorkflowDefinition   @relation(fields: [definitionId], references: [id], onDelete: Cascade)
+  key             String
+  name            String
+  initial         Boolean              @default(false)
+  terminal        Boolean              @default(false)
+  fromTransitions WorkflowTransition[] @relation("WorkflowFrom")
+  toTransitions   WorkflowTransition[] @relation("WorkflowTo")
+  instances       WorkflowInstance[]
+
+  @@unique([definitionId, key])
+}
+
+model WorkflowTransition {
+  id                 String             @id @default(cuid())
+  definitionId       String
+  definition         WorkflowDefinition @relation(fields: [definitionId], references: [id], onDelete: Cascade)
+  key                String
+  fromStateId        String
+  fromState          WorkflowState      @relation("WorkflowFrom", fields: [fromStateId], references: [id], onDelete: Restrict)
+  toStateId          String
+  toState            WorkflowState      @relation("WorkflowTo", fields: [toStateId], references: [id], onDelete: Restrict)
+  requiredPermission String
+  requireReason      Boolean            @default(false)
+  controlPointId     String?
+  controlPoint       ControlPoint?      @relation(fields: [controlPointId], references: [id], onDelete: Restrict)
+  history            WorkflowHistory[]
+
+  @@unique([definitionId, key])
+}
+
+model WorkflowInstance {
+  id             String               @id @default(cuid())
+  definitionId   String
+  definition     WorkflowDefinition   @relation(fields: [definitionId], references: [id], onDelete: Restrict)
+  organizationId String
+  organization   Organization         @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  projectId      String?
+  resourceType   String
+  resourceId     String
+  title          String
+  creatorUserId  String
+  creator        User                 @relation(fields: [creatorUserId], references: [id], onDelete: Restrict)
+  currentStateId String
+  currentState   WorkflowState        @relation(fields: [currentStateId], references: [id], onDelete: Restrict)
+  version        Int                  @default(0)
+  status         String               @default("PENDING")
+  idempotencyKey String
+  fingerprint    String
+  history        WorkflowHistory[]
+  requests       OperationalRequest[]
+  checks         ControlCheck[]
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+
+  @@unique([creatorUserId, idempotencyKey])
+  @@index([organizationId, projectId, status])
+}
+
+model WorkflowHistory {
+  id              String             @id @default(cuid())
+  instanceId      String
+  instance        WorkflowInstance   @relation(fields: [instanceId], references: [id], onDelete: Restrict)
+  transitionId    String
+  transition      WorkflowTransition @relation(fields: [transitionId], references: [id], onDelete: Restrict)
+  actorUserId     String
+  actor           User               @relation(fields: [actorUserId], references: [id], onDelete: Restrict)
+  fromState       String
+  toState         String
+  reason          String?
+  instanceVersion Int
+  idempotencyKey  String
+  fingerprint     String
+  createdAt       DateTime           @default(now())
+
+  @@unique([instanceId, idempotencyKey])
+  @@unique([instanceId, instanceVersion])
+}
+
+model ControlPoint {
+  communicationPolicies CommunicationPolicy[]
+  id                    String                @id @default(cuid())
+  organizationId        String
+  organization          Organization          @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  projectId             String?
+  name                  String
+  kind                  String
+  requiredPermission    String
+  allowSelfApproval     Boolean               @default(false)
+  status                String                @default("ACTIVE")
+  rules                 ApprovalRule[]
+  transitions           WorkflowTransition[]
+  requests              OperationalRequest[]
+  checks                ControlCheck[]
+  createdAt             DateTime              @default(now())
+}
+
+model ApprovalRule {
+  id                 String       @id @default(cuid())
+  controlPointId     String
+  controlPoint       ControlPoint @relation(fields: [controlPointId], references: [id], onDelete: Restrict)
+  stageIndex         Int
+  approverUserId     String
+  approver           User         @relation(fields: [approverUserId], references: [id], onDelete: Restrict)
+  requiredPermission String
+
+  @@unique([controlPointId, stageIndex, approverUserId])
+}
+
+model OperationalRequest {
+  communicationMessage CommunicationMessage?
+  siaAction            SiaAction?
+  id                   String                @id @default(cuid())
+  organizationId       String
+  organization         Organization          @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  projectId            String?
+  resourceType         String
+  resourceId           String
+  type                 String                @default("GENERAL")
+  title                String
+  description          String?
+  requesterUserId      String
+  requester            User                  @relation(fields: [requesterUserId], references: [id], onDelete: Restrict)
+  controlPointId       String
+  controlPoint         ControlPoint          @relation(fields: [controlPointId], references: [id], onDelete: Restrict)
+  workflowInstanceId   String?
+  workflowInstance     WorkflowInstance?     @relation(fields: [workflowInstanceId], references: [id], onDelete: Restrict)
+  instanceVersion      Int?
+  siaId                String?
+  toolKey              String?
+  payload              String?
+  status               String                @default("DRAFT")
+  expiresAt            DateTime?
+  decidedAt            DateTime?
+  idempotencyKey       String
+  fingerprint          String
+  approvals            SiaApproval[]
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+
+  @@unique([requesterUserId, idempotencyKey])
+  @@index([organizationId, projectId, status])
+}
+
+model ControlCheck {
+  id              String           @id @default(cuid())
+  controlPointId  String
+  controlPoint    ControlPoint     @relation(fields: [controlPointId], references: [id], onDelete: Restrict)
+  instanceId      String
+  instance        WorkflowInstance @relation(fields: [instanceId], references: [id], onDelete: Restrict)
+  instanceVersion Int
+  actorUserId     String
+  actor           User             @relation(fields: [actorUserId], references: [id], onDelete: Restrict)
+  status          String
+  reason          String
+  createdAt       DateTime         @default(now())
+
+  @@unique([controlPointId, instanceId, instanceVersion])
+}
+
+model Notification {
+  id              String       @id @default(cuid())
+  recipientUserId String
+  recipient       User         @relation(fields: [recipientUserId], references: [id], onDelete: Restrict)
+  organizationId  String
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  projectId       String?
+  resourceType    String
+  resourceId      String
+  type            String
+  title           String
+  message         String
+  priority        String       @default("NORMAL")
+  reference       String
+  readAt          DateTime?
+  expiresAt       DateTime?
+  createdAt       DateTime     @default(now())
+
+  @@unique([recipientUserId, reference])
+  @@index([recipientUserId, readAt])
+}
+
+model NotificationPreference {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String
+  channel   String
+  enabled   Boolean  @default(true)
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, type, channel])
+}
+
+model Reminder {
+  id              String       @id @default(cuid())
+  organizationId  String
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  projectId       String?
+  resourceType    String
+  resourceId      String
+  recipientUserId String
+  recipient       User         @relation(fields: [recipientUserId], references: [id], onDelete: Restrict)
+  remindAt        DateTime
+  reason          String
+  status          String       @default("PENDING")
+  completedAt     DateTime?
+  failureCode     String?
+  reference       String
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  @@unique([organizationId, reference])
+}
+
+model RecurringWork {
+  id             String                @id @default(cuid())
+  organizationId String
+  organization   Organization          @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  projectId      String?
+  resourceType   String
+  resourceId     String
+  ownerUserId    String
+  owner          User                  @relation(fields: [ownerUserId], references: [id], onDelete: Restrict)
+  title          String
+  kind           String
+  definitionId   String?
+  definition     WorkflowDefinition?   @relation(fields: [definitionId], references: [id], onDelete: Restrict)
+  template       String?
+  frequency      String
+  interval       Int                   @default(1)
+  timezone       String                @default("UTC")
+  startAt        DateTime
+  nextRunAt      DateTime
+  occurrences    Int                   @default(0)
+  maxOccurrences Int
+  until          DateTime?
+  status         String                @default("ACTIVE")
+  failureCode    String?
+  runs           RecurringOccurrence[]
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+}
+
+model RecurringOccurrence {
+  id               String        @id @default(cuid())
+  recurringWorkId  String
+  recurringWork    RecurringWork @relation(fields: [recurringWorkId], references: [id], onDelete: Restrict)
+  scheduledAt      DateTime
+  status           String
+  resultResourceId String?
+  createdAt        DateTime      @default(now())
+
+  @@unique([recurringWorkId, scheduledAt])
+}
+
+model Escalation {
+  id                String       @id @default(cuid())
+  organizationId    String
+  organization      Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  projectId         String?
+  resourceType      String
+  resourceId        String
+  trigger           String
+  level             Int
+  responsibleUserId String
+  responsible       User         @relation(fields: [responsibleUserId], references: [id], onDelete: Restrict)
+  reason            String
+  status            String       @default("OPEN")
+  resolvedAt        DateTime?
+  reference         String
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+
+  @@unique([organizationId, reference])
+}

@@ -1,0 +1,119 @@
+{
+  "classification": "LOCAL BASELINE ONLY",
+  "measuredAt": "2026-10-04T17:58:22.639Z",
+  "node": "v22.14.0",
+  "fixture": {
+    "authorizedTasks": 300,
+    "unrelatedCompanyTasks": 6000,
+    "samplesPerOperation": 3,
+    "automationScanSize": 25
+  },
+  "notes": [
+    "No production database or external provider accessed",
+    "Prisma query event durations are millisecond-resolution engine measurements, not request latency",
+    "No token or model cost measurement; NOT VERIFIED",
+    "Serial fresh-fixture samples include cold first sample; not production percentiles"
+  ],
+  "samples": {
+    "authorization": [
+      {
+        "elapsedMs": 10.748399999999947,
+        "queryCount": 11,
+        "databaseMs": 0,
+        "responseBytes": 29
+      },
+      {
+        "elapsedMs": 6.6237999999998465,
+        "queryCount": 11,
+        "databaseMs": 0,
+        "responseBytes": 29
+      },
+      {
+        "elapsedMs": 9.037800000000061,
+        "queryCount": 11,
+        "databaseMs": 0,
+        "responseBytes": 29
+      }
+    ],
+    "tasks": [
+      {
+        "elapsedMs": 18.031999999999925,
+        "queryCount": 14,
+        "databaseMs": 1,
+        "responseBytes": 155291
+      },
+      {
+        "elapsedMs": 12.306400000000394,
+        "queryCount": 14,
+        "databaseMs": 1,
+        "responseBytes": 155291
+      },
+      {
+        "elapsedMs": 17.653199999999742,
+        "queryCount": 14,
+        "databaseMs": 1,
+        "responseBytes": 155291
+      }
+    ],
+    "executive": [
+      {
+        "elapsedMs": 314.7422999999999,
+        "queryCount": 522,
+        "databaseMs": 1,
+        "responseBytes": 220757
+      },
+      {
+        "elapsedMs": 290.75260000000026,
+        "queryCount": 522,
+        "databaseMs": 1,
+        "responseBytes": 220757
+      },
+      {
+        "elapsedMs": 323.84060000000045,
+        "queryCount": 522,
+        "databaseMs": 3,
+        "responseBytes": 220757
+      }
+    ],
+    "siaContext": [
+      {
+        "elapsedMs": 561.2076000000002,
+        "queryCount": 843,
+        "databaseMs": 1,
+        "responseBytes": 92866
+      },
+      {
+        "elapsedMs": 512.0355,
+        "queryCount": 843,
+        "databaseMs": 2,
+        "responseBytes": 92866
+      },
+      {
+        "elapsedMs": 452.6977999999999,
+        "queryCount": 843,
+        "databaseMs": 1,
+        "responseBytes": 92866
+      }
+    ],
+    "automationScan": [
+      {
+        "elapsedMs": 966.0092000000004,
+        "queryCount": 2197,
+        "databaseMs": 4,
+        "responseBytes": 82
+      },
+      {
+        "elapsedMs": 982.0423000000001,
+        "queryCount": 2197,
+        "databaseMs": 4,
+        "responseBytes": 82
+      },
+      {
+        "elapsedMs": 1201.3273999999992,
+        "queryCount": 2197,
+        "databaseMs": 7,
+        "responseBytes": 82
+      }
+    ]
+  }
+}

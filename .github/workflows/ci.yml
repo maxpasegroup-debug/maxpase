@@ -1,0 +1,45 @@
+name: MAXPASE Validation
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      DATABASE_URL: file:./ci.db
+      NEXT_TELEMETRY_DISABLED: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci --ignore-scripts --no-audit
+      - run: npm run prisma:generate
+      - run: npm run prisma:validate
+      - run: npm run validate:migrations
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - name: Require reviewed registry metadata submission
+        env:
+          APPROVED: ${{ vars.NPM_AUDIT_APPROVED }}
+        run: test "$APPROVED" = "true"
+      - name: Production dependency audit
+        run: npm audit --omit=dev --audit-level=high
+      - name: Full dependency findings
+        run: npm audit --json > dependency-audit.json
+        continue-on-error: true
+      - name: Reject unreviewed findings
+        run: npx tsx scripts/review-dependency-audit.ts dependency-audit.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: dependency-findings
+          path: dependency-audit.json
+          if-no-files-found: ignore

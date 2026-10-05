@@ -1,0 +1,22 @@
+import { z } from "zod";
+
+const text = z.string().trim().min(1).max(200);
+const optionalText = z.string().trim().max(4000).nullable().optional();
+const reference = z.string().min(1).nullable().optional();
+const date = z.coerce.date().nullable().optional();
+const metadata = z.record(z.string(), z.unknown()).nullable().optional().transform(v => v == null ? v : JSON.stringify(v));
+const status = z.enum(["ACTIVE", "INACTIVE", "ARCHIVED"]).default("ACTIVE");
+const common = { name: text, slug: z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/).max(120), description: optionalText, status, metadata };
+const scoped = { organizationId: text };
+export const companyInput = z.object({ ...common, groupOrganizationId: reference, legalName: optionalText, shortName: optionalText, companyType: optionalText, country: optionalText, region: optionalText, identifiers: z.record(z.string(), z.string()).nullable().optional().transform(v => v == null ? v : JSON.stringify(v)) });
+export const groupInput = z.object(common);
+export const organizationInput = z.object({ ...common, parentId: text, type: z.enum(["DIVISION", "BUSINESS_UNIT", "DEPARTMENT", "TEAM", "OTHER"]) });
+export const relationshipInput = z.object({ fromCompanyId: text, toCompanyId: text, relationship: z.enum(["SUBSIDIARY", "PARENT", "AFFILIATE", "JOINT_VENTURE", "CONTROLLED_ENTITY", "EMPLOYER", "OTHER"]), status, metadata }).refine(v => v.fromCompanyId !== v.toCompanyId, "A company cannot relate to itself").refine(v => v.relationship !== "OTHER" || !!v.metadata, "Other relationships require documentation in metadata");
+export const ownershipInput = z.object({ companyId: text, ownerPersonId: reference, ownerOrgId: reference, percentage: z.number().min(0).max(100).nullable().optional(), ownershipType: z.enum(["UNSPECIFIED", "EQUITY", "BENEFICIAL", "VOTING", "OTHER"]).default("UNSPECIFIED"), effectiveFrom: date, effectiveTo: date, status, notes: optionalText, metadata }).refine(v => !!v.ownerPersonId !== !!v.ownerOrgId, "Exactly one owner is required").refine(v => !v.effectiveFrom || !v.effectiveTo || v.effectiveTo >= v.effectiveFrom, "Invalid effective date range");
+export const membershipInput = z.object({ ...scoped, personId: text, title: optionalText, status: z.enum(["INVITED", "ACTIVE", "SUSPENDED", "ENDED"]).default("ACTIVE"), startDate: date, endDate: date, scope: z.enum(["ORGANIZATION", "DESCENDANTS"]).default("ORGANIZATION"), metadata }).refine(v => !v.startDate || !v.endDate || v.endDate >= v.startDate, "Invalid membership date range");
+export const personInput = z.object({ ...scoped, displayName: text, legalName: optionalText, email: z.string().email().nullable().optional(), phone: optionalText });
+export const brandInput = z.object({ ...common, ...scoped, website: z.string().url().refine(v => /^https?:\/\//.test(v), "Website must use HTTP or HTTPS").nullable().optional() });
+export const productInput = z.object({ ...common, ...scoped, brandId: reference, divisionId: reference, type: z.enum(["PRODUCT", "SERVICE", "PLATFORM"]).default("PRODUCT"), lifecycle: z.enum(["CONCEPT", "DEVELOPMENT", "LIVE", "RETIRED"]).default("CONCEPT") });
+export { projectInput, goalInput } from "./execution-input";
+export const businessKinds = ["groups", "companies", "organizations", "relationships", "ownership", "people", "memberships", "brands", "products", "projects", "goals"] as const;
+export type BusinessKind = typeof businessKinds[number];

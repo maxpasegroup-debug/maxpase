@@ -1,0 +1,17 @@
+import { z } from "zod";
+import { requiredUtcDate } from "./execution-input";
+const id = z.string().min(1).max(200);
+const optionalId = id.nullable().optional();
+const text = z.string().trim().min(1).max(200);
+const optionalText = z.string().trim().max(4000).nullable().optional();
+const positive = z.number().int().min(1).max(1000000).nullable().optional();
+const metadata = z.record(z.string(), z.unknown()).nullable().optional().refine(v => JSON.stringify(v ?? {}).length <= 16000, "Metadata too large").transform(v => v == null ? v : JSON.stringify(v));
+export const programStatuses = ["DRAFT", "ACTIVE", "PAUSED", "RETIRED", "ARCHIVED"] as const;
+export const batchStatuses = ["PLANNED", "OPEN", "ACTIVE", "COMPLETED", "CANCELLED", "ARCHIVED"] as const;
+export const locationStatuses = ["PLANNED", "ACTIVE", "INACTIVE", "ARCHIVED"] as const;
+export const programInput = z.object({ organizationId: id, name: text, slug: z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/).max(120), description: optionalText, kind: z.enum(["PROGRAM", "SERVICE"]).default("PROGRAM"), status: z.enum(programStatuses).default("DRAFT"), durationDays: positive, capacity: positive, priceMinor: z.number().int().min(0).max(2147483647).nullable().optional(), currency: z.string().regex(/^[A-Z]{3}$/).nullable().optional(), brandId: optionalId, productId: optionalId, metadata }).strict().refine(v => (v.priceMinor == null) === (v.currency == null), "Price and currency must be configured together");
+export const batchInput = z.object({ programId: id, name: text, status: z.enum(batchStatuses).default("PLANNED"), startDate: requiredUtcDate.nullable().optional(), endDate: requiredUtcDate.nullable().optional(), capacity: positive, locationId: optionalId, metadata }).strict().refine(v => !v.startDate || !v.endDate || v.startDate <= v.endDate, "End date precedes start date");
+export const locationInput = z.object({ organizationId: id, name: text, type: z.enum(["CAMPUS", "DISTRICT_HUB", "COMMUNITY_CENTRE", "ONLINE", "OTHER"]).default("OTHER"), status: z.enum(locationStatuses).default("PLANNED"), address: optionalText, city: optionalText, region: optionalText, country: optionalText, postalCode: optionalText, metadata }).strict();
+export const participantInput = z.object({ batchId: id, personId: id, status: z.enum(["PLANNED", "ACTIVE", "COMPLETED", "WITHDRAWN"]).default("PLANNED") }).strict();
+export const companyKinds = ["divisions", "departments", "teams", "people", "programs", "batches", "locations", "products", "projects", "goals", "responsibilities", "participants", "approvals", "requests", "notifications", "workflows", "instances", "employers"] as const;
+export type CompanyKind = typeof companyKinds[number];

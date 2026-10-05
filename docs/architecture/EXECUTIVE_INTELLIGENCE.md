@@ -1,0 +1,71 @@
+# Executive Intelligence
+
+## Phase 10 Query And Privacy Review
+
+Source permissions still constrain all counts, comparisons, health, history, attention and selectors. No cross-request result/permission cache is introduced. Shared ancestry/project lookup reduces repeated authorization queries, and scoped event/deadline indexes support reviewed paths. Local small-fixture timings and index plans are measured, not enterprise capacity. Per-resource progress/source checks and potentially large historical result sets still require representative deployment load/pagination planning before scale. HTTP/SSR does not replace director/mobile/accessibility acceptance. See PHASE_10_VALIDATION.md.
+
+## Phase 08 Consumer
+
+SIA now consumes these deterministic projections through an internally constrained access resolver, applying agent and requesting-human source authority before aggregation. Briefing/attention/decisions remain domain evidence; recommendations are separately labeled RULE_BASED and never mutate source work. Governed decision memory references the existing append-only history. No broader cached dashboard or fake metrics enter SIA context. Earlier Phase 07 descriptions are historical; see SIA_VIRTUAL_CEO.md for current behavior.
+
+Phase 07 adds a deterministic, human-operated executive layer. Information becomes a signal only through an explicit rule; attention is not a copy of the event stream. Decisions remain human records or existing assigned operational approvals. No AI API, reasoning, memory, agent executor, automatic recommendation or new SIA authority is installed.
+
+## Source of Truth
+
+The execution service remains authoritative for project/task/goal/milestone status, calculated progress, blockers and dependencies. The operations service remains authoritative for requests, workflow instances, approvals, notifications, reminders and escalations. Organization ancestry and named capabilities remain Phase 03 concepts. Executive reads do not write metrics, synthetic activity or historical snapshots.
+
+`executive-service.ts` produces the protected command-center DTO. `/app` now opens `/app/executive`; the business registries and original `/app/foundation` remain available. Dedicated views cover briefing, attention, decisions, company comparison, projects, goals, operations, KPIs, risks, opportunities, changes and metrics. Server actions use session identity and allowlisted input contracts. There are no seeded executive records or metrics.
+
+## Metrics and Company Health
+
+Metric contracts contain name, definition, actual organization/project scope (null means all authorized scopes), value, unit, source, period, calculation, availability, calculatedAt, lastUpdated and explicit AUTHORIZED_RECORDS_ONLY coverage. Current snapshot counts are not historic period totals. The period filter governs changes and completions; deadlines use a seven-day forward horizon. Every source is filtered for actual domain access and executive.read before aggregation. An accessible empty source is zero; an inaccessible source is NO_DATA.
+
+Available counts: active/blocked projects, overdue tasks, active/at-risk or missed goals, the viewer's pending approvals, unresolved escalations/requests, source-backed failed events, pending reminders, failed workflow instances and the viewer's important notifications. These are not finance or company-wide approval/headcount metrics. Notification counts are recipient-private. Company comparisons never rank or score companies; nested-company work belongs to its nearest company rather than being counted in the parent company.
+
+Health is AT_RISK when named current source concerns exist. Otherwise unavailable categories yield UNKNOWN; complete available categories yield NO_CURRENT_CONCERNS, explicitly limited to authorized records. Reasons state actual counts rather than an opaque number. Project health is conservative UNKNOWN absent named concerns, not an invented assertion of overall health. Progress comes unchanged from the execution service. Goal target is its recorded target date; manual progress and real ProgressUpdate history retain their existing provenance.
+
+## Executive Records
+
+`ExecutiveRecord` is a small discriminated persistence envelope, not a second source for execution or operational data. Kinds are KPI, DECISION, RISK, OPPORTUNITY and ATTENTION. Each has a strict server input/lifecycle contract, immutable organization/project scope, restrictive organization/project/person foreign keys, an owner, unique source/reference, version and timestamps. Serialized payloads follow existing SQLite JSON-text practice. `ExecutiveHistory` holds append-only trusted actors, lifecycle changes, reasons, timestamps and optional explicit KPI observations. No public endpoint updates or deletes history.
+
+Creation requires executive.read, the kind's manage capability, person.read and a real active owner membership covering the actual scope. Project records also require project.read. References are namespaced by kind and organization. Identical authorized retries return the existing record; altered bodies with the same reference fail. Compare-and-set versions reject replay, stale updates and competing lifecycle actions. Scope/owner identities cannot be moved through content edits. Important writes, history, audit and operational events commit in one transaction.
+
+Risk context can be revised while open: title, description, severity, probability and mitigation. Probability is nullable or 0..1, never inferred. Opportunity context includes potential impact, next action, source and an explicit lifecycle; context can be revised while open. Decision draft context can be revised before submission. Revisions append history and audit the before/after payload, rather than erasing earlier decisions. Accepted/realized/closed records are not casually edited. Terminal reopening must pass the explicit lifecycle. Content revision does not execute a business action.
+
+## KPIs and Trends
+
+KPIs are explicit human-authored definitions with owner, target, unit, HIGHER/LOWER preference, UTC period, description and attested source. No default actual exists. Actual observations require kpi.manage, an active period and a human reason/source evidence. They are human attestations, not independently verified provider data. Observations cannot be backdated or silently backfilled. Definitions/targets/periods are immutable: create a new definition for a new target or reporting period so old observations never change meaning.
+
+For HIGHER, actual >= target is ON_TRACK; for LOWER, actual <= target is ON_TRACK. An unfavorable gap within 10% of the absolute target is AT_RISK; a larger gap is OFF_TRACK. Zero targets use only floating-point epsilon tolerance, not an invented percentage denominator. Missing actual or an expired period yields NO_DATA. Trends use at least three real observations: equal values STABLE, mixed movement VOLATILE, consistent favorable/unfavorable movement IMPROVING/DECLINING. Less than three is INSUFFICIENT_DATA. Goal trends use actual ProgressUpdate rows, not reconstructed historic values. KPI trends describe observations in their stated definition/period, not fabricated company performance history. Aggregate metric history is intentionally not persisted; there is no broadened-viewer snapshot that could leak later through trends.
+
+## Attention
+
+Rules generate: CRITICAL/HIGH overdue tasks only at those recorded priorities; HIGH explicitly blocked projects, missed goals, expired pending approvals, unresolved explicit escalations, failed source-backed operational events and OFF_TRACK KPIs; MEDIUM at-risk goals/KPIs and important deadlines within seven days. Normal overdue tasks remain available metrics, not automatically urgent attention. No LOW items are fabricated simply to fill a tier. Severity, source, owner when readable, due date, explanation and human next-action guidance are exposed with source links. Guidance is a fixed operational instruction, not an AI recommendation.
+
+Handling states are NEW, ACKNOWLEDGED, IN_PROGRESS, RESOLVED, DISMISSED. A stable rule/type/source key prevents duplicate handling records. Reads do not materialize NEW records. The first authorized human handling action creates persistence and history; subsequent actions use expected versions. Handling does not mark the source task complete or resolve an escalation. Resolved/dismissed handling remains history, while live condition generation determines whether a source is currently active. Source reads are reauthorized on every historical attention read and mutation, including KPI, event and escalation wrappers; revocation removes their visibility. Failed reminder/recurrence/control-check events resolve the actual wrapped resource and its read capabilities instead of being discarded or exposed on log access alone. Notification-event source access remains recipient-private. A removed condition disappears from live attention without inventing a human resolution. Original operational sources remain the place to remediate failures.
+
+## Decisions and Approval Boundary
+
+Strategic decisions contain what/title, why, impact, human-written options/recommendation where supplied, designated decision maker, requester in creation history, needed time and immutable scope. Lifecycle: DRAFT -> PENDING -> APPROVED/REJECTED/DEFERRED/CANCELLED; DEFERRED -> PENDING/CANCELLED; APPROVED -> COMPLETED. Approval/rejection/deferral requires decision.decide and the designated Person, not merely a role name. Other management transitions require decision.manage. Every decision records the actual User actor; another account does not become a different designated human.
+
+Operational approval decisions are projected directly from the existing SiaApproval/request policy; only the viewer's assignments are included, with the existing actionable result. The queue links to Phase 05 controls, which reauthorize stages, independent human identity and policy. No second approval engine, approval consumption or task mutation is added. An approved strategic decision does not itself execute a tool or grant agent access. Phase 05 SIA executionEnabled=false remains authoritative.
+
+## Changes, Briefing and Explainability
+
+What Changed admits real project creation/status/reopening, goal status changes, approval completion, KPI status changes, and authorized structural audits. User-reported events cannot impersonate these reserved lifecycle namespaces, including legacy plural names such as companies.updated; historical user-reported structural audits are excluded. A current non-terminal task whose due timestamp crossed within the selected period produces an explainable deadline-crossing signal; future deadlines do not masquerade as past changes. It is a current-state deadline projection, not proof of the task's historical status at that instant. Generic assignment/content mutations are not promoted to executive change signals.
+
+TODAY uses an explicit UTC calendar day and read timestamp, with today's changes, live attention, human decisions, next-seven-day deadlines, blocked work, goal/KPI concerns and selected-period actual completion wins. Date-only business inputs follow the existing UTC-midnight rule; explicit instants require a timezone. The UI's date-only Until filter includes that whole UTC day. UI section order intentionally preserves mobile priorities: attention, decisions, changes, deadlines, company health, projects, goals. Links return to real source views, people labels require existing person access, unknown owners stay unavailable, and all derived views display calculation/source-period/last-update freshness. No streaming or real-time delivery claim is made.
+
+## Authorization and Filters
+
+executive.read is additive, never a substitute for project/task/goal/event/approval/etc. reads. Distinct decision/kpi/risk/opportunity read/manage, decision.decide and attention.manage capabilities are registered without automatic canonical-role assignments. Active account, Person, dated membership, compatible human role and active organization ancestry remain mandatory. Group titles and system.admin do not bypass checks.
+
+Filters accept organizationId (existing group/company/division/business-unit/department/team tree), projectId, productId, UTC from/until, severity and validated status. Actual projects/products must be readable and lie within selected ancestry. Project-only grants cannot authorize an organization filter without their actual project anchor. All source rows, counts, company labels, selectors, attention, records/history and changes retain independent access checks. Log read alone cannot expose confidential underlying source events. Dependency summaries reauthorize both tasks and executive scopes. A user with A-only access cannot have B's work influence any visible value, health reason, trend, decision queue or change.
+
+## Query and Failure Boundaries
+
+Existing domain list/progress logic is reused; each source category is loaded once per dashboard and summarized server-side. Goal observation history is loaded in one authorized-ID batch. Event queries restrict candidates to failed records or whitelisted changes inside the period, avoiding an all-history activity scan; structural audit candidates are similarly scoped. Executive indexes cover organization/project + kind/status, due time, unique source identity, and history record/time. No warehouse, distributed worker or cache is introduced.
+
+This is a relational foundation, not a benchmarked large-enterprise analytics system. Existing source authorization/progress services still perform per-resource checks; very large portfolios require measured pagination/query planning before claiming scale. No cross-request result cache can preserve revoked visibility. Database exceptions surface as generic action failures; authorized lifecycle/version errors are explicit. Passive reads are not audited. Production migration application, visual browser/device behavior, load and deployment validation must be separately performed and reported, not inferred from HTTP rendering or builds.
+
+See PHASE_07_VALIDATION.md for Phase 07 evidence, and PHASE_08_VALIDATION.md for the current SIA phase.
