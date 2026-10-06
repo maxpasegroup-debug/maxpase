@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { randomBytes } from "node:crypto";
+import { validateBossConfiguration } from "./group/identity";
 
 const developmentSecret = randomBytes(32).toString("base64url");
 
@@ -14,6 +15,7 @@ const envSchema = z.object({
 });
 
 export function validateRuntimeEnvironment(env: NodeJS.ProcessEnv = process.env) {
+  validateBossConfiguration(env);
   const production = env.NODE_ENV === "production";
   if (production && (!env.DATABASE_URL || !env.AUTH_SECRET || env.AUTH_SECRET.length < 32 || /dev-only|replace-with|changeme/i.test(env.AUTH_SECRET) || env.AUTH_COOKIE_SECURE === "false")) throw new Error("Production environment is not securely configured");
   if (production) {

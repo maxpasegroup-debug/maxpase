@@ -1,5 +1,9 @@
 # Architecture
 
+## MAXSPACE Group Finalization
+
+The current group/product identity is MAXSPACE GROUP / MAXSPACE OS. The existing root ids, maxpase-group slug, auth/session contracts and migration history are retained. /app/boss reuses executive/domain/Business Graph services with current scoped authority, not another engine. See MAXSPACE_GROUP_ARCHITECTURE.md for confirmed companies/domains, explicit PIN provisioning and external/manual production prerequisites.
+
 ## F06 Surgical Remediation
 
 Authorization loads selected identity fields and bounded principal membership/role/permission batches, then resolves grant anchors/ancestors and explicitly authorized descendants inside the requested SIA scope. Business Graph reuses that hierarchy rather than scanning every organization again. Paths and capability-ID projections are reused only within the current access context; grants are never cached across requests. Narrow get_tasks reads only source-authorized tasks, their independently readable endpoints and governed memory; other read tools retain scoped executive/graph projections. Nested role/member/approval/instance-transition reads use collection-wide child batches rather than per-parent include expansion. Existing transaction, independent human approval, confirmation and provider-disabled boundaries remain. See docs/audit/F06_SIA_CONTEXT_SCALABILITY_REMEDIATION.md for reproduced failure, local evidence and remaining production prerequisites.

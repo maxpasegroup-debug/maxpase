@@ -1,4 +1,6 @@
 import { cookies } from "next/headers";
+import { headers } from "next/headers";
+import { siteByHost } from "@/server/portals/sites";
 import { config } from "@/server/config";
 import { authenticationService } from "./service";
 
@@ -12,6 +14,8 @@ export async function createSession(userId: string) {
   return result.session;
 }
 export async function getSession(): Promise<AuthSession | null> {
+  const h = await headers();
+  if (h.has("x-maxpase-portal") || siteByHost(h.get("host"))) return null;
   const token = (await cookies()).get(config.AUTH_COOKIE_NAME)?.value;
   return token ? authenticationService.validate(token, config.AUTH_SECRET) : null;
 }

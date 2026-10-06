@@ -1,6 +1,9 @@
 import type { NextConfig } from "next";
+import { portalSites } from "./src/server/portals/sites";
 
 const nextConfig: NextConfig = {
+  distDir: process.env.MAXPASE_PORTAL_SMOKE === "true" && process.env.NODE_ENV !== "production" ? ".next-portal-smoke" : ".next",
+  experimental: { serverActions: { allowedOrigins: ["maxpase.com", "www.maxpase.com", ...portalSites.flatMap(s => [s.domain, "www." + s.domain])] } },
   poweredByHeader: false,
   async headers() {
     return [{ source: "/:path*", headers: [

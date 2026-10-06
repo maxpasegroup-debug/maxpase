@@ -2,6 +2,7 @@ import NavLink from "./nav-link";
 import { logoutAction } from "@/server/auth/actions";
 import { requireSession } from "@/server/auth/guards";
 import { enterAira } from "./aira/actions";
+import { BOSS_EMAIL } from "@/server/group/identity";
 
 export default async function AppLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   const session = await requireSession();
@@ -15,6 +16,8 @@ export default async function AppLayout({ children }: Readonly<{ children: React
           <span>MAXPASE GROUP</span>
         </div>
         <nav className="nav-list" aria-label="Main navigation">
+          {session.email === BOSS_EMAIL && <NavLink href="/app/boss">Boss Panel</NavLink>}
+          <details className="workspace-navigation" open={session.email !== BOSS_EMAIL}><summary>Workspace</summary>
           <NavLink href="/app/executive">Command Center</NavLink>
           <NavLink href="/app/sia">SIA Virtual CEO</NavLink>
           <NavLink href="/app/communications">Communications</NavLink>
@@ -72,6 +75,7 @@ export default async function AppLayout({ children }: Readonly<{ children: React
           <NavLink href="/app/security">
             Security
           </NavLink>
+          </details>
         </nav>
       </aside>
       <main className="main" id="main-content" tabIndex={-1}>

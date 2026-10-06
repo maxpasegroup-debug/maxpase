@@ -1,5 +1,9 @@
 # Business Graph
 
+## Current Group Identity
+
+MAXSPACE GROUP is the current group-facing name. The existing graph now registers the user-supplied AIRA, PEARN and TOP RANK AI structure and confirmed brand domains through explicit idempotent operator initialization. No equity is inferred and historical ids/slugs remain. See MAXSPACE_GROUP_ARCHITECTURE.md; earlier sections are phase history.
+
 ## Phase 10 Preservation
 
 Hardening changes no company roots, ownership/equity semantics, canonical roles, people identity or resource scope. MAXPASE GROUP remains the ecosystem root and AIRA the first Company OS. Sessions, budgets, diagnostics and deployment procedures grant no business authority. Domain writes retain transactionally required audits and source filtering; no new business data is fabricated. See PHASE_10_VALIDATION.md.

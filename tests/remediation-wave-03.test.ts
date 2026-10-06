@@ -159,15 +159,15 @@ describe("Wave 03 readiness and routing boundaries", () => {
     try { expect((await ready()).status).toBe(503); expect(health().status).toBe(200); }
     finally { vi.unstubAllEnvs(); }
   });
-  it("keeps middleware a routing hint, protects exact app paths and leaves public paths alone", () => {
+  it("keeps middleware a routing hint, protects exact app paths and leaves public paths alone", async () => {
     vi.stubEnv("AUTH_COOKIE_NAME", "maxpase_session");
     try {
       for (const path of ["/app", "/app/executive?organizationId=forged"]) {
-        const response = middleware(new NextRequest("https://maxpase.test" + path));
+        const response = await middleware(new NextRequest("https://maxpase.test" + path));
         expect(response.status).toBe(307); expect(response.headers.get("location")).toBe("https://maxpase.test/login");
       }
-      for (const path of ["/login", "/api/health", "/api/ready", "/application"]) expect(middleware(new NextRequest("https://maxpase.test" + path)).headers.get("x-middleware-next")).toBe("1");
-      expect(middleware(new NextRequest("https://maxpase.test/app", { headers: { cookie: "maxpase_session=forged" } })).headers.get("x-middleware-next")).toBe("1");
+      for (const path of ["/login", "/api/health", "/api/ready", "/application"]) expect((await middleware(new NextRequest("https://maxpase.test" + path))).headers.get("x-middleware-next")).toBe("1");
+      expect((await middleware(new NextRequest("https://maxpase.test/app", { headers: { cookie: "maxpase_session=forged" } }))).headers.get("x-middleware-next")).toBe("1");
     } finally { vi.unstubAllEnvs(); }
   });
   it("does not trust forwarding or host values over a configured production origin", () => {

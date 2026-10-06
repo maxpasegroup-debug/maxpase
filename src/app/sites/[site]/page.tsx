@@ -1,0 +1,16 @@
+import Link from "next/link";
+import type { Metadata } from "next";
+import { ArrowRight, ArrowUpRight, ArrowDown, GraduationCap, FlaskConical, BriefcaseBusiness } from "lucide-react";
+import { requestPortal } from "@/server/portals/request";
+import { portalSites } from "@/server/portals/sites";
+const icons = { skillcity: GraduationCap, startup: GraduationCap, labs: FlaskConical, jobs: BriefcaseBusiness };
+export async function generateMetadata({ params }: { params: Promise<{ site: string }> }): Promise<Metadata> { const { site } = await requestPortal((await params).site); return { title: site.name, description: site.description, alternates: { canonical: `https://${site.domain}` } }; }
+export default async function PortalLanding({ params }: { params: Promise<{ site: string }> }) {
+  const { site, paths } = await requestPortal((await params).site), Icon = icons[site.id];
+  return <main className={`portal-landing portal-${site.theme}`}><header className="portal-header"><Link className="portal-wordmark" href={paths.home}><Icon size={28} /><span>{site.name}<span>AIRA SKILL CITY</span></span></Link><nav aria-label={`${site.name} navigation`}><a className="portal-focus-link" href="#focus">Explore</a><Link className="portal-button" href={paths.login}>Login<ArrowUpRight size={17} /></Link></nav></header>
+    <section className="portal-hero" style={{ backgroundImage: `url('${site.image}')` }}><div className="portal-hero-copy"><p className="portal-kicker">{site.eyebrow}</p><h1>{site.name}</h1><p>{site.description}</p><Link className="portal-button" href={paths.login}>Enter gateway<ArrowRight size={18} /></Link></div><div className="portal-hero-bottom"><span>{site.domain}</span><a href="#focus" aria-label="Explore"><ArrowDown size={22} /></a></div></section>
+    <section className="portal-focus" id="focus"><header><p className="portal-kicker">{site.id === "startup" ? "BUILD YOUR NEXT IDEA" : site.id === "labs" ? "MAKE ROOM FOR DISCOVERY" : "MOVE FORWARD WITH PURPOSE"}</p><h2>{site.id === "startup" ? "Start curious. Build with purpose." : site.id === "labs" ? "Explore. Experiment. Create." : "Your skills. Your next step."}</h2></header><div className="portal-focus-grid">{site.focus.map((label, i) => <article key={label}><span>0{i + 1}</span><h3>{label}</h3></article>)}</div></section>
+    {site.id === "skillcity" && <section className="portal-focus"><header><p className="portal-kicker">THE AIRA ECOSYSTEM</p><h2>Choose your next direction.</h2></header><div className="portal-focus-grid">{portalSites.filter(s => s.id !== "skillcity").map(s => <article key={s.id}><h3>{s.name}</h3><p>{s.description}</p><a className="portal-button" href={`https://${s.domain}`}>Explore<ArrowUpRight size={18} /></a></article>)}</div></section>}
+    <section className="portal-gateway-band"><div><p className="portal-kicker">YOUR {site.id === "skillcity" ? "SKILL CITY" : site.id === "jobs" ? "CAREER" : site.id === "labs" ? "LABS" : "STARTUP"} WORKSPACE</p><h2>Ready for your next chapter?</h2></div><Link className="portal-button" href={paths.login}>Sign in<ArrowUpRight size={18} /></Link></section>
+    <footer className="portal-footer"><strong>{site.name}</strong><span>AIRA SKILL CITY PRIVATE LIMITED</span><a href="https://unsplash.com" target="_blank" rel="noopener noreferrer">Illustrative photograph: Unsplash</a></footer></main>;
+}

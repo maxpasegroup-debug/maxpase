@@ -1,5 +1,9 @@
 # SIA Architecture
 
+## MAXSPACE Identity
+
+SIA remains the same shared Virtual CEO under MAXSPACE GROUP / MAXSPACE OS. The Boss Panel links to existing scoped tools and governed context; no new SIA, seeded agent authority, provider or autonomous executor is introduced. Stable legacy identifiers and historical phase descriptions remain preserved. See MAXSPACE_GROUP_ARCHITECTURE.md.
+
 ## F06 Scope-First Context
 
 Current context authority is resolved from bounded selected principal relations and grant-root/requested-scope hierarchy reads, not a global organization dump. get_tasks now has a narrow source projection: current user/agent task and executive intersection, only related readable organization/project endpoints, plus existing reviewed source-authorized memory. It does not load the complete executive portfolio/Business Graph. Other registered read tools retain their authorized executive/graph contract with bounded primary and collection-wide nested reads. Output/final-memory byte limits and decision-history disclosure remain. Initial/final current authorization is reloaded; only structural paths, capability-ID projections and identical scope checks within one read are reused. No cross-request cache, provider integration, new authority or timeout padding is introduced. The F06 remediation report supersedes earlier global-hierarchy/include findings for the repaired paths; production load/SLO/token-cost acceptance remains NOT VERIFIED.

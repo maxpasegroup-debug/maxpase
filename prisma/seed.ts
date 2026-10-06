@@ -4,6 +4,7 @@ import { hashPassword } from "../src/server/auth/password";
 import { canonicalAiraRoles } from "../src/server/domain/aira-roles";
 import { workforcePermissions } from "../src/server/authorization/registry";
 import { seedAiraStructure } from "../src/server/domain/aira-seed";
+import { initializeGroupStructure } from "../src/server/group/structure";
 
 const prisma = new PrismaClient();
 
@@ -50,6 +51,7 @@ async function main() {
   });
 
   await prisma.$transaction(db => seedAiraStructure(db, aira.id));
+  await prisma.$transaction(initializeGroupStructure);
   const department = await prisma.organization.upsert({
     where: { slug: "aira-development-administration" }, update: {},
     create: { type: "DEPARTMENT", name: "Development administration", slug: "aira-development-administration", parentId: aira.id, description: "Development example only; not a claim about AIRA's real organization.", metadata: JSON.stringify({ developmentSeed: true }), department: { create: {} } }

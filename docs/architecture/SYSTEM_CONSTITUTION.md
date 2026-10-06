@@ -1,5 +1,9 @@
 # MAXPASE OS System Constitution
 
+## Current Group Identity
+
+MAXSPACE GROUP and MAXSPACE OS supersede the historical product-facing MAXPASE names below. The underlying ecosystem/company/authorization boundaries and stable identifiers remain unchanged. See MAXSPACE_GROUP_ARCHITECTURE.md for current supplied structure and the Boss Panel.
+
 ## Canonical Hierarchy
 
 MAXPASE GROUP is the parent business ecosystem. MAXPASE OS is shared operating infrastructure. SIA is the MAXPASE GROUP Virtual CEO and intelligence layer. Company OSs and company operations sit below that shared foundation.
