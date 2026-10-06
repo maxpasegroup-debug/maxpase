@@ -1,0 +1,37 @@
+{
+  "status": "PASS",
+  "measuredAt": "2026-10-06T18:31:01.079Z",
+  "database": "isolated disposable fixture",
+  "browser": "msedge",
+  "browserVersion": "154.0.4258.53",
+  "accessibility": "keyboard skip, approval actions and horizontal table scrolling; not screen-reader certification",
+  "workflows": [
+    "company shortcuts",
+    "approval confirmation cancellation",
+    "approve",
+    "reject",
+    "prepare/retry/submit request",
+    "independent reviewer",
+    "overdue task assignment/update with long reference",
+    "reminder",
+    "resolve escalation",
+    "saved filter reload",
+    "private unread notification/read",
+    "activity"
+  ],
+  "fixtureStates": [
+    "DRAFT",
+    "SUBMITTED",
+    "APPROVED",
+    "REJECTED",
+    "CANCELLED"
+  ],
+  "screenshots": 24,
+  "widths": [
+    320,
+    390,
+    768,
+    1440
+  ],
+  "pageErrors": 0
+}

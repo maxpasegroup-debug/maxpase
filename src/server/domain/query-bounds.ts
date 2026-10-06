@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { sortWork } from "@/lib/work-list";
 
 export const READ_BUDGET = 5000;
 export class QueryBudgetError extends Error {
@@ -30,6 +31,14 @@ export function resultPage<T extends { id: string }>(rows: T[], raw: PageInput =
   const ordered = databasePaged ? rows : [...rows].sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0).filter(r => !page.after || r.id > page.after);
   const records = ordered.slice(0, page.limit);
   return { records, nextCursor: ordered.length > page.limit ? records.at(-1)!.id : null };
+}
+export function sortedResultPage<T extends { id: string; [key: string]: unknown }>(rows: T[], sort: string, raw: PageInput = {}) {
+  const page = pageInput.parse(raw), ordered = sortWork(rows, sort);
+  const index = page.after ? ordered.findIndex(r => r.id === page.after) : -1;
+  // A vanished or inaccessible cursor cannot silently restart a list.
+  if (page.after && index < 0) return { records: [] as T[], nextCursor: null };
+  const remaining = ordered.slice(index + 1), records = remaining.slice(0, page.limit);
+  return { records, nextCursor: remaining.length > page.limit ? records.at(-1)!.id : null };
 }
 export function groupRows<T>(rows: T[], parent: (row: T) => string) {
   const groups = new Map<string, T[]>();

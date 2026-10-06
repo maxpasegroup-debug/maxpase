@@ -1,0 +1,303 @@
+{
+  "classification": "ISOLATED LOCAL SERVICE BENCHMARK; NOT PRODUCTION SLO ACCEPTANCE",
+  "measuredAt": "2026-10-06T15:54:11.043Z",
+  "node": "v22.14.0",
+  "fixture": {
+    "authorizedTasks": [
+      100,
+      1000
+    ],
+    "unrelatedCompanyTasks": 6000,
+    "warmups": 1,
+    "samplesPerOperation": 10,
+    "explicitCapacityRefusalAt": 5001
+  },
+  "criteria": {
+    "localBossObservedP95Ms": 2000,
+    "localTaskPageObservedP95Ms": 2000,
+    "state": "PROPOSED, NOT OWNER-AGREED"
+  },
+  "notes": [
+    "No production data, credentials or external provider accessed",
+    "Serial service timings exclude browser, network, TLS and concurrent load",
+    "Prisma engine duration has millisecond resolution; no SQL or parameters recorded",
+    "Query-capacity refusal is explicit, not silent truncation",
+    "Fresh authorization denies reads immediately after permission revocation"
+  ],
+  "summary": {
+    "boss_100": {
+      "medianMs": 342.4985999999999,
+      "observedP95Ms": 380.40790000000015,
+      "maxQueryCount": 549,
+      "maxResponseBytes": 1016804
+    },
+    "task_page_100": {
+      "medianMs": 13.101999999999862,
+      "observedP95Ms": 19.54950000000008,
+      "maxQueryCount": 18,
+      "maxResponseBytes": 32179
+    },
+    "boss_1000": {
+      "medianMs": 932.4611999999979,
+      "observedP95Ms": 1298.039999999999,
+      "maxQueryCount": 1449,
+      "maxResponseBytes": 9802042
+    },
+    "task_page_1000": {
+      "medianMs": 32.446100000001024,
+      "observedP95Ms": 40.76310000000012,
+      "maxQueryCount": 19,
+      "maxResponseBytes": 32179
+    }
+  },
+  "samples": {
+    "boss_100": [
+      {
+        "elapsedMs": 380.40790000000015,
+        "queryCount": 549,
+        "databaseMs": 1,
+        "responseBytes": 1016804
+      },
+      {
+        "elapsedMs": 360.72900000000027,
+        "queryCount": 549,
+        "databaseMs": 2,
+        "responseBytes": 1016804
+      },
+      {
+        "elapsedMs": 358.53930000000037,
+        "queryCount": 549,
+        "databaseMs": 1,
+        "responseBytes": 1016804
+      },
+      {
+        "elapsedMs": 325.8792999999996,
+        "queryCount": 549,
+        "databaseMs": 1,
+        "responseBytes": 1016804
+      },
+      {
+        "elapsedMs": 327.1295999999993,
+        "queryCount": 549,
+        "databaseMs": 1,
+        "responseBytes": 1016804
+      },
+      {
+        "elapsedMs": 323.9961000000003,
+        "queryCount": 549,
+        "databaseMs": 1,
+        "responseBytes": 1016804
+      },
+      {
+        "elapsedMs": 348.6130999999996,
+        "queryCount": 549,
+        "databaseMs": 1,
+        "responseBytes": 1016804
+      },
+      {
+        "elapsedMs": 300.2599999999993,
+        "queryCount": 549,
+        "databaseMs": 1,
+        "responseBytes": 1016804
+      },
+      {
+        "elapsedMs": 342.4985999999999,
+        "queryCount": 549,
+        "databaseMs": 1,
+        "responseBytes": 1016804
+      },
+      {
+        "elapsedMs": 341.48279999999977,
+        "queryCount": 549,
+        "databaseMs": 1,
+        "responseBytes": 1016804
+      }
+    ],
+    "task_page_100": [
+      {
+        "elapsedMs": 19.54950000000008,
+        "queryCount": 18,
+        "databaseMs": 0,
+        "responseBytes": 32179
+      },
+      {
+        "elapsedMs": 12.570900000000165,
+        "queryCount": 18,
+        "databaseMs": 0,
+        "responseBytes": 32179
+      },
+      {
+        "elapsedMs": 12.95129999999972,
+        "queryCount": 18,
+        "databaseMs": 0,
+        "responseBytes": 32179
+      },
+      {
+        "elapsedMs": 12.610500000000684,
+        "queryCount": 18,
+        "databaseMs": 0,
+        "responseBytes": 32179
+      },
+      {
+        "elapsedMs": 13.101999999999862,
+        "queryCount": 18,
+        "databaseMs": 0,
+        "responseBytes": 32179
+      },
+      {
+        "elapsedMs": 12.218699999999444,
+        "queryCount": 18,
+        "databaseMs": 0,
+        "responseBytes": 32179
+      },
+      {
+        "elapsedMs": 15.660299999999552,
+        "queryCount": 18,
+        "databaseMs": 0,
+        "responseBytes": 32179
+      },
+      {
+        "elapsedMs": 13.61999999999989,
+        "queryCount": 18,
+        "databaseMs": 0,
+        "responseBytes": 32179
+      },
+      {
+        "elapsedMs": 13.096799999999348,
+        "queryCount": 18,
+        "databaseMs": 0,
+        "responseBytes": 32179
+      },
+      {
+        "elapsedMs": 14.844599999999446,
+        "queryCount": 18,
+        "databaseMs": 0,
+        "responseBytes": 32179
+      }
+    ],
+    "boss_1000": [
+      {
+        "elapsedMs": 853.1572000000006,
+        "queryCount": 1449,
+        "databaseMs": 9,
+        "responseBytes": 9802042
+      },
+      {
+        "elapsedMs": 1085.6730000000007,
+        "queryCount": 1449,
+        "databaseMs": 10,
+        "responseBytes": 9802042
+      },
+      {
+        "elapsedMs": 794.6149000000005,
+        "queryCount": 1449,
+        "databaseMs": 5,
+        "responseBytes": 9802042
+      },
+      {
+        "elapsedMs": 818.768,
+        "queryCount": 1449,
+        "databaseMs": 5,
+        "responseBytes": 9802042
+      },
+      {
+        "elapsedMs": 952.4048999999995,
+        "queryCount": 1449,
+        "databaseMs": 6,
+        "responseBytes": 9802042
+      },
+      {
+        "elapsedMs": 847.5483999999997,
+        "queryCount": 1449,
+        "databaseMs": 4,
+        "responseBytes": 9802042
+      },
+      {
+        "elapsedMs": 1056.0012000000006,
+        "queryCount": 1449,
+        "databaseMs": 5,
+        "responseBytes": 9802042
+      },
+      {
+        "elapsedMs": 1298.039999999999,
+        "queryCount": 1449,
+        "databaseMs": 7,
+        "responseBytes": 9802042
+      },
+      {
+        "elapsedMs": 932.4611999999979,
+        "queryCount": 1449,
+        "databaseMs": 5,
+        "responseBytes": 9802042
+      },
+      {
+        "elapsedMs": 829.2635000000009,
+        "queryCount": 1449,
+        "databaseMs": 4,
+        "responseBytes": 9802042
+      }
+    ],
+    "task_page_1000": [
+      {
+        "elapsedMs": 36.90390000000116,
+        "queryCount": 18,
+        "databaseMs": 4,
+        "responseBytes": 32179
+      },
+      {
+        "elapsedMs": 33.674700000001394,
+        "queryCount": 18,
+        "databaseMs": 4,
+        "responseBytes": 32179
+      },
+      {
+        "elapsedMs": 31.05040000000008,
+        "queryCount": 18,
+        "databaseMs": 5,
+        "responseBytes": 32179
+      },
+      {
+        "elapsedMs": 40.76310000000012,
+        "queryCount": 18,
+        "databaseMs": 5,
+        "responseBytes": 32179
+      },
+      {
+        "elapsedMs": 38.811899999998786,
+        "queryCount": 18,
+        "databaseMs": 5,
+        "responseBytes": 32179
+      },
+      {
+        "elapsedMs": 29.70470000000023,
+        "queryCount": 18,
+        "databaseMs": 4,
+        "responseBytes": 32179
+      },
+      {
+        "elapsedMs": 30.13040000000001,
+        "queryCount": 18,
+        "databaseMs": 4,
+        "responseBytes": 32179
+      },
+      {
+        "elapsedMs": 32.446100000001024,
+        "queryCount": 19,
+        "databaseMs": 4,
+        "responseBytes": 32179
+      },
+      {
+        "elapsedMs": 28.86620000000039,
+        "queryCount": 18,
+        "databaseMs": 4,
+        "responseBytes": 32179
+      },
+      {
+        "elapsedMs": 30.670600000001286,
+        "queryCount": 18,
+        "databaseMs": 4,
+        "responseBytes": 32179
+      }
+    ]
+  }
+}

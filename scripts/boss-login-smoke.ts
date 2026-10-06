@@ -38,7 +38,7 @@ async function main() {
   }
   const aira = await db.organization.findUniqueOrThrow({ where: { slug: "aira-skill-city" }, select: { id: true } });
   const scoped = await fetch(base + "/app/boss?companyId=" + aira.id, { headers }); assert.equal(scoped.status, 200);
-  const denied = await fetch(base + "/app/boss?companyId=forged", { headers }); assert.match(await denied.text(), /Boss Panel unavailable/);
+  const denied = await fetch(base + "/app/boss?companyId=forged", { headers }); assert.match(await denied.text(), /Boss Panel not authorized/);
   await authenticationService.revoke(issuedToken!, config.AUTH_SECRET); issuedToken = undefined;
   const revoked = await fetch(base + "/app/boss", { headers, redirect: "manual" }); assert.equal(revoked.status, 307);
   console.log("PASS local landing/image, actual PIN form submission, authenticated 17 Boss views, company context, forged scope denial and session revocation; no secret output or production/browser acceptance.");

@@ -48,6 +48,25 @@ beforeAll(async () => {
 }, 30000);
 afterAll(async () => { await db.$disconnect(); rmSync(dir, { recursive: true, force: true }); });
 describe("Phase 07 deterministic executive boundary", () => {
+  it("batch scope checks reject mismatched project ownership and never survive permission revocation", async () => {
+    const foreignProject = await db.project.findFirstOrThrow({ where: { organizationId: b } });
+    const valid = await db.task.create({ data: { organizationId: division, projectId, title: "Batch authorized task" } });
+    const forged = await db.task.create({ data: { organizationId: division, projectId: foreignProject.id, title: "Batch forged project scope" } });
+    const mismatched = await db.task.create({ data: { organizationId: a, projectId, title: "Batch mismatched organization scope" } });
+    const person = await db.user.findUniqueOrThrow({ where: { id: reader }, select: { personId: true } });
+    const member = await db.membership.findFirstOrThrow({ where: { personId: person.personId! }, include: { roles: true } });
+    const permission = await db.permission.findUniqueOrThrow({ where: { key: "executive.read" } });
+    const roleId = member.roles[0].roleId;
+    try {
+      const view = await service.dashboard(reader, {}, new Date(), { tasks: true });
+      expect(view.tasks.map(t => t.id)).toContain(valid.id);
+      expect(JSON.stringify(view)).not.toContain("Batch forged");
+      expect(JSON.stringify(view)).not.toContain("Batch mismatched");
+      await db.rolePermission.delete({ where: { roleId_permissionId: { roleId, permissionId: permission.id } } });
+      try { await expect(service.dashboard(reader)).rejects.toThrow("Access denied"); }
+      finally { await db.rolePermission.create({ data: { roleId, permissionId: permission.id } }); }
+    } finally { await db.task.deleteMany({ where: { id: { in: [valid.id, forged.id, mismatched.id] } } }); }
+  });
   it("aggregates only authorized companies and rejects forged filters/actors", async () => {
     const view = await service.dashboard(reader);
     expect(metric(view, "Blocked projects").value).toBe(1); expect(metric(view, "Overdue tasks").value).toBe(2);

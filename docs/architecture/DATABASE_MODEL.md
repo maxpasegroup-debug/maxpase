@@ -1,5 +1,9 @@
 # Database Model
 
+## Account Timezone Preference
+
+`20261006090000_account_timezone` adds nullable `User.timezone` using an additive SQLite ALTER TABLE. The value is a validated IANA timezone; null preserves existing accounts and resolves to IST for the Boss account or UTC otherwise. This is a display preference, not a replacement for recurrence timezone or UTC timestamps. Own-account preference saves and `account.timezone_updated` audit events share a transaction. Earlier migrations remain unchanged; readiness verifies the new checksum and column. Apply the migration to the persistent application SQLite database before serving the new client. No credential reseeding or database reset is required.
+
 ## Phase 10 Migration And Recovery
 
 20261004180000_phase_10_hardening is the eleventh migration. It adds SecurityRateBucket (hashed/pseudonymous budget key, window, expiry, count, unique key/window, expiry index) and non-destructive composite indexes for task deadlines, outbound message queues, scoped SIA memory and failed operational events. Earlier migration SQL remains unchanged. Fresh/repeated deploy, drift/integrity/FKs and isolated snapshot/restore are checked by scripts/validate-migrations.ts. Production migration/restore are NOT RUN; SQLite requires one persistent shared file and intentional migration/backup steps. See MIGRATION_RUNBOOK.md and BACKUP_RESTORE.md.

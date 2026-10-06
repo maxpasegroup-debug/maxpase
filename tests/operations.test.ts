@@ -56,6 +56,26 @@ async function workflow(controlPointId?: string) {
   return { definition, instance, transition, command: { instanceId: instance.id, transitionId: transition.id, expectedVersion: 0, reason: "Checked", idempotencyKey: unique() } };
 }
 describe("Phase 05 operational controls and security", () => {
+  it("provides scoped approval reasons and chain history, and searches before pagination without changing authority", async () => {
+    const p = await policy([[first], [last]]);
+    const r = await request(p.id, { title: "Inbox evidence review", description: "Evidence: agreed delivery checklist" });
+    const chain = await approvals(r.id);
+    expect((await ops.list(first, "approvals", { recordId: chain[0].id }))[0]).not.toHaveProperty("approvals");
+    const before = await ops.listPage(last, "approvals", { organizationId: a, search: "delivery checklist", sort: "newest" } as Parameters<typeof ops.listPage>[2]);
+    expect(before.records).toHaveLength(1);
+    expect(before.records[0]).toMatchObject({ requestId: r.id, description: "Evidence: agreed delivery checklist", actionable: false });
+    expect(String(before.records[0].nextStep)).toContain("earlier stage");
+    await decide(first, chain[0].id);
+    const after = await ops.listPage(last, "approvals", { recordId: chain[1].id });
+    expect(after.records[0]).toMatchObject({ actionable: true, policyName: p.name });
+    expect(after.records[0].approvals).toEqual(expect.arrayContaining([expect.objectContaining({ id: chain[0].id, status: "APPROVED", comment: "Reviewed against the operational policy", decidedAt: expect.any(Date) })]));
+    expect((await ops.listPage(outsider, "approvals", { recordId: chain[1].id, approverUserId: last })).records).toEqual([]);
+    await expect(decide(outsider, chain[1].id)).rejects.toThrow();
+    expect((await ops.listPage(last, "approvals", { search: "does not match evidence" })).records).toEqual([]);
+    await decide(last, chain[1].id);
+    await expect(decide(last, chain[1].id)).rejects.toThrow();
+    expect(await db.auditEvent.count({ where: { entityId: chain[1].id, action: "approval.approved" } })).toBe(1);
+  });
   it("separates immutable published definitions from instances and prevents arbitrary states", async () => {
     const w = await workflow();
     expect(w.instance.currentStateId).toBe(w.transition.fromStateId);
@@ -113,6 +133,8 @@ describe("Phase 05 operational controls and security", () => {
   it("supports ordered stages with parallel unanimous decisions within a stage", async () => {
     const p = await policy([[first, parallel], [last]]), r = await request(p.id), chain = await approvals(r.id);
     const one = chain.find(a => a.approverUserId === first)!, two = chain.find(a => a.approverUserId === parallel)!, three = chain.find(a => a.approverUserId === last)!;
+    expect((await ops.listPage(last, "approvals", { recordId: three.id }, { after: "zzz" })).records).toMatchObject([{ id: three.id, actionable: false }]);
+    expect((await ops.listPage(first, "approvals", { recordId: three.id })).records).toEqual([]);
     expect((await ops.list(last, "approvals")).find(row => row.id === three.id)).toMatchObject({ actionable: false });
     await expect(decide(last, three.id)).rejects.toThrow("Earlier");
     await decide(first, one.id);
@@ -120,6 +142,7 @@ describe("Phase 05 operational controls and security", () => {
     await expect(decide(last, three.id)).rejects.toThrow("Earlier");
     await decide(parallel, two.id);
     expect((await ops.list(last, "approvals")).find(row => row.id === three.id)).toMatchObject({ actionable: true });
+    expect((await ops.listPage(last, "approvals", { recordId: three.id })).records).toMatchObject([{ id: three.id, actionable: true }]);
     await decide(last, three.id);
     expect(await db.operationalRequest.findUnique({ where: { id: r.id } })).toMatchObject({ status: "APPROVED" });
     expect(await db.notification.count({ where: { reference: "approval:" + three.id } })).toBe(1);

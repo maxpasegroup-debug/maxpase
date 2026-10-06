@@ -1,0 +1,160 @@
+{
+  "measuredAt": "2026-10-06T15:55:14.539Z",
+  "mode": "READ-ONLY PUBLIC DNS/TLS/HTTP; NO AUTHENTICATION OR PRODUCTION MUTATIONS",
+  "status": "BLOCKED",
+  "sessionIsolation": "UNIT REGRESSION REQUIRED; LIVE LOGGED-IN CROSS-HOST CHECK NOT RUN",
+  "results": [
+    {
+      "host": "maxpase.com",
+      "status": "PASS",
+      "dns": {
+        "status": "PASS",
+        "addresses": [
+          "69.46.46.21"
+        ]
+      },
+      "tls": {
+        "status": "PASS",
+        "issuer": "Let's Encrypt",
+        "validFrom": "Oct  6 02:46:07 2026 GMT",
+        "validUntil": "Jan  4 02:46:06 2027 GMT"
+      },
+      "home": {
+        "httpStatus": 200,
+        "elapsedMs": 3283.2081,
+        "correctBrand": true,
+        "stayedAtRoot": true
+      },
+      "login": {
+        "httpStatus": 200,
+        "elapsedMs": 694.8240999999998,
+        "emailField": true,
+        "credentialField": true,
+        "expectedCredential": "Boss PIN"
+      },
+      "anonymous": {
+        "httpStatus": 307,
+        "loginRedirect": true
+      }
+    },
+    {
+      "host": "airaskillcity.com",
+      "status": "BLOCKED",
+      "dns": {
+        "status": "PASS",
+        "addresses": [
+          "69.46.46.53"
+        ]
+      },
+      "tls": {
+        "status": "PASS",
+        "issuer": "Let's Encrypt",
+        "validFrom": "Aug 24 10:43:04 2026 GMT",
+        "validUntil": "Nov 22 10:43:03 2026 GMT"
+      },
+      "home": {
+        "httpStatus": 200,
+        "elapsedMs": 1970.1854999999996,
+        "correctBrand": true,
+        "stayedAtRoot": true
+      },
+      "login": {
+        "httpStatus": 200,
+        "elapsedMs": 1430.0294999999987,
+        "emailField": true,
+        "credentialField": true,
+        "expectedCredential": "portal password"
+      },
+      "anonymous": {
+        "httpStatus": 404,
+        "loginRedirect": false
+      },
+      "corporateRoute": {
+        "httpStatus": 404
+      }
+    },
+    {
+      "host": "airastartupskool.com",
+      "status": "PASS",
+      "dns": {
+        "status": "PASS",
+        "addresses": [
+          "69.46.46.10"
+        ]
+      },
+      "tls": {
+        "status": "PASS",
+        "issuer": "Let's Encrypt",
+        "validFrom": "Oct  6 06:03:38 2026 GMT",
+        "validUntil": "Jan  4 06:03:37 2027 GMT"
+      },
+      "home": {
+        "httpStatus": 200,
+        "elapsedMs": 1124.348399999999,
+        "correctBrand": true,
+        "stayedAtRoot": true
+      },
+      "login": {
+        "httpStatus": 200,
+        "elapsedMs": 336.83970000000045,
+        "emailField": true,
+        "credentialField": true,
+        "expectedCredential": "portal password"
+      },
+      "anonymous": {
+        "httpStatus": 307,
+        "loginRedirect": true
+      },
+      "corporateRoute": {
+        "httpStatus": 404
+      }
+    },
+    {
+      "host": "airalabs.online",
+      "status": "PASS",
+      "dns": {
+        "status": "PASS",
+        "addresses": [
+          "69.46.46.109"
+        ]
+      },
+      "tls": {
+        "status": "PASS",
+        "issuer": "Let's Encrypt",
+        "validFrom": "Oct  6 03:41:35 2026 GMT",
+        "validUntil": "Jan  4 03:41:34 2027 GMT"
+      },
+      "home": {
+        "httpStatus": 200,
+        "elapsedMs": 616.4511999999995,
+        "correctBrand": true,
+        "stayedAtRoot": true
+      },
+      "login": {
+        "httpStatus": 200,
+        "elapsedMs": 377.2357000000011,
+        "emailField": true,
+        "credentialField": true,
+        "expectedCredential": "portal password"
+      },
+      "anonymous": {
+        "httpStatus": 307,
+        "loginRedirect": true
+      },
+      "corporateRoute": {
+        "httpStatus": 404
+      }
+    },
+    {
+      "host": "nicejobs.online",
+      "status": "BLOCKED",
+      "dns": {
+        "status": "PASS",
+        "addresses": [
+          "69.46.46.21"
+        ]
+      },
+      "failure": "ERR_TLS_CERT_ALTNAME_INVALID"
+    }
+  ]
+}

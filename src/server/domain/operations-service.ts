@@ -1,5 +1,6 @@
-import { boundedRead, groupRows, resultPage, type PageInput } from "./query-bounds";
+import { boundedRead, groupRows, resultPage, sortedResultPage, type PageInput } from "./query-bounds";
 import { createHash } from "node:crypto";
+import { z } from "zod";
 import { PrismaClient, type Prisma } from "@prisma/client";
 import { prisma } from "@/server/db";
 import { AccessError, createAccessContext as defaultAccessContext } from "@/server/authorization/engine";
@@ -21,7 +22,7 @@ export function recurrenceDate(start: Date, frequency: string, interval: number,
   } else date.setUTCDate(date.getUTCDate() + interval * index * (frequency === "WEEKLY" ? 7 : 1));
   return date;
 }
-export type OperationsQuery = { organizationId?: string; projectId?: string; search?: string; status?: string; requesterUserId?: string; approverUserId?: string; actorUserId?: string; entityId?: string; type?: string; priority?: string; read?: string; from?: string; until?: string; assigneePersonId?: string; dueBefore?: string };
+export type OperationsQuery = { recordId?: string; organizationId?: string; projectId?: string; search?: string; status?: string; requesterUserId?: string; approverUserId?: string; actorUserId?: string; entityId?: string; type?: string; priority?: string; read?: string; from?: string; until?: string; assigneePersonId?: string; dueBefore?: string };
 const keys: Record<input.OperationsKind, string> = { "my-tasks": "task.read", workflows: "workflow.read", instances: "workflow.read", approvals: "approval.read", requests: "request.read", notifications: "notification.read", activity: "activity.read", events: "event.read", reminders: "reminder.read", recurring: "recurrence.read", escalations: "escalation.read", controls: "control.read", preferences: "notification.read", sia: "request.read" };
 export function createOperationsService(client: PrismaClient = prisma, createAccessContext = defaultAccessContext) {
   async function context(db: DB, userId: string) {
@@ -553,7 +554,8 @@ export function createOperationsService(client: PrismaClient = prisma, createAcc
       const dates = { ...(from || until ? { createdAt: { gte: from, lte: until } } : {}) };
       const scope = { OR: [{ organizationId: { in: ctx.organizationIds(key) } }, { projectId: { in: ctx.grants.filter(g => g.key === key && g.projectId).map(g => g.projectId!) } }], ...(query.organizationId ? { organizationId: query.organizationId } : {}), ...(query.projectId ? { projectId: query.projectId } : {}) };
       const search = query.search?.trim().slice(0, 200) ?? "";
-      const status = query.status ? { status: query.status.slice(0, 64) } : {};
+      const exact = query.recordId ? { id: z.string().min(1).max(200).parse(query.recordId) } : {};
+      const status = { ...exact, ...(query.status ? { status: query.status.slice(0, 64) } : {}) };
       let rows: Record<string, unknown>[];
       switch (kind) {
         case "workflows": return boundedRead(take => db.workflowDefinition.findMany({ take, where: { ...scope, ...status, name: { contains: search } }, include: { states: true, transitions: { include: { fromState: true, toState: true } } }, orderBy: { createdAt: "desc" } }));
@@ -600,6 +602,9 @@ export function createOperationsService(client: PrismaClient = prisma, createAcc
           await boundResource(db, ctx, row as Resource, key);
           if (kind === "approvals") {
             const request = await db.operationalRequest.findUniqueOrThrow({ where: { id: String(row.requestId) }, include: { controlPoint: true, workflowInstance: true } });
+            if (search && !request.title.toLowerCase().includes(search.toLowerCase()) && !request.description?.toLowerCase().includes(search.toLowerCase())) continue;
+            row.description = request.description;
+            row.requestType = request.type;
             row.actionable = row.status === "PENDING" && request.status === "SUBMITTED" && request.controlPoint.status === "ACTIVE" && (!request.expiresAt || request.expiresAt > new Date()) && (!request.workflowInstance || request.workflowInstance.status === "PENDING" && request.workflowInstance.version === request.instanceVersion) && await db.siaApproval.count({ where: { requestId: request.id, stageIndex: { lt: Number(row.stageIndex) }, status: { not: "APPROVED" } } }) === 0;
             if (row.actionable) {
               const assigned = await db.siaApproval.findUniqueOrThrow({ where: { id: String(row.id) } });
@@ -615,6 +620,7 @@ export function createOperationsService(client: PrismaClient = prisma, createAcc
             const communication = await db.communicationMessage.findUnique({ where: { requestId: String(kind === "approvals" ? row.requestId : row.id) }, select: { id: true, organizationId: true, projectId: true, sender: true, recipient: true, channel: true, subject: true, content: true, purpose: true } });
             if (communication && (await ctx.decide("communication.read", communication)).allowed && (await ctx.decide("person.read", communication)).allowed) row.communicationPreview = communication;
           }
+          if (kind === "approvals") row.nextStep = row.status !== "PENDING" ? "Decision recorded. Review the history below." : row.expiresAt && new Date(String(row.expiresAt)) <= new Date() ? "Request expired. The requester must prepare a new request." : row.actionable ? row.approverUserId === userId ? "Review the evidence, record a reason and approve or reject." : "Waiting for the assigned approver." : "Waiting for an earlier stage or current policy authority. No decision is permitted yet.";
           visible.push(row);
         } catch (e) { if (!(e instanceof AccessError)) throw e; }
       }
@@ -656,12 +662,41 @@ export function createOperationsService(client: PrismaClient = prisma, createAcc
     if (request.requesterUserId !== userId || request.controlPoint.allowSelfApproval || !await approvedAuthority(transaction, id)) throw new AccessError("Current independent human approval required");
     return request;
   }
-  async function listPage(userId: string, kind: input.OperationsKind, query: OperationsQuery = {}, page: PageInput = {}) {
+  async function inboxDetails(userId: string, page: { records: (Record<string, unknown> & { id: string })[]; nextCursor: string | null }) {
+    if (!page.records.length) return page;
+    return client.$transaction(async db => {
+      const ctx = await context(db, userId);
+      const requests = await boundedRead(take => db.operationalRequest.findMany({ take, where: { id: { in: page.records.map(r => String(r.requestId)) } }, include: { controlPoint: true, workflowInstance: true } }));
+      const visible: typeof requests = [];
+      for (const request of requests) {
+        try { await boundResource(db, ctx, request, "approval.read"); visible.push(request); }
+        catch (error) { if (!(error instanceof AccessError)) throw error; }
+      }
+      // Expand history only for the authorized visible page, never executive counters.
+      const history = groupRows(await boundedRead(take => db.siaApproval.findMany({ take, where: { requestId: { in: visible.map(r => r.id) } }, select: { requestId: true, id: true, stageIndex: true, approverUserId: true, status: true, comment: true, decidedAt: true }, orderBy: [{ stageIndex: "asc" }, { id: "asc" }] })), r => r.requestId!);
+      const records: typeof page.records = [];
+      for (const row of page.records) {
+        const request = visible.find(r => r.id === row.requestId);
+        if (!request) continue;
+        records.push({ ...row, workflowInstanceId: request.workflowInstanceId, instanceVersion: request.instanceVersion,
+          canOpenRequest: (await ctx.decide("request.read", request)).allowed,
+          canOpenWorkflow: !!request.workflowInstance && (await ctx.decide("workflow.read", request.workflowInstance)).allowed,
+          policyName: (await ctx.decide("control.read", request.controlPoint)).allowed ? request.controlPoint.name : "Policy details not authorized",
+          approvals: (history.get(request.id) ?? []).map(({ requestId: _parent, ...entry }) => { void _parent; return entry; }) });
+      }
+      return { ...page, records };
+    });
+  }
+  async function listPage(userId: string, kind: input.OperationsKind, query: OperationsQuery & { recordId?: string } = {}, page: PageInput = {}) {
+    const recordId = query.recordId ? z.string().min(1).max(200).parse(query.recordId) : undefined;
     if (kind === "my-tasks") {
       const ctx = await context(client, userId);
       return createExecutionService(client, createAccessContext).listPage(userId, "tasks", { ...query, assigneePersonId: ctx.user!.personId! }, page);
     }
-    return resultPage(await list(userId, kind, query) as (Record<string, unknown> & { id: string })[], page);
+    const rows = await list(userId, kind, query) as (Record<string, unknown> & { id: string })[];
+    const sort = (query as OperationsQuery & { sort?: string }).sort;
+    const result = sort && sort !== "reference" && !recordId ? sortedResultPage(rows, sort, page) : resultPage(rows.filter(r => !recordId || r.id === recordId), recordId ? {} : page);
+    return kind === "approvals" ? inboxDetails(userId, result) : result;
   }
   return { listPage, requireApprovedRequest, saveControl, saveWorkflow, publishWorkflow, startWorkflow, transition, checkControl, createRequest, updateRequest, submitRequest, decide, cancelRequest, siaBoundary, registerEvent, preference, markRead, generateNotification, saveReminder, saveRecurring, escalate, changeStatus, processDue, list, overview, workspace };
 }

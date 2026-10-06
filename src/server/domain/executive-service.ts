@@ -32,7 +32,7 @@ function source(raw: unknown, type: string): Source {
   if (type === "DEPENDENCY") { const task = r.task as { title: string }, prerequisite = r.prerequisite as { title: string; status: string }; r.title = `${task.title} depends on ${prerequisite.title}`; r.status = prerequisite.status; }
   if (type === "NOTIFICATION") r.status = r.readAt ? "READ" : "UNREAD";
   return { id: String(r.id), organizationId: String(r.organizationId), projectId: type === "PROJECT" ? String(r.id) : (r.projectId ?? r.scopeProjectId ?? null) as string | null,
-    title: String(r.title ?? r.name ?? r.reason ?? r.description ?? r.eventType ?? ""), status: String(r.status), dueAt: (r.dueAt ?? r.dueDate ?? r.targetDate ?? r.expiresAt ?? r.remindAt ?? null) as Date | null,
+    title: String(r.title ?? r.name ?? r.reason ?? r.description ?? r.eventType ?? ""), status: String(r.status), dueAt: (r.dueAt ?? r.dueDate ?? r.targetDate ?? r.expectedResolution ?? r.expiresAt ?? r.remindAt ?? null) as Date | null,
     ownerPersonId: (r.assigneePersonId ?? r.ownerPersonId ?? null) as string | null, priority: String(r.priority ?? "NORMAL"),
     createdAt: r.createdAt as Date, updatedAt: (r.updatedAt ?? r.readAt ?? r.decidedAt ?? r.createdAt) as Date, progress: (r.calculatedProgress ?? null) as number | null,
     productId: (r.productId ?? null) as string | null, goalId: (r.goalId ?? null) as string | null, relatedTaskId: (r.taskId ?? null) as string | null, prerequisiteId: (r.prerequisiteId ?? null) as string | null, type,
@@ -179,7 +179,14 @@ export function createExecutiveService(client: PrismaClient = prisma, createAcce
     }
     const authorized = async (rows: Source[]) => {
       const result: Source[] = [];
-      for (const s of rows) if (scopeMatch(s) && (await ctx.decide("executive.read", s)).allowed) result.push(s);
+      // Authority is scope-based. Recheck each distinct scope once in this read-only batch.
+      const decisions = new Map<string, boolean>();
+      for (const s of rows) {
+        if (!scopeMatch(s)) continue;
+        const key = JSON.stringify([s.organizationId, s.projectId ?? null]);
+        if (!decisions.has(key)) decisions.set(key, (await ctx.decide("executive.read", s)).allowed);
+        if (decisions.get(key)) result.push(s);
+      }
       return result;
     };
     const sources: Record<string, Source[]> = {};
@@ -209,7 +216,7 @@ export function createExecutiveService(client: PrismaClient = prisma, createAcce
       if (type === "APPROVAL" || type === "NOTIFICATION") for (const row of sources[type]) row.ownerPersonId = ctx.user!.personId;
       if (type === "ESCALATION" || type === "REMINDER") {
         const assignments = operationRows as { id: string; responsibleUserId?: string; recipientUserId?: string }[];
-        const people = await boundedRead(take => client.user.findMany({ take, where: { id: { in: assignments.map(r => r.responsibleUserId ?? r.recipientUserId ?? "") } }, select: { id: true, personId: true } }));
+        const people = assignments.length ? await boundedRead(take => client.user.findMany({ take, where: { id: { in: assignments.map(r => r.responsibleUserId ?? r.recipientUserId ?? "") } }, select: { id: true, personId: true } })) : [];
         for (const row of sources[type]) { const assigned = assignments.find(r => r.id === row.id); row.ownerPersonId = people.find(p => p.id === (assigned?.responsibleUserId ?? assigned?.recipientUserId))?.personId ?? null; }
       }
       if (filter.productId) sources[type] = sources[type].filter(r => sources.PROJECT.some(p => p.id === r.projectId));
@@ -315,6 +322,7 @@ export function createExecutiveService(client: PrismaClient = prisma, createAcce
     }
     return { calculatedAt: now, sourcePeriod: { from, until }, lastUpdated: [...Object.values(sources).flat(), ...recordRows].reduce<Date | null>((last, r) => r.updatedAt && (!last || r.updatedAt > last) ? r.updatedAt : last, null),
       metrics, companies, attention: visibleAttention, records: recordRows.filter(r => !filter.status || r.status === filter.status), changes, deadlines, wins, projects: projectIntelligence, goals: goalIntelligence, tasks: projection.tasks ? sources.TASK : [],
+      blockers: sources.BLOCKER, milestones: sources.MILESTONE,
       decisions: [...sources.APPROVAL.filter(a => a.status === "PENDING"), ...recordRows.filter(r => r.kind === "DECISION" && ["PENDING", "DEFERRED"].includes(r.status)).map(r => source(r, "DECISION"))],
       operations: Object.fromEntries(["APPROVAL", "ESCALATION", "REQUEST", "NOTIFICATION", "REMINDER", "INSTANCE", "EVENT"].map(k => [k, sources[k]])),
       briefing: { date: now.toISOString().slice(0, 10), timezone: "UTC", changes: changes.filter(c => c.createdAt >= todayStart), attention: visibleAttention.filter(a => !["RESOLVED", "DISMISSED"].includes(a.handlingStatus)), deadlines, blockedWork: sources.PROJECT.filter(p => p.status === "BLOCKED"), concerns: sources.GOAL.filter(g => ["AT_RISK", "MISSED"].includes(g.status)), wins },

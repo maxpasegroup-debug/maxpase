@@ -1,0 +1,282 @@
+{
+  "classification": "ISOLATED LOCAL PRODUCTION-BUILD HTTP; NOT PRODUCTION CONCURRENCY/TLS SLO",
+  "measuredAt": "2026-10-06T18:18:16.588Z",
+  "fixtureTasks": 1000,
+  "samplesPerRoute": 20,
+  "excludedWarmupsPerRoute": 2,
+  "criteria": {
+    "p95Ms": 2000,
+    "p99Ms": 5000,
+    "agreed": true
+  },
+  "transport": "Loopback HTTP; secure runtime configuration retained; read-only requests with a fixture-issued cookie; no TLS or origin mutation bypass",
+  "summary": {
+    "overview": {
+      "observedP95Ms": 625.3606,
+      "observedP99Ms": 632.4835999999996,
+      "maxHtmlBytes": 69412,
+      "status": "PASS"
+    },
+    "projects": {
+      "observedP95Ms": 1325.030999999999,
+      "observedP99Ms": 1434.1108000000022,
+      "maxHtmlBytes": 1464109,
+      "status": "PASS"
+    },
+    "tasks": {
+      "observedP95Ms": 245.79609999999957,
+      "observedP99Ms": 386.6759999999995,
+      "maxHtmlBytes": 436083,
+      "status": "PASS"
+    }
+  },
+  "samples": {
+    "overview": [
+      {
+        "elapsedMs": 632.4835999999996,
+        "bytes": 69412
+      },
+      {
+        "elapsedMs": 554.5091000000011,
+        "bytes": 69412
+      },
+      {
+        "elapsedMs": 534.9754000000012,
+        "bytes": 69412
+      },
+      {
+        "elapsedMs": 567.1172999999999,
+        "bytes": 69412
+      },
+      {
+        "elapsedMs": 625.3606,
+        "bytes": 69412
+      },
+      {
+        "elapsedMs": 512.9111999999986,
+        "bytes": 69412
+      },
+      {
+        "elapsedMs": 534.3786,
+        "bytes": 69412
+      },
+      {
+        "elapsedMs": 509.7675999999992,
+        "bytes": 69412
+      },
+      {
+        "elapsedMs": 532.6320999999989,
+        "bytes": 69412
+      },
+      {
+        "elapsedMs": 550.5301,
+        "bytes": 69412
+      },
+      {
+        "elapsedMs": 587.6298999999999,
+        "bytes": 69412
+      },
+      {
+        "elapsedMs": 587.3552000000018,
+        "bytes": 69412
+      },
+      {
+        "elapsedMs": 555.4264000000003,
+        "bytes": 69412
+      },
+      {
+        "elapsedMs": 503.5480000000025,
+        "bytes": 69412
+      },
+      {
+        "elapsedMs": 540.545900000001,
+        "bytes": 69412
+      },
+      {
+        "elapsedMs": 585.3644999999997,
+        "bytes": 69412
+      },
+      {
+        "elapsedMs": 509.380000000001,
+        "bytes": 69412
+      },
+      {
+        "elapsedMs": 499.71800000000076,
+        "bytes": 69412
+      },
+      {
+        "elapsedMs": 483.0576000000001,
+        "bytes": 69412
+      },
+      {
+        "elapsedMs": 473.71080000000075,
+        "bytes": 69412
+      }
+    ],
+    "projects": [
+      {
+        "elapsedMs": 1034.193800000001,
+        "bytes": 1464109
+      },
+      {
+        "elapsedMs": 1125.7733999999982,
+        "bytes": 1464109
+      },
+      {
+        "elapsedMs": 1140.9924999999967,
+        "bytes": 1464109
+      },
+      {
+        "elapsedMs": 1159.9700999999986,
+        "bytes": 1464109
+      },
+      {
+        "elapsedMs": 1071.2008999999998,
+        "bytes": 1464109
+      },
+      {
+        "elapsedMs": 1325.030999999999,
+        "bytes": 1464109
+      },
+      {
+        "elapsedMs": 1056.6503999999986,
+        "bytes": 1464109
+      },
+      {
+        "elapsedMs": 1039.3189999999959,
+        "bytes": 1464109
+      },
+      {
+        "elapsedMs": 955.1266999999934,
+        "bytes": 1464109
+      },
+      {
+        "elapsedMs": 1010.3384000000005,
+        "bytes": 1464109
+      },
+      {
+        "elapsedMs": 1031.5332999999955,
+        "bytes": 1464109
+      },
+      {
+        "elapsedMs": 960.5381999999954,
+        "bytes": 1464109
+      },
+      {
+        "elapsedMs": 957.7287999999971,
+        "bytes": 1464109
+      },
+      {
+        "elapsedMs": 1254.3574999999983,
+        "bytes": 1464109
+      },
+      {
+        "elapsedMs": 1072.0976999999984,
+        "bytes": 1464109
+      },
+      {
+        "elapsedMs": 1021.4714999999997,
+        "bytes": 1464109
+      },
+      {
+        "elapsedMs": 1020.4887999999992,
+        "bytes": 1464109
+      },
+      {
+        "elapsedMs": 1434.1108000000022,
+        "bytes": 1464109
+      },
+      {
+        "elapsedMs": 1192.6091000000015,
+        "bytes": 1464109
+      },
+      {
+        "elapsedMs": 1051.8482999999978,
+        "bytes": 1464109
+      }
+    ],
+    "tasks": [
+      {
+        "elapsedMs": 386.6759999999995,
+        "bytes": 436083
+      },
+      {
+        "elapsedMs": 210.32280000000173,
+        "bytes": 435800
+      },
+      {
+        "elapsedMs": 245.79609999999957,
+        "bytes": 435800
+      },
+      {
+        "elapsedMs": 206.18930000000546,
+        "bytes": 435800
+      },
+      {
+        "elapsedMs": 235.212099999997,
+        "bytes": 435800
+      },
+      {
+        "elapsedMs": 207.25220000000263,
+        "bytes": 435800
+      },
+      {
+        "elapsedMs": 237.78420000000187,
+        "bytes": 435800
+      },
+      {
+        "elapsedMs": 228.6313999999984,
+        "bytes": 435800
+      },
+      {
+        "elapsedMs": 231.04030000000057,
+        "bytes": 435800
+      },
+      {
+        "elapsedMs": 188.6872000000003,
+        "bytes": 435800
+      },
+      {
+        "elapsedMs": 201.53179999999702,
+        "bytes": 435800
+      },
+      {
+        "elapsedMs": 217.85489999999845,
+        "bytes": 435800
+      },
+      {
+        "elapsedMs": 225.9759999999951,
+        "bytes": 435800
+      },
+      {
+        "elapsedMs": 229.95390000000043,
+        "bytes": 436083
+      },
+      {
+        "elapsedMs": 188.71110000000044,
+        "bytes": 435800
+      },
+      {
+        "elapsedMs": 226.2780000000057,
+        "bytes": 435800
+      },
+      {
+        "elapsedMs": 212.37769999999728,
+        "bytes": 435800
+      },
+      {
+        "elapsedMs": 221.51420000000508,
+        "bytes": 435800
+      },
+      {
+        "elapsedMs": 230.99090000000433,
+        "bytes": 435800
+      },
+      {
+        "elapsedMs": 220.46979999999894,
+        "bytes": 435800
+      }
+    ]
+  },
+  "status": "PASS"
+}

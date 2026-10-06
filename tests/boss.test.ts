@@ -12,6 +12,8 @@ import { createAuthenticationService } from "@/server/auth/service";
 import { createBossService } from "@/server/group/boss-service";
 import { createAccessContext } from "@/server/authorization/engine";
 import { canonicalAiraRoles } from "@/server/domain/aira-roles";
+import { bossHref, parseBossFilters } from "@/server/group/boss-reliability";
+import { createExecutionService } from "@/server/domain/execution-service";
 
 const directory = mkdtempSync(join(tmpdir(), "maxspace-boss-")), file = join(directory, "test.db");
 const db = new PrismaClient({ datasourceUrl: "file:" + file.replaceAll("\\", "/") });
@@ -33,6 +35,66 @@ beforeEach(async () => { now = new Date(); await db.securityRateBucket.deleteMan
 afterAll(async () => { await db.$disconnect(); rmSync(directory, { recursive: true, force: true }); });
 
 describe("MAXPASE group and Boss controls", () => {
+  it("validates filters, includes the entire UTC end day, and preserves company/view/filter navigation", () => {
+    const query = { from: "2026-10-01", until: "2026-10-06", status: "ACTIVE", projectId: "project", productId: "product", severity: "HIGH" };
+    const parsed = parseBossFilters(query);
+    expect(parsed.until?.toISOString()).toBe("2026-10-06T23:59:59.999Z");
+    expect(parsed.from?.toISOString()).toBe("2026-10-01T00:00:00.000Z");
+    const url = new URL(bossHref("projects", airaId, query), "https://test.invalid");
+    expect(Object.fromEntries(url.searchParams)).toEqual({ view: "projects", companyId: airaId, ...query });
+    for (const bad of [{ from: "2026-02-30" }, { from: "2026-10-07", until: "2026-10-06" }, { status: "FORGED" }, { status: ["ACTIVE", "BLOCKED"] }]) expect(() => parseBossFilters(bad)).toThrow();
+  });
+  it("does not declare an empty company healthy, invent freshness, or equate service readiness with assurance", async () => {
+    const data = await boss.dashboard(userId, pearnId);
+    expect(data.cards[0].health).toBe("NO_RECORDED_WORK");
+    expect(data.executive.companies[0]).toMatchObject({ health: "NO_RECORDED_WORK", reasons: ["Health not established: no recorded work"] });
+    expect(data.executive.companies[0].coverage).toContain("readable metrics");
+    expect(data.executive.companies[0]).toHaveProperty("evidence.lastUpdated", null);
+    expect(data.cards[0].evidence).toMatchObject({ recordCount: 0, lastUpdated: null, freshness: "NO RECORDED WORK" });
+    expect(data.cards[0].metrics.find(m => m.name === "Overdue tasks")?.value).toBe(0);
+    // This fixture intentionally lacks Prisma migration metadata: readiness must not pretend to pass.
+    expect(data.system).toMatchObject({ database: "UNAVAILABLE", application: "REQUEST SERVED", backup: "NOT VERIFIED", monitoring: "NOT VERIFIED", production: "NOT VERIFIED" });
+    expect(data.sia).toMatchObject({ status: "NOT CONFIGURED", canAsk: false, capabilities: [], autonomousExecution: false });
+  });
+  it("filters authorized work by status and UTC update dates without suppressing company health evidence", async () => {
+    const active = await db.project.create({ data: { organizationId: airaId, name: "Reliability active", slug: "reliability-active", status: "ACTIVE", updatedAt: new Date("2026-10-06T23:59:59.000Z") } });
+    const blocked = await db.project.create({ data: { organizationId: airaId, name: "Reliability blocked", slug: "reliability-blocked", status: "BLOCKED", updatedAt: new Date("2026-10-05T12:00:00Z") } });
+    const foreign = await db.project.create({ data: { organizationId: pearnId, name: "Other company project", slug: "reliability-other" } });
+    try {
+      const data = await boss.dashboard(userId, airaId, parseBossFilters({ status: "ACTIVE", from: "2026-10-06", until: "2026-10-06" }));
+      expect(data.executive.projects.map(p => p.id)).toEqual([active.id]);
+      expect(data.cards[0].projects.map(p => p.id).sort()).toEqual([active.id, blocked.id].sort());
+      expect(data.cards[0].health).toContain("AT_RISK");
+      expect(data.cards[0].evidence.lastUpdated?.toISOString()).toBe("2026-10-06T23:59:59.000Z");
+      expect((await boss.dashboard(userId, airaId, { status: "COMPLETED" })).executive.projects).toEqual([]);
+      await expect(boss.dashboard(userId, airaId, { projectId: foreign.id })).rejects.toThrow();
+      const projectSelection = await boss.dashboard(userId, airaId, { projectId: active.id });
+      expect(projectSelection.executive.projects.map(p => p.id)).toEqual([active.id]);
+      expect(projectSelection.executive.companies[0].metrics.find(m => m.name === "Blocked projects")?.value).toBe(1);
+    } finally { await db.project.deleteMany({ where: { id: { in: [active.id, blocked.id, foreign.id] } } }); }
+  });
+  it("enables SIA only for active identities with intersected tool authority and an available provider", async () => {
+    const sia = await db.siaIdentity.create({ data: { name: "Reliability SIA" } });
+    const role = await db.role.create({ data: { organizationId: airaId, key: "reliability-sia", name: "Reader", principalType: "AGENT", permissions: { create: { permission: { connect: { key: "executive.read" } } } } } });
+    await db.siaRoleAssignment.create({ data: { siaId: sia.id, organizationId: airaId, roleId: role.id } });
+    const provider = process.env.SIA_PROVIDER;
+    try {
+      expect((await boss.dashboard(userId, airaId)).sia).toMatchObject({ status: "NOT AUTHORIZED", canAsk: false });
+      await db.siaTool.create({ data: { siaId: sia.id, key: "get_group_overview", name: "Overview", enabled: true, permissionKey: "executive.read" } });
+      process.env.SIA_PROVIDER = "deterministic";
+      expect((await boss.dashboard(userId, airaId)).sia).toMatchObject({ canAsk: true, capabilities: ["get group overview"], autonomousExecution: false });
+      process.env.SIA_PROVIDER = "unsupported";
+      expect((await boss.dashboard(userId, airaId)).sia).toMatchObject({ status: "UNAVAILABLE", canAsk: false });
+      await db.siaIdentity.update({ where: { id: sia.id }, data: { status: "SUSPENDED" } });
+      expect((await boss.dashboard(userId, airaId)).sia).toMatchObject({ status: "NOT CONFIGURED", canAsk: false });
+    } finally {
+      if (provider === undefined) delete process.env.SIA_PROVIDER; else process.env.SIA_PROVIDER = provider;
+      await db.siaRoleAssignment.deleteMany({ where: { siaId: sia.id } });
+      await db.siaIdentity.delete({ where: { id: sia.id } });
+      await db.rolePermission.deleteMany({ where: { roleId: role.id } });
+      await db.role.delete({ where: { id: role.id } });
+    }
+  });
   it("initializes known structure idempotently without replacing identities, roles or ownership", async () => {
     const before = await db.organization.findMany({ select: { id: true }, orderBy: { id: "asc" } });
     await db.$transaction(initializeGroupStructure);
@@ -113,6 +175,16 @@ describe("MAXPASE group and Boss controls", () => {
     try { await expect(boss.authority(userId)).rejects.toThrow(); }
     finally { await db.rolePermission.create({ data: { roleId: role.id, permissionId: permission.id } }); }
   });
+  it("shows company workflow shortcuts only while their current capability is granted", async () => {
+    const initial = await boss.dashboard(userId, airaId);
+    expect(initial.shortcuts.map(s => s.label)).toEqual(expect.arrayContaining(["New project", "New task", "New goal", "New request", "Approval inbox", "My assignments"]));
+    const role = await db.role.findUniqueOrThrow({ where: { organizationId_key: { organizationId: groupId, key: "group-boss" } } });
+    const permission = await db.permission.findUniqueOrThrow({ where: { key: "task.manage" } });
+    await db.rolePermission.delete({ where: { roleId_permissionId: { roleId: role.id, permissionId: permission.id } } });
+    try { expect((await boss.dashboard(userId, airaId)).shortcuts.some(s => s.label === "New task")).toBe(false); }
+    finally { await db.rolePermission.create({ data: { roleId: role.id, permissionId: permission.id } }); }
+    expect(initial.sia.autonomousExecution).toBe(false);
+  });
   it("keeps company context isolated and reports real work, unknown ownership and unconfigured SIA", async () => {
     await db.task.create({ data: { organizationId: airaId, title: "AIRA scoped work", dueDate: new Date("2000-01-01"), priority: "CRITICAL" } });
     await db.task.create({ data: { organizationId: pearnId, title: "PEARN confidential work" } });
@@ -122,6 +194,8 @@ describe("MAXPASE group and Boss controls", () => {
     expect(JSON.stringify(all).includes("FOREIGN confidential work")).toBe(false);
     const selected = await boss.dashboard(userId, airaId);
     expect(selected.executive.tasks.map(t => t.title)).toEqual(["AIRA scoped work"]);
+    expect(selected.overview.queues.overdue.map(t => t.title)).toEqual(["AIRA scoped work"]);
+    expect(selected.overview.owner(selected.overview.queues.overdue[0])).toBe("Owner not recorded");
     expect(selected.executive.attention.some(a => a.severity === "CRITICAL")).toBe(true);
     expect(JSON.stringify(selected).includes("PEARN confidential work")).toBe(false);
     expect(selected.graph.ownership).toEqual([]); expect(selected.sia.status).toBe("NOT CONFIGURED");
@@ -129,12 +203,18 @@ describe("MAXPASE group and Boss controls", () => {
     await expect(boss.dashboard(userId, foreign.id)).rejects.toThrow();
     const ctx = await createAccessContext(userId, db);
     expect((await ctx.decide("task.read", { organizationId: foreign.id })).allowed).toBe(false);
+    const ownTask = selected.overview.queues.overdue[0];
+    const execution = createExecutionService(db);
+    expect((await execution.listPage(userId, "tasks", { recordId: ownTask.id }, { after: "zzz" })).records.map(r => r.id)).toEqual([ownTask.id]);
+    const foreignTask = await db.task.findFirstOrThrow({ where: { organizationId: foreign.id } });
+    expect((await execution.listPage(userId, "tasks", { recordId: foreignTask.id })).records).toEqual([]);
+    expect((await boss.dashboard(userId, airaId, parseBossFilters({ status: "COMPLETED" }))).overview.queues.overdue.map(t => t.id)).toEqual([ownTask.id]);
   });
   it("does not turn company visibility into project/task or SIA authority after revocation", async () => {
     const role = await db.role.findUniqueOrThrow({ where: { organizationId_key: { organizationId: groupId, key: "group-boss" } } });
     const permission = await db.permission.findUniqueOrThrow({ where: { key: "task.read" } });
     await db.rolePermission.delete({ where: { roleId_permissionId: { roleId: role.id, permissionId: permission.id } } });
-    try { const data = await boss.dashboard(userId, airaId); expect(data.executive.tasks).toEqual([]); expect(data.sia.status).toBe("NOT CONFIGURED"); }
+    try { const data = await boss.dashboard(userId, airaId); expect(data.executive.tasks).toEqual([]); expect(data.sia.status).toBe("NOT CONFIGURED"); expect(data.readable.task).toBe(false); expect(data.cards[0].metrics.find(m => m.name === "Overdue tasks")?.value).toBeNull(); expect(data.cards[0].evidence.readableMetrics).toBeLessThan(data.cards[0].evidence.totalMetrics); }
     finally { await db.rolePermission.create({ data: { roleId: role.id, permissionId: permission.id } }); }
     expect(await db.siaTool.count({ where: { enabled: true } })).toBe(0);
     expect(await db.integration.count()).toBe(0);
@@ -145,5 +225,17 @@ describe("MAXPASE group and Boss controls", () => {
     const before = await db.session.count();
     try { await expect(auth.loginBoss(credentials(), secret)).rejects.toThrow(); expect(await db.session.count()).toBe(before); }
     finally { sql.exec("DROP TRIGGER BossAuditFailure"); sql.close(); }
+  });
+  it("shows a standalone task blocker as real company risk with its resolution deadline", async () => {
+    const task = await db.task.create({ data: { organizationId: pearnId, title: "Blocked company work" } });
+    const expectedResolution = new Date("2026-10-10T10:00:00Z");
+    const blocker = await db.executionBlocker.create({ data: { organizationId: pearnId, taskId: task.id, description: "Awaiting a required input", expectedResolution } });
+    try {
+      const data = await boss.dashboard(userId, pearnId);
+      expect(data.cards[0].health).toBe("AT_RISK");
+      expect(data.overview.queues.blockers).toMatchObject([{ id: blocker.id, dueAt: expectedResolution }]);
+      expect(data.executive.companies[0].reasons).toContain("Open recorded blockers");
+      expect(data.overview.urgent[0].row.id).toBe(blocker.id);
+    } finally { await db.executionBlocker.delete({ where: { id: blocker.id } }); await db.task.delete({ where: { id: task.id } }); }
   });
 });

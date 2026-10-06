@@ -41,6 +41,37 @@ beforeEach(async () => { await db.securityRateBucket.deleteMany(); });
 afterAll(async () => { if (priorSecret === undefined) delete process.env.AUTH_SECRET; else process.env.AUTH_SECRET = priorSecret; await db.$disconnect(); rmSync(directory, { recursive: true, force: true }); });
 
 describe("Separate brand domains and authenticated gateways", () => {
+  it("rejects every cross-realm session pair across corporate and all four portal audiences", async () => {
+    const person = await db.user.findUniqueOrThrow({ where: { id: userId }, select: { personId: true } });
+    const permission = await db.permission.findUniqueOrThrow({ where: { key: "organization.read" } });
+    const members: string[] = [], roles: string[] = [];
+    const realms = [undefined, "skillcity", "startup", "labs", "jobs"] as const;
+    const tokens: string[] = [];
+    try {
+      for (const slug of ["aira-skill-city", "aira-career-hub"]) {
+        const org = await db.organization.findUniqueOrThrow({ where: { slug } });
+        const role = await db.role.create({ data: { organizationId: org.id, key: "launch-realm-fixture", name: "Isolated realm fixture", permissions: { create: { permissionId: permission.id } } } });
+        roles.push(role.id);
+        const member = await db.membership.create({ data: { personId: person.personId!, organizationId: org.id, roles: { create: { roleId: role.id } } } });
+        members.push(member.id);
+      }
+      for (const realm of realms) tokens.push((await auth.create(userId, secret, undefined, 300000, realm)).token);
+      for (const [i, source] of realms.entries()) {
+        for (const [j, target] of realms.entries()) {
+          if (i === j) expect(await auth.validate(tokens[i], secret, target)).toMatchObject({ userId });
+          else {
+            expect(await auth.validate(tokens[i], secret, target)).toBeNull();
+            await auth.revoke(tokens[i], secret, target);
+            expect(await auth.validate(tokens[i], secret, source)).not.toBeNull();
+          }
+        }
+      }
+    } finally {
+      for (const [i, realm] of realms.entries()) if (tokens[i]) await auth.revoke(tokens[i], secret, realm);
+      await db.membership.deleteMany({ where: { id: { in: members } } });
+      await db.role.deleteMany({ where: { id: { in: roles } } });
+    }
+  });
   it("keeps MAXPASE routing separate and requires company authority for Skill City", async () => {
     const group = await middleware(new NextRequest("https://maxpase.com/", { headers: { host: "maxpase.com" } }));
     expect(group.headers.get("x-middleware-rewrite")).toBeNull();

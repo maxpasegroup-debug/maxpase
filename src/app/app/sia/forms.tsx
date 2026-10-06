@@ -4,13 +4,14 @@ import { Send, Check, Plus, Save, ShieldCheck } from "lucide-react";
 import { siaAction, type SiaState } from "./actions";
 import type { Selection } from "@/server/sia/context";
 import type { SiaResponse } from "@/server/sia/registry";
+import { UserTime } from "@/components/ui/user-time";
 function ContextFields({ selection, mode }: { selection: Selection; mode: string }) { return <><input type="hidden" name="siaId" value={selection.siaId}/><input type="hidden" name="organizationId" value={selection.organizationId}/><input type="hidden" name="projectId" value={selection.projectId ?? ""}/><input type="hidden" name="mode" value={mode}/></>; }
 export function Response({ response: r }: { response: SiaResponse }) {
   const graph = r.context.graph as { nodes: { id: string; type: string; name: string }[]; edges: { from: string; to: string; type: string }[] } | undefined;
   const memory = r.context.memory as { id: string; category: string; value: string; sourceType: string; sourceId: string | null; confidence: number | null }[] | undefined;
   const briefing = r.context.briefing as { date: string; changes: { id: string; title: string; href: string }[]; deadlines: { id: string; title: string; href: string }[]; wins: { id: string; title: string; href: string }[] } | null;
   const decisionDetails = r.context.decisionDetails as { id: string; question: string; context: string; impact: string | null; options: string[]; humanRecommendation: string | null; decisionMaker: string | null; nextAction: string }[] | undefined;
-  return <div className="sia-response" aria-live="polite"><p className="muted">{r.provider} / {r.calculatedAt.replace("T", " ")} UTC</p>
+  return <div className="sia-response" aria-live="polite"><p className="muted">{r.provider} / <UserTime value={r.calculatedAt}/></p>
     {briefing && <section><h2>Today / {briefing.date} UTC</h2><div className="sia-facts">{(["changes", "deadlines", "wins"] as const).map(k => <div key={k}><h3>{k[0].toUpperCase() + k.slice(1)}</h3>{briefing[k].length ? briefing[k].map(i => <p key={i.id}><a href={i.href}>{i.title}</a></p>) : <p className="muted">No matching authorized records.</p>}</div>)}</div></section>}
     <section><h2>Facts</h2>{r.facts.length ? <dl className="sia-facts">{r.facts.map((f, i) => <div key={i}><dt>{f.label}</dt><dd>{f.value ?? "Unavailable"}<small>{f.source}</small></dd></div>)}</dl> : <p className="muted">No matching facts.</p>}</section>
     <section><h2>Signals</h2>{r.signals.length ? r.signals.map(s => <div className="sia-row" key={s.id + s.explanation}><div><strong>{s.title}</strong><p>{s.explanation}</p><p className="muted">Owner: {s.owner ?? "Unavailable"}</p><a href={s.href}>{s.nextAction}</a></div><span className="badge">{s.severity}</span></div>) : <p className="muted">No matching authorized signals.</p>}</section>

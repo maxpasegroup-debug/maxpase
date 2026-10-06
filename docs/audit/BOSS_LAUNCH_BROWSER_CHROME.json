@@ -1,0 +1,37 @@
+{
+  "status": "PASS",
+  "measuredAt": "2026-10-06T18:24:36.702Z",
+  "database": "isolated disposable fixture",
+  "browser": "chrome",
+  "browserVersion": "154.0.8037.98",
+  "accessibility": "keyboard skip and approval actions; not screen-reader certification",
+  "workflows": [
+    "company shortcuts",
+    "approval confirmation cancellation",
+    "approve",
+    "reject",
+    "prepare/retry/submit request",
+    "independent reviewer",
+    "overdue task assignment/update with long reference",
+    "reminder",
+    "resolve escalation",
+    "saved filter reload",
+    "private unread notification/read",
+    "activity"
+  ],
+  "fixtureStates": [
+    "DRAFT",
+    "SUBMITTED",
+    "APPROVED",
+    "REJECTED",
+    "CANCELLED"
+  ],
+  "screenshots": 24,
+  "widths": [
+    320,
+    390,
+    768,
+    1440
+  ],
+  "pageErrors": 0
+}

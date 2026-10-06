@@ -1,11 +1,12 @@
 import { PrismaClient, type Prisma } from "@prisma/client";
+import { z } from "zod";
 import { prisma } from "@/server/db";
 import { createAccessContext as defaultAccessContext, AccessError, type ResourceScope } from "@/server/authorization/engine";
 import { activeMembershipWhere, ancestry } from "@/server/authorization/business-scope";
 import * as input from "./execution-input";
 import { createWorkforceService } from "./workforce-service";
 import { operationalEvent, notify } from "./operational-events";
-import { READ_BUDGET, databasePage, checkRows, boundedRead, resultPage, type PageInput } from "./query-bounds";
+import { READ_BUDGET, databasePage, checkRows, boundedRead, resultPage, sortedResultPage, type PageInput } from "./query-bounds";
 
 type DB = Prisma.TransactionClient;
 type Context = Awaited<ReturnType<typeof defaultAccessContext>>;
@@ -16,7 +17,7 @@ export const completionProgress = (tasks: { status: string }[]) => {
   const relevant = tasks.filter(t => t.status !== "CANCELLED");
   return relevant.length ? relevant.filter(t => t.status === "COMPLETED").length / relevant.length * 100 : null;
 };
-export type ExecutionQuery = { organizationId?: string; projectId?: string; search?: string; status?: string; ownerPersonId?: string; assigneePersonId?: string; priority?: string; dueBefore?: string; overdue?: string; page?: PageInput };
+export type ExecutionQuery = { recordId?: string; organizationId?: string; projectId?: string; search?: string; status?: string; ownerPersonId?: string; assigneePersonId?: string; priority?: string; dueBefore?: string; overdue?: string; sort?: string; page?: PageInput };
 
 export function createExecutionService(client: PrismaClient = prisma, createAccessContext = defaultAccessContext) {
   async function audit(db: DB, ctx: Context, scope: ResourceScope, action: string, entityId: string, changes: Prisma.InputJsonObject = {}) {
@@ -331,7 +332,8 @@ export function createExecutionService(client: PrismaClient = prisma, createAcce
       const search = query.search?.trim().slice(0, 200) ?? "";
       const priority = query.priority ? { priority: input.projectInput.shape.priority.parse(query.priority) } : {};
       const owner = query.ownerPersonId ? { ownerPersonId: query.ownerPersonId } : {};
-      const { take, after } = databasePage(query.page);
+      const { take, after: cursor } = databasePage(query.page);
+      const after = query.recordId ? { id: z.string().min(1).max(200).parse(query.recordId) } : cursor;
       switch (kind) {
         case "projects": {
           const rows = checkRows(await db.project.findMany({ take, where: { ...after, OR: [{ organizationId: { in: ids } }, { id: { in: projectIds }, ...(query.organizationId ? { organizationId: query.organizationId } : {}) }], ...(query.projectId ? { id: query.projectId } : {}), name: { contains: search }, ...priority, ...owner, ...(query.status ? { status: input.projectInput.shape.status.parse(query.status) } : {}) }, orderBy: query.page ? { id: "asc" } : [{ updatedAt: "desc" }, { id: "asc" }] }));
@@ -356,7 +358,7 @@ export function createExecutionService(client: PrismaClient = prisma, createAcce
           return rows.map(r => ({ ...r, organizationId: r.task.organizationId, projectId: r.task.projectId }));
         }
         case "blockers": {
-          const rows = await boundedRead(take => db.executionBlocker.findMany({ take, where: { OR: [{ organizationId: { in: ids } }, { projectId: { in: projectIds } }, { task: { projectId: { in: projectIds } } }, { goal: { projectId: { in: projectIds } } }], description: { contains: search }, ...(query.status ? { status: query.status === "OPEN" ? "OPEN" : "RESOLVED" } : {}) }, include: { task: { select: { projectId: true } }, goal: { select: { projectId: true } } } }));
+          const rows = await boundedRead(take => db.executionBlocker.findMany({ take, where: { ...after, OR: [{ organizationId: { in: ids } }, { projectId: { in: projectIds } }, { task: { projectId: { in: projectIds } } }, { goal: { projectId: { in: projectIds } } }], description: { contains: search }, ...(query.status ? { status: query.status === "OPEN" ? "OPEN" : "RESOLVED" } : {}) }, include: { task: { select: { projectId: true } }, goal: { select: { projectId: true } } } }));
           const visible = [];
           for (const r of rows) {
             const projectId = r.projectId ?? r.task?.projectId ?? r.goal?.projectId;
@@ -400,11 +402,11 @@ export function createExecutionService(client: PrismaClient = prisma, createAcce
     return client.$transaction(async db => {
       const ctx = await createAccessContext(userId, db);
       if (!ctx.active) throw new AccessError("Access denied");
-      const capabilities = ["project", "milestone", "task", "goal", "dependency", "blocker", "membership", "responsibility"].flatMap(d => [d + ".read", d + ".manage", d + ".reopen"]);
+      const capabilities = [...["project", "milestone", "task", "goal", "dependency", "blocker", "membership", "responsibility"].flatMap(d => [d + ".read", d + ".manage", d + ".reopen"]), "reminder.manage", "escalation.manage", "activity.read"];
       capabilities.push("goal.progress");
       const scopes = Object.fromEntries(capabilities.map(key => [key, { organizations: ctx.organizationIds(key), projects: ctx.grants.filter(g => g.key === key && g.projectId).map(g => g.projectId!) }]));
       const projectRows = await boundedRead(take => db.project.findMany({ take, where: { OR: [{ organizationId: { in: ctx.organizationIds("project.read") } }, { id: { in: scopes["project.read"].projects } }] }, select: { id: true, name: true, organizationId: true } }));
-      const orgRows = await boundedRead(take => db.organization.findMany({ take, where: { id: { in: [...ctx.organizationIds("organization.read"), ...projectRows.map(p => p.organizationId)] } }, select: { id: true, name: true } }));
+      const orgRows = await boundedRead(take => db.organization.findMany({ take, where: { id: { in: [...ctx.organizationIds("organization.read"), ...projectRows.map(p => p.organizationId)] } }, select: { id: true, name: true, parentId: true } }));
       // Only contact labels, never accounts or credentials, enter assignment options.
       const people = await assignmentPeople(db, ctx);
       const products = await boundedRead(take => db.product.findMany({ take, where: { organizationId: { in: ctx.organizationIds("product.read") } }, select: { id: true, name: true, organizationId: true } }));
@@ -435,9 +437,13 @@ export function createExecutionService(client: PrismaClient = prisma, createAcce
     const completed = [...projects, ...tasks, ...goals].filter(r => "completionDate" in r && r.completionDate && r.completionDate <= now && r.completionDate.getTime() >= now.getTime() - 7 * 86400000);
     return { metrics: { activeProjects: projects.filter(r => "status" in r && r.status === "ACTIVE").length, blockedProjects: projects.filter(r => "status" in r && r.status === "BLOCKED").length, overdueTasks: tasks.filter(r => "dueDate" in r && r.dueDate && r.dueDate < now && !terminal(r.status)).length, upcomingDeadlines: attention.filter(r => r.kind === "APPROACHING").length, activeGoals: goals.filter(r => "status" in r && r.status === "ACTIVE").length, atRiskGoals: goals.filter(r => "status" in r && r.status === "AT_RISK").length, recentlyCompleted: completed.length }, attention, completed, asOf: now };
   }
-  async function listPage(userId: string, kind: input.ExecutionKind, query: ExecutionQuery = {}, page: PageInput = {}) {
-    const databasePaged = !["blockers", "responsibilities"].includes(kind);
-    return resultPage(await list(userId, kind, { ...query, page: databasePaged ? page : undefined }) as (Record<string, unknown> & { id: string })[], page, databasePaged);
+  async function listPage(userId: string, kind: input.ExecutionKind, query: ExecutionQuery & { recordId?: string } = {}, page: PageInput = {}) {
+    const recordId = query.recordId ? z.string().min(1).max(200).parse(query.recordId) : undefined;
+    const sorted = query.sort;
+    const databasePaged = !recordId && (!sorted || sorted === "reference") && !["blockers", "responsibilities"].includes(kind);
+    const rows = await list(userId, kind, { ...query, page: databasePaged ? page : undefined }) as (Record<string, unknown> & { id: string })[];
+    if (sorted && sorted !== "reference" && !recordId) return sortedResultPage(rows, sorted, page);
+    return resultPage(rows.filter(r => !recordId || r.id === recordId), recordId ? {} : page, databasePaged);
   }
   return { save, list, listPage, detail, progress, history, dependency, blocker, overview, workspace, peopleOptions };
 }

@@ -10,7 +10,7 @@ export function Pagination({ path, query, nextCursor }: { path: string; query: R
   };
   if (!query.cursor && !nextCursor) return null;
   return <nav className="list-toolbar" aria-label="Result pages">
-    {query.cursor && <Link className="button secondary" href={href()} title="First page" aria-label="First page"><ChevronsLeft size={18}/></Link>}
-    {nextCursor && <Link className="button secondary" href={href(nextCursor)} title="Next page" aria-label="Next page"><ArrowRight size={18}/></Link>}
+    {query.cursor && <Link prefetch={false} className="button secondary" href={href()} title="First page" aria-label="First page"><ChevronsLeft size={18}/></Link>}
+    {nextCursor && <Link prefetch={false} className="button secondary" href={href(nextCursor)} title="Next page" aria-label="Next page"><ArrowRight size={18}/></Link>}
   </nav>;
 }

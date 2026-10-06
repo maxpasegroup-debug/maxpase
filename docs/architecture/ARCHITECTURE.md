@@ -1,5 +1,13 @@
 # Architecture
 
+## Boss Navigation And Design Phase 2
+
+The shared authenticated shell uses one navigation model (`src/lib/workspace-navigation.ts`) for six groups: Overview, Companies, Work, Decisions, People and System. Existing Boss views and domain workspaces remain intact beneath those groups. Company labels are projected only from currently authorized profiles; navigation visibility never grants authority. Allowlisted Boss filters and company context travel through group links and detailed-module return links. A native modal mobile drawer preserves keyboard focus and returns focus to its trigger. Shared application styles provide readable table scrolling, semantic text-plus-color statuses and visible focus. Physical-device and screen-reader acceptance remain manual, not full WCAG certification.
+
+Detailed-module links namespace saved Boss filters as `bossStatus`, `bossFrom`, etc., plus `returnView` and `bossCompanyId`; they never submit a project status as a task/approval status. Module GET filter forms preserve this allowlisted return context. Back restores the original Boss company/view/filters even after a module applies its own filters. Workforce links use that module's existing `organization` filter contract; group-wide business registries do not claim to be filtered by a company parameter they cannot process.
+
+Own-account timezone preferences are persisted on User and audited transactionally. Boss defaults to Asia/Kolkata (IST); other unset accounts default to UTC. A shared display context formats Boss, executive, operational and communication timestamps in that preference. UTC instants, recurrence schedules, date-only domain fields and explicitly labeled UTC date-filter boundaries are unchanged. No credentials, permission grants, SIA execution or business models are redesigned.
+
 ## MAXSPACE Group Finalization
 
 The current group/product identity is MAXSPACE GROUP / MAXSPACE OS. The existing root ids, maxpase-group slug, auth/session contracts and migration history are retained. /app/boss reuses executive/domain/Business Graph services with current scoped authority, not another engine. See MAXSPACE_GROUP_ARCHITECTURE.md for confirmed companies/domains, explicit PIN provisioning and external/manual production prerequisites.

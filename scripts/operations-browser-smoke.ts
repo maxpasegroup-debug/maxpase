@@ -1,0 +1,212 @@
+import assert from "node:assert/strict";
+import { DatabaseSync } from "node:sqlite";
+import { mkdtempSync, readdirSync, readFileSync, rmSync, mkdirSync, openSync, closeSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
+import { randomInt, randomBytes } from "node:crypto";
+import { spawn, execFileSync } from "node:child_process";
+import { createRequire } from "node:module";
+import { PrismaClient } from "@prisma/client";
+import { provisionBoss } from "../src/server/group/provision";
+import { createAuthenticationService } from "../src/server/auth/service";
+import { createOperationsService } from "../src/server/domain/operations-service";
+import { createExecutionService } from "../src/server/domain/execution-service";
+
+async function main() {
+  const directory = mkdtempSync(join(tmpdir(), "maxpase-phase4-browser-")), file = join(directory, "test.db");
+  const db = new PrismaClient({ datasourceUrl: "file:" + file.replaceAll("\\", "/") });
+  const secret = randomBytes(32).toString("base64url"), base = "http://127.0.0.1:3005";
+  const { chromium } = createRequire(import.meta.url)(process.env.PLAYWRIGHT_MODULE ?? "playwright-core");
+  const channel = process.env.BOSS_BROWSER_CHANNEL ?? "chromium";
+  assert.ok(["chromium", "chrome", "msedge"].includes(channel));
+  const log = openSync(join(directory, "server.log"), "w"), output = resolve(".next/phase5-launch", channel);
+  let server: ReturnType<typeof spawn> | undefined, browser: Awaited<ReturnType<typeof chromium.launch>> | undefined;
+  let stage = "fixture preparation", screenshots = 0;
+  let failurePage: { screenshot: (options: { path: string; fullPage: boolean }) => Promise<unknown>; getByRole: (role: string) => { allTextContents: () => Promise<string[]> } } | undefined;
+  try {
+    assert.ok(directory.startsWith(join(tmpdir(), "maxpase-phase4-browser-")));
+    const sql = new DatabaseSync(file);
+    for (const folder of readdirSync("prisma/migrations").filter(f => /^\d/.test(f)).sort()) sql.exec(readFileSync(join("prisma/migrations", folder, "migration.sql"), "utf8"));
+    sql.close();
+    const boss = await provisionBoss(db, { BOSS_PIN: String(randomInt(100000, 1000000)) });
+    const organizationId = (await db.organization.findUniqueOrThrow({ where: { slug: "aira-skill-city" } })).id;
+    const actor = await db.person.create({ data: { displayName: "Operational test requester with a long international management responsibility name" } });
+    const requester = await db.user.create({ data: { email: "requester@fixture.invalid", personId: actor.id } });
+    const permissions = await db.permission.findMany({ select: { id: true } });
+    const role = await db.role.create({ data: { key: "fixture-requester", name: "Fixture operator", organizationId, permissions: { create: permissions.map(p => ({ permissionId: p.id })) } } });
+    await db.membership.create({ data: { personId: actor.id, organizationId, roles: { create: { roleId: role.id } } } });
+    const ops = createOperationsService(db), execution = createExecutionService(db);
+    const resource = { organizationId, projectId: null, resourceType: "ORGANIZATION", resourceId: organizationId };
+    const policy = await ops.saveControl(boss.userId, { organizationId, name: "Management review", kind: "APPROVAL", requiredPermission: "approval.decide", stages: [[{ approverUserId: boss.userId }]] });
+    const independent = await ops.saveControl(boss.userId, { organizationId, name: "Independent follow-up review", kind: "APPROVAL", requiredPermission: "approval.decide", stages: [[{ approverUserId: requester.id }]] });
+    const requests = [];
+    for (const [title, description] of [["Approve delivery checklist", "Evidence: delivery_checklist.md reviewed by the requester."], ["Reject incomplete handover", "Evidence: missing handover sign-off."]]) {
+      const row = await ops.createRequest(requester.id, { ...resource, title, description, controlPointId: policy.id, idempotencyKey: randomBytes(12).toString("hex") });
+      await ops.submitRequest(requester.id, row.id); requests.push(row);
+    }
+    await ops.createRequest(requester.id, { ...resource, title: "Draft management context awaiting supporting evidence", description: "Isolated draft, not submitted or approved.", controlPointId: policy.id, idempotencyKey: "browser-draft" });
+    const waiting = await ops.createRequest(requester.id, { ...resource, title: "Waiting management review", description: "Isolated pending review; no automatic approval.", controlPointId: policy.id, idempotencyKey: "browser-waiting" });
+    await ops.submitRequest(requester.id, waiting.id);
+    const cancelled = await ops.createRequest(requester.id, { ...resource, title: "Cancelled superseded request", description: "The requester cancelled this superseded request.", controlPointId: policy.id, idempotencyKey: "browser-cancelled" });
+    await ops.submitRequest(requester.id, cancelled.id); await ops.cancelRequest(requester.id, cancelled.id);
+    const bossPerson = (await db.user.findUniqueOrThrow({ where: { id: boss.userId } })).personId!;
+    const task = await execution.save(boss.userId, "tasks", { organizationId, title: "Manager follow-up task with long supporting reference " + "delivery_checklist_".repeat(6), assigneePersonId: bossPerson, status: "TODO", priority: "HIGH", dueDate: "2020-01-01" });
+    const escalation = await ops.escalate(boss.userId, { ...resource, responsibleUserId: boss.userId, reason: "Follow up with the delivery owner", trigger: "REQUIRED_ACTION", level: 1, reference: "browser-escalation" });
+    const session = await createAuthenticationService(db).create(boss.userId, secret);
+    const env: NodeJS.ProcessEnv = { ...process.env, DATABASE_URL: "file:" + file.replaceAll("\\", "/"), AUTH_SECRET: secret, AUTH_COOKIE_SECURE: "false", APP_ORIGIN: base };
+    delete env.BOSS_PIN;
+    server = spawn(process.execPath, [resolve("node_modules/next/dist/bin/next"), "dev", "--hostname", "127.0.0.1", "--port", "3005"], { env, stdio: ["ignore", log, log], windowsHide: true });
+    stage = "server readiness";
+    for (let attempt = 0; ; attempt++) {
+      if (server.exitCode !== null) throw new Error("Fixture server exited");
+      try { const response = await fetch(base + "/login", { signal: AbortSignal.timeout(5000) }); if (response.ok) break; } catch { /* Wait only for this owned fixture server. */ }
+      if (attempt >= 60) throw new Error("Fixture server not ready");
+      await new Promise(r => setTimeout(r, 1000));
+    }
+    mkdirSync(output, { recursive: true });
+    browser = await chromium.launch({ headless: true, ...(channel !== "chromium" ? { channel } : {}) });
+    const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
+    await context.addCookies([{ name: "maxpase_session", value: session.token, url: base, httpOnly: true, sameSite: "Lax" }]);
+    const page = await context.newPage();
+    failurePage = page;
+    let errors = 0; page.on("pageerror", () => errors++);
+    const params = `organizationId=${organizationId}&companyId=${organizationId}&returnView=overview&bossCompanyId=${organizationId}&bossStatus=ACTIVE`;
+    const visit = async (path: string) => { const response = await page.goto(base + path, { waitUntil: "networkidle" }); assert.equal(response?.status(), 200); };
+    stage = "shortcuts and context";
+    await visit(`/app/boss?companyId=${organizationId}&status=ACTIVE`);
+    await page.keyboard.press("Tab");
+    await page.getByRole("link", { name: "Skip to content", exact: true }).press("Enter");
+    assert.ok(await page.locator("#main-content").evaluate((element: HTMLElement) => element === document.activeElement));
+    assert.ok(await page.getByRole("navigation", { name: "Authorized workflow shortcuts" }).getByRole("link", { name: "New task" }).count());
+    await page.getByRole("navigation", { name: "Authorized workflow shortcuts" }).getByRole("link", { name: "New task" }).click();
+    await page.getByRole("heading", { name: "New record", exact: true }).waitFor();
+    assert.equal(await page.locator('.business-form [name=organizationId]').inputValue(), organizationId);
+    await page.locator(".workspace-back").click();
+    await page.waitForURL((url: URL) => url.pathname === "/app/boss");
+    assert.equal(new URL(page.url()).searchParams.get("status"), "ACTIVE");
+    stage = "approval evidence and confirmed decisions";
+    await visit(`/app/operations/approvals?${params}&status=PENDING&sort=title`);
+    assert.ok((await page.locator(".approval-detail").innerText()).includes("Evidence: delivery_checklist.md reviewed"));
+    const approve = page.locator(".approval-detail").getByRole("button", { name: "Approve", exact: true });
+    await page.locator('.approval-detail [name=reason]').fill("Reviewed the checklist and current policy");
+    page.once("dialog", (dialog: { dismiss: () => Promise<void> }) => dialog.dismiss());
+    await approve.focus(); await page.keyboard.press("Enter");
+    assert.equal((await db.operationalRequest.findUniqueOrThrow({ where: { id: requests[0].id } })).status, "SUBMITTED");
+    page.once("dialog", (dialog: { accept: () => Promise<void> }) => dialog.accept());
+    await approve.focus(); await page.keyboard.press("Enter");
+    await page.getByRole("status").filter({ hasText: "Saved" }).first().waitFor();
+    assert.equal((await db.operationalRequest.findUniqueOrThrow({ where: { id: requests[0].id } })).status, "APPROVED");
+    await visit(`/app/operations/approvals?${params}&status=PENDING`);
+    await page.locator('.approval-detail [name=reason]').fill("Supporting sign-off is missing");
+    page.once("dialog", (dialog: { accept: () => Promise<void> }) => dialog.accept());
+    await page.locator(".approval-detail").getByRole("button", { name: "Reject", exact: true }).click();
+    await page.getByRole("status").filter({ hasText: "Saved" }).first().waitFor();
+    assert.equal((await db.operationalRequest.findUniqueOrThrow({ where: { id: requests[1].id } })).status, "REJECTED");
+    assert.equal(await db.auditEvent.count({ where: { action: "approval.approved" } }), 1);
+    stage = "request preparation, retry protection and independent approval";
+    await visit(`/app/operations/requests?${params}&create=true`);
+    await page.locator('.operation-editor [name=title]').fill("Boss prepared follow-up request");
+    await page.locator('.operation-editor [name=description]').fill("Supporting evidence: operational follow-up review.");
+    await page.locator('.operation-editor [name=controlPointId]').selectOption(independent.id);
+    const saveRequest = page.locator(".operation-editor").getByRole("button", { name: "Save", exact: true });
+    await saveRequest.click();
+    await page.getByRole("status").filter({ hasText: "Saved" }).first().waitFor();
+    await Promise.all([page.waitForResponse((response: { request: () => { method: () => string } }) => response.request().method() === "POST"), saveRequest.click()]);
+    const prepared = await db.operationalRequest.findFirstOrThrow({ where: { title: "Boss prepared follow-up request", requesterUserId: boss.userId } });
+    assert.equal(await db.operationalRequest.count({ where: { title: prepared.title } }), 1);
+    await visit(`/app/operations/requests?${params}&recordId=${prepared.id}`);
+    page.once("dialog", (dialog: { accept: () => Promise<void> }) => dialog.accept());
+    await page.getByRole("button", { name: "Submit", exact: true }).click();
+    await page.getByRole("status").filter({ hasText: "Saved" }).first().waitFor();
+    assert.equal((await db.operationalRequest.findUniqueOrThrow({ where: { id: prepared.id } })).status, "SUBMITTED");
+    const assigned = await db.siaApproval.findFirstOrThrow({ where: { requestId: prepared.id } });
+    const reviewer = await createAuthenticationService(db).create(requester.id, secret);
+    const reviewContext = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
+    await reviewContext.addCookies([{ name: "maxpase_session", value: reviewer.token, url: base, httpOnly: true, sameSite: "Lax" }]);
+    const reviewPage = await reviewContext.newPage();
+    await reviewPage.goto(`${base}/app/operations/approvals?organizationId=${organizationId}&recordId=${assigned.id}`, { waitUntil: "networkidle" });
+    await reviewPage.locator('.approval-detail [name=reason]').fill("Independent reviewer checked the supporting reason");
+    reviewPage.once("dialog", (dialog: { accept: () => Promise<void> }) => dialog.accept());
+    await reviewPage.getByRole("button", { name: "Approve", exact: true }).click();
+    await reviewPage.getByRole("status").filter({ hasText: "Saved" }).first().waitFor();
+    assert.equal((await db.operationalRequest.findUniqueOrThrow({ where: { id: prepared.id } })).status, "APPROVED");
+    await reviewContext.close();
+    stage = "task assignment and update";
+    await visit(`/app/operations/my-tasks?${params}`);
+    await page.getByRole("link", { name: "Open task", exact: true }).click();
+    await page.waitForURL((url: URL) => url.pathname === "/app/execution/tasks");
+    assert.equal(new URL(page.url()).searchParams.get("recordId"), task.id);
+    await page.getByRole("button", { name: "Edit", exact: true }).click();
+    await page.locator('.business-form [name=status]').selectOption("IN_PROGRESS");
+    await page.locator(".business-form").getByRole("button", { name: "Save", exact: true }).click();
+    await page.getByRole("heading", { name: "Edit record", exact: true }).waitFor({ state: "hidden" });
+    assert.equal((await db.task.findUniqueOrThrow({ where: { id: task.id } })).status, "IN_PROGRESS");
+    stage = "reminder and escalation follow-up";
+    await visit(`/app/operations/reminders?${params}&create=true`);
+    await page.locator('.operation-editor [name=recipientUserId]').selectOption(boss.userId);
+    await page.locator('.operation-editor [name=remindAt]').fill("2026-10-08T09:00");
+    await page.locator('.operation-editor [name=reason]').fill("Review delivery follow-up");
+    await page.locator(".operation-editor").getByRole("button", { name: "Save", exact: true }).click();
+    await page.getByRole("status").filter({ hasText: "Saved" }).first().waitFor();
+    assert.equal(await db.reminder.count({ where: { recipientUserId: boss.userId } }), 1);
+    await visit(`/app/operations/escalations?${params}&recordId=${escalation.id}`);
+    page.once("dialog", (dialog: { accept: () => Promise<void> }) => dialog.accept());
+    await page.getByRole("button", { name: "Resolve", exact: true }).click();
+    await page.getByRole("status").filter({ hasText: "Saved" }).first().waitFor();
+    assert.equal((await db.escalation.findUniqueOrThrow({ where: { id: escalation.id } })).status, "RESOLVED");
+    stage = "saved filters and relevant activity";
+    await visit(`/app/operations/activity?${params}&sort=newest`);
+    assert.ok((await page.locator(".operations-table").innerText()).includes("approval approved"));
+    await page.locator('.saved-filter-panel > summary').click();
+    await page.locator('.saved-filters input').fill("Company recent activity");
+    await page.getByRole("button", { name: "Save current filters", exact: true }).click();
+    await page.getByRole("status").filter({ hasText: "Filter saved" }).waitFor();
+    await page.reload({ waitUntil: "networkidle" });
+    await page.locator('.saved-filter-panel > summary').click();
+    await page.locator('.saved-filters select').selectOption("Company recent activity");
+    assert.equal(new URL(page.url()).searchParams.get("bossStatus"), "ACTIVE");
+    stage = "private notifications and unread indicator";
+    await visit(`/app/operations/notifications?${params}&read=unread`);
+    const count = await db.notification.count({ where: { recipientUserId: boss.userId, readAt: null, OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }] } });
+    assert.equal(await page.locator('.notification-indicator span').innerText(), String(count));
+    assert.ok(count > 0);
+    await page.getByRole("button", { name: "Mark read", exact: true }).first().click();
+    await page.getByRole("status").filter({ hasText: "Saved" }).first().waitFor();
+    await page.locator('.notification-indicator span').filter({ hasText: new RegExp(`^${count - 1}$`) }).waitFor();
+    assert.equal(await page.locator('.notification-indicator span').innerText(), String(count - 1));
+    stage = "responsive workflow surfaces";
+    for (const width of [320, 390, 768, 1440]) {
+      await page.setViewportSize({ width, height: 1000 });
+      for (const kind of ["approvals", "requests", "reminders", "escalations", "my-tasks", "notifications"]) {
+        stage = `responsive ${channel} ${kind} ${width}`;
+        await visit(`/app/operations/${kind}?${params}`);
+        assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1));
+        if (width === 320 && kind === "my-tasks") {
+          const region = page.getByRole("region", { name: "My Tasks records", exact: true });
+          await region.focus(); await page.keyboard.press("ArrowRight");
+          await page.waitForFunction(() => ((document.querySelector(".table-scroll") as HTMLElement | null)?.scrollLeft ?? 0) > 0);
+          await region.evaluate((element: HTMLElement) => { element.scrollLeft = 0; });
+        }
+        await page.screenshot({ path: join(output, `${kind}-${width}.png`), fullPage: true, animations: "disabled", timeout: 60000 }); screenshots++;
+      }
+    }
+    assert.equal(errors, 0);
+    const report = { status: "PASS", measuredAt: new Date().toISOString(), database: "isolated disposable fixture", browser: channel, browserVersion: browser.version(), accessibility: "keyboard skip, approval actions and horizontal table scrolling; not screen-reader certification", workflows: ["company shortcuts", "approval confirmation cancellation", "approve", "reject", "prepare/retry/submit request", "independent reviewer", "overdue task assignment/update with long reference", "reminder", "resolve escalation", "saved filter reload", "private unread notification/read", "activity"], fixtureStates: ["DRAFT", "SUBMITTED", "APPROVED", "REJECTED", "CANCELLED"], screenshots, widths: [320, 390, 768, 1440], pageErrors: errors };
+    writeFileSync(resolve("docs/audit", `BOSS_LAUNCH_BROWSER_${channel.toUpperCase()}.json`), JSON.stringify(report, null, 2) + "\n");
+    console.log(JSON.stringify(report));
+  } catch (error) {
+    await failurePage?.screenshot({ path: join(output, "failure.png"), fullPage: true }).catch(() => {});
+    if (failurePage) console.error(JSON.stringify({ alerts: await failurePage.getByRole("alert").allTextContents(), status: await failurePage.getByRole("status").allTextContents() }));
+    console.error(`Operational workflow browser check failed at ${stage}: ${error instanceof Error ? error.message : "unknown failure"}`); process.exitCode = 1;
+  } finally {
+    await browser?.close();
+    if (server?.pid && server.exitCode === null) {
+      if (process.platform === "win32") { try { execFileSync("taskkill", ["/PID", String(server.pid), "/T", "/F"], { stdio: "ignore", windowsHide: true }); } catch { server.kill("SIGTERM"); } } else server.kill("SIGTERM");
+      await new Promise<void>(r => { if (server!.exitCode !== null || server!.signalCode !== null) r(); else server!.once("exit", () => r()); });
+    }
+    closeSync(log); await db.$disconnect();
+    assert.ok(directory.startsWith(join(tmpdir(), "maxpase-phase4-browser-")));
+    rmSync(directory, { recursive: true, force: true });
+  }
+}
+void main();

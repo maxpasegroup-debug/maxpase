@@ -1,4 +1,6 @@
 "use client";
+import { useSearchParams } from "next/navigation";
+import { WorkspaceReturnFields } from "@/components/ui/workspace-return-fields";
 import { useActionState, useEffect, useState } from "react";
 import { Plus, Pencil, Eye, X, Check, ShieldCheck } from "lucide-react";
 import type { WorkforceKind } from "@/server/domain/workforce-input";
@@ -79,6 +81,7 @@ function AccessInspector({ users, workspace }: { users: WorkforceRow[]; workspac
   </form></section>;
 }
 export function WorkforceManager({ kind, rows, workspace, activeOrganization, search, status, accounts = [] }: { kind: WorkforceKind; rows: WorkforceRow[]; workspace: Workspace; activeOrganization: string; search: string; status: string; accounts?: WorkforceRow[] }) {
+  const returnQuery = useSearchParams();
   const [editing, setEditing] = useState<WorkforceRow | null | undefined>();
   const [details, setDetails] = useState<WorkforceRow | undefined>();
   useEffect(() => { setDetails(previous => previous ? rows.find(r => r.id === previous.id) : undefined); }, [rows]);
@@ -90,7 +93,7 @@ export function WorkforceManager({ kind, rows, workspace, activeOrganization, se
   const identity = (r: WorkforceRow) => text(r.displayName ?? r.email ?? r.name ?? r.person ?? r.title);
   return <>
     <div className="view-heading"><div><p className="eyebrow">People &amp; access</p><h1>{titles[kind]}</h1></div>{canCreate && <button className="button" onClick={() => setEditing(null)}><Plus size={16}/>New {kind === "people" ? "person" : kind === "users" ? "account" : "record"}</button>}</div>
-    <form method="get" className="list-toolbar"><input name="search" aria-label="Search records" type="search" placeholder="Search" defaultValue={search}/>
+    <form method="get" className="list-toolbar"><WorkspaceReturnFields query={Object.fromEntries(returnQuery.entries())}/><input name="search" aria-label="Search records" type="search" placeholder="Search" defaultValue={search}/>
       <select name="organization" aria-label="Active organization" defaultValue={activeOrganization}><option value="">All authorized organizations</option>{workspace.organizations.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}</select>
       <select name="status" aria-label="Status" defaultValue={status}><option value="">All statuses</option>{["ACTIVE", "INACTIVE", "SUSPENDED", "ARCHIVED", "INVITED", "ENDED"].map(s => <option key={s} value={s}>{text(s)}</option>)}</select><button className="button secondary">Apply</button>
     </form>

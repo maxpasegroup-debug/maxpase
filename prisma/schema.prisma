@@ -358,6 +358,7 @@ model User {
   id                      String                   @id @default(cuid())
   email                   String                   @unique
   passwordHash            String?
+  timezone                String?
   status                  LifecycleStatus          @default(ACTIVE)
   personId                String?
   person                  Person?                  @relation(fields: [personId], references: [id], onDelete: SetNull)
