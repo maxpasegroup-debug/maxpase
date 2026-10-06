@@ -6,6 +6,29 @@
 
 #### Five-Domain Routing Update
 
+#### Railway Sign-In Recovery
+
+Production repair performed on 2026-10-06: PASS. The authenticated Railway CLI confirmed the MAXPASE application service had no application authentication/database variables, no app volume and no existing SQLite database file. A new app-only volume was mounted at /data; the separate PostgreSQL service and its data were untouched. A generated stable signing secret was sent via private stdin, the persistent SQLite URL/canonical HTTPS origin/secure-cookie settings were configured, and deployment c1285f3a-cbb1-4549-99a1-0dc2da90e65a succeeded. All 12 existing SQLite migrations were applied. The canonical Boss account was provisioned through private SSH stdin in the persistent database; only its bcrypt hash persists and no BOSS_PIN service variable was created.
+
+Production HTTPS verification: PASS, readiness 200, real Boss PIN form submission, secure HttpOnly host-only cookie, all 17 command-center views, logout and session replay rejection after logout. The smoke used scripts/production-boss-smoke.ts and revoked its test session. Local verification also passed 38 focused authentication/security tests, lint, TypeScript, production build and the actual local Boss form. No interactive browser, mobile or physical-device acceptance was performed. The repair is a CLI upload of validated local source; the code changes still need committing/pushing so a later GitHub deployment retains them.
+
+Separate domain findings: Railway attaches airastartupskool.online, not the requested airastartupskool.com. Nice Jobs is attached but its certificate is VALIDATING_OWNERSHIP and public HTTPS fails validation. airaskillcity.com returned a matching public identity but is not attached to this selected application service, so it is not accepted as deployment evidence. No unrelated domains were removed/reassigned, no DNS provider changes were made, and certificate checks were never bypassed. These are separate domain-routing prerequisites, not a failed MAXPASE Boss login.
+
+The public production checks found a PIN form on maxpase.com but unavailable readiness and a branded gateway returning Gateway configuration unavailable. The latter is specifically emitted when the runtime AUTH_SECRET is absent or shorter than 32 characters. A Railway PostgreSQL service is not compatible with this repository's SQLite Prisma provider and 12 SQLite migrations; its presence alone does not prove which DATABASE_URL the application uses. Do not change the provider or replace an existing production database as an incident workaround.
+
+On the MAXPASE application service (not the PostgreSQL service), confirm a persistent volume is mounted at /data, preserve/back up any existing business database before changing paths, and configure DATABASE_URL=file:/data/maxpase.db, a private stable generated AUTH_SECRET of at least 32 characters, APP_ORIGIN=https://maxpase.com, AUTH_COOKIE_SECURE=true and BOSS_EMAIL=boss@maxpase.com. Reuse the actual existing persistent SQLite path when one exists. Never point DATABASE_URL to the PostgreSQL connection string. An example, blank or development signing secret is rejected. All five domains must use this same configured application service.
+
+After deploying the code, run these commands inside the actual application container with its volume and runtime variables available, not on a laptop and not in a pre-deploy container lacking the mounted volume:
+
+```sh
+npx --no-install prisma migrate deploy
+npx --no-install tsx scripts/provision-boss.ts
+```
+
+Provisioning is an explicit reviewed operator action. Supply BOSS_PIN through a private one-off environment, never command arguments, source, logs or a fixed seed; remove it afterward. Provisioning may rotate an existing Boss credential and revokes existing sessions. No general development seed is required. The two operator scripts now tolerate an absent .env file and validate runtime settings rather than requiring a development file on Railway. The runtime must include the Prisma CLI and tsx for these operator commands; a production install omitting those tools requires an approved maintenance artifact containing them. Account activation is not performed automatically on application startup.
+
+Redeploy/restart the configured service, require /api/ready to return 200, then verify Boss login and all five public hosts. Server startup Ready is not database readiness. Auth/readiness logs now add only controlled stage/reason categories (origin_or_host_rejected, auth_secret_invalid, persistent_sqlite_url_required, secure_cookie_required, https_app_origin_required, database_schema_missing or database_configuration_or_connection_failed); no exception message, stack, credentials or environment values are logged or exposed in endpoint responses. Live Railway configuration and production provisioning remain operator prerequisites, not claims made by local validation.
+
 The five requested experiences now route independently on the same application:
 
 | Domain | Landing | Login | Protected destination |
