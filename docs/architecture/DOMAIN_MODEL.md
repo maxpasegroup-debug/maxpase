@@ -1,4 +1,12 @@
+Phase 03 recruitment extension: [Nice Jobs interview, human approval and offer architecture](NICE_JOBS_INTERVIEW_APPROVAL_OFFER_ARCHITECTURE.md). Existing Phase01/02 identity, scope, audit and human authority boundaries remain in force. Offer acceptance does not activate workforce assignments.
+
 # Domain Model
+
+Nice Jobs applications are separate from workforce profiles/assignments. Each references the existing candidate Person/User, company and exact JobVersion/VersionArea, with controlled submission/review/shortlist/rejection/withdrawal states and private evaluation evidence. See [Phase 02](NICE_JOBS_APPLICATION_SCREENING_ARCHITECTURE.md); no employment activation is implied by an application.
+
+## Nice Jobs Workforce Foundation
+
+Existing Nice Jobs Product -> NiceJobsTemplate -> immutable published NiceJobsVersion -> existing division via NiceJobsVersionArea. Existing Person -> company-bounded NiceJobsWorkerProfile -> version-pinned NiceJobsAssignment. These are job/workforce records, not Users, Memberships, canonical Roles, employment dates or permission grants. See NICE_JOBS_WORKFORCE_ARCHITECTURE.md.
 
 ## Phase 09 Communication Models
 

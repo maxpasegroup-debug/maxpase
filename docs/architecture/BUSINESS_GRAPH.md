@@ -1,4 +1,12 @@
+Phase 03 recruitment extension: [Nice Jobs interview, human approval and offer architecture](NICE_JOBS_INTERVIEW_APPROVAL_OFFER_ARCHITECTURE.md). Existing Phase01/02 identity, scope, audit and human authority boundaries remain in force. Offer acceptance does not activate workforce assignments.
+
 # Business Graph
+
+Nice Jobs Phase 02 preserves the accepted graph: AIRA Skill City Private Limited owns the Nice Jobs product, distributed through Career Hub. Applications reference actual eligible version/business divisions without fabricating candidate employee memberships there. Candidate notification distribution belongs to Career Hub; application decisions/audit retain actual business-division scope. See [Phase 02](NICE_JOBS_APPLICATION_SCREENING_ARCHITECTURE.md).
+
+## Nice Jobs Workforce Phase 01
+
+The existing company-owned Nice Jobs Product under AIRA Career Hub now anchors Job Templates/Versions, existing division business areas and Person-linked workforce profiles/assignments. Academic Advisor covers Startup School and Skill Studio; Business Development Manager covers Labs. Job assignment and lifecycle attestations create no Membership, Role, ownership or access. Historical versions remain pinned. See NICE_JOBS_WORKFORCE_ARCHITECTURE.md.
 
 ## Current Group Identity
 

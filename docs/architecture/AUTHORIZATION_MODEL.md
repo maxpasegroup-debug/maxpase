@@ -1,4 +1,12 @@
+Phase 03 recruitment extension: [Nice Jobs interview, human approval and offer architecture](NICE_JOBS_INTERVIEW_APPROVAL_OFFER_ARCHITECTURE.md). Existing Phase01/02 identity, scope, audit and human authority boundaries remain in force. Offer acceptance does not activate workforce assignments.
+
 # Authorization Model
+
+Nice Jobs Phase 02 registers explicit `nicejobs.application.self/read/evaluate/shortlist/reject/close` capabilities without automatic grants. Own access requires reviewed Career Hub access and Person ownership; management requires the appropriate capability at the application's actual division. Private application notifications resolve ownership and Career Hub distribution scope through the existing canonical resource adapter. See [Phase 02](NICE_JOBS_APPLICATION_SCREENING_ARCHITECTURE.md).
+
+## Nice Jobs Phase 01
+
+Explicit `nicejobs.job.read/create/edit/publish/pause/archive` and `nicejobs.worker.read/assign/transition` reuse current scoped membership/capability evaluation in an AIRA window. Company/job-area mutations, worker division/person reads and date-valid membership checks use actual records. No role/job title grants authority; registry additions grant no employee or agent access. Nice Jobs realm sessions cannot authenticate corporate actions. See NICE_JOBS_WORKFORCE_ARCHITECTURE.md.
 
 ## Phase 10 Review
 

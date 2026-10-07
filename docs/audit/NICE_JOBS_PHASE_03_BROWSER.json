@@ -1,0 +1,34 @@
+{
+  "status": "PASS",
+  "recordedAt": "2026-10-07T19:16:03.838Z",
+  "browser": "154.0.8037.98",
+  "isolated": true,
+  "HTTP": [
+    "anonymous denied",
+    "corporate/portal session replay denied"
+  ],
+  "workflows": [
+    "private interviewer evaluation",
+    "attendance completion",
+    "independent human approval",
+    "offer preparation",
+    "offer review",
+    "offer issuance",
+    "candidate privacy",
+    "candidate acceptance",
+    "no workforce activation",
+    "filtered management pipeline",
+    "draft configuration rendering",
+    "context-preserving interviewer search and assignment"
+  ],
+  "screenshots": 16,
+  "widths": [
+    320,
+    390,
+    768,
+    1440
+  ],
+  "noPageOverflow": true,
+  "pageErrors": 0,
+  "limitations": "Local dev server and simulated viewports only. No physical devices, screen readers, production TLS or production deployment. Isolated reviewed sessions; no production credentials used."
+}

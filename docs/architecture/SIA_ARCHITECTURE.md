@@ -1,4 +1,12 @@
+Phase 03 recruitment extension: [Nice Jobs interview, human approval and offer architecture](NICE_JOBS_INTERVIEW_APPROVAL_OFFER_ARCHITECTURE.md). Existing Phase01/02 identity, scope, audit and human authority boundaries remain in force. Offer acceptance does not activate workforce assignments.
+
 # SIA Architecture
+
+Nice Jobs Phase 02 exposes no recruitment SIA tool or autonomous decision authority. Human evaluation, shortlist and rejection remain explicitly authorized application-service actions. Future assistance must pass the existing human AND agent authorization/approval/execution/audit boundary; SIA is not hiring or employment authority. See [Phase 02](NICE_JOBS_APPLICATION_SCREENING_ARCHITECTURE.md).
+
+## Nice Jobs Workforce Phase 01
+
+No Nice Jobs tool is enabled or registered for SIA in this phase. Future workforce context must use bounded source-authorized reads through the existing human/agent intersection and controlled approval/confirmation/audit gateway, never a workforce dump or caller-supplied human impersonation. Job assignments and human lifecycle attestations confer no agent capability. Autonomous suspension, disciplinary decisions and termination remain forbidden. See NICE_JOBS_WORKFORCE_ARCHITECTURE.md.
 
 ## MAXSPACE Identity
 

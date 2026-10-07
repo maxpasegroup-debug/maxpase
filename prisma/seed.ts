@@ -5,6 +5,7 @@ import { canonicalAiraRoles } from "../src/server/domain/aira-roles";
 import { workforcePermissions } from "../src/server/authorization/registry";
 import { seedAiraStructure } from "../src/server/domain/aira-seed";
 import { initializeGroupStructure } from "../src/server/group/structure";
+import { createNiceJobsService } from "../src/server/nicejobs/service";
 
 const prisma = new PrismaClient();
 
@@ -152,6 +153,8 @@ async function main() {
       title: "MAXPASE GROUP Virtual CEO"
     }
   });
+  const administrator = await prisma.user.findUniqueOrThrow({ where: { email: "admin@maxpase.local" }, select: { id: true } });
+  await createNiceJobsService(prisma).seedKnown(administrator.id);
 }
 
 main()

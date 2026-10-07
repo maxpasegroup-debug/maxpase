@@ -1,4 +1,12 @@
+Phase 03 recruitment extension: [Nice Jobs interview, human approval and offer architecture](NICE_JOBS_INTERVIEW_APPROVAL_OFFER_ARCHITECTURE.md). Existing Phase01/02 identity, scope, audit and human authority boundaries remain in force. Offer acceptance does not activate workforce assignments.
+
 # Architecture
+
+Nice Jobs Phase 02 adds a version-bound candidate application/screening service and scoped gateway views, reusing identity, authorization, publication, events and notifications. See [Application And Screening](NICE_JOBS_APPLICATION_SCREENING_ARCHITECTURE.md). This boundary stops at shortlist and adds no SIA recruitment authority.
+
+## Nice Jobs Workforce Phase 01
+
+`src/server/nicejobs` provides the versioned template/profile/assignment foundation under the existing AIRA Career Hub Product boundary. The shared corporate `/app/nicejobs` and Nice Jobs gateway management views use existing identities, branded sessions, scoped authorization and transactional operational audit. No new recruitment, task, approval, SIA, finance or disciplinary engine is introduced. See NICE_JOBS_WORKFORCE_ARCHITECTURE.md for strict scope/version/pagination and deferred capabilities.
 
 ## Boss Navigation And Design Phase 2
 

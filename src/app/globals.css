@@ -768,3 +768,40 @@ progress { width: 120px; accent-color: var(--accent); }
   .communication-message dl { grid-template-columns: 110px minmax(0, 1fr); gap: 8px 12px; }
   .app-shell:has(.communication-workspace) .nav-list { max-height: 80px; overflow: auto; }
 }
+.nj-workspace { max-width: 1440px; padding: 24px; margin: 0 auto; }
+.nj-workspace h1 { font-size: 28px; overflow-wrap: anywhere; }
+.nj-workspace h2 { font-size: 20px; margin-top: 24px; }
+.nj-workspace nav, .nj-filters, .nj-actions { display: flex; flex-wrap: wrap; gap: 16px; margin: 20px 0; }
+.nj-workspace nav a { padding: 12px 4px; }
+.nj-workspace nav a[aria-current] { border-bottom: 2px solid #087e78; font-weight: 700; }
+.nj-workspace table { min-width: 1000px; width: 100%; }
+.nj-workspace td { max-width: 300px; overflow-wrap: anywhere; vertical-align: top; }
+.nj-workspace .business-table th:last-child, .nj-workspace .business-table td:last-child { min-width: 160px; width: auto; }
+.nj-workspace details > summary { cursor: pointer; min-height: 44px; padding: 12px 0; }
+.nj-workspace .table-scroll:focus-visible { outline: 2px solid #087e78; outline-offset: 3px; }
+.nj-workspace input, .nj-workspace select, .nj-workspace textarea { width: 100%; min-height: 44px; }
+.nj-workspace label { display: grid; gap: 6px; max-width: 480px; }
+.nj-form { display: grid; gap: 12px; margin: 12px 0; max-width: 540px; }
+.nj-form button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; }
+.nj-form fieldset { min-width: 0; border: 1px solid #cbd4d8; padding: 12px; }
+.nj-form .nj-check { display: flex; align-items: center; gap: 10px; min-height: 44px; }
+.nj-check input { width: 20px; min-height: 20px; }
+.nj-detail { display: grid; gap: 8px; }
+.nj-detail dt { font-weight: 600; text-transform: capitalize; }
+.nj-detail dd { margin: 0 0 12px; overflow-wrap: anywhere; }
+@media (max-width: 600px) { .nj-workspace { padding: 16px; } .nj-filters > label { width: 100%; } }
+/* Candidate application surfaces share the operational workspace tokens. */
+.nj-application-list { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); }
+.nj-application-list article { border: 1px solid var(--border, #d7dedc); border-radius: 8px; padding: 20px; min-width: 0; overflow-wrap: anywhere; }
+.nj-application-list h2 { font-size: 20px; }
+.nj-application-list h3 { font-size: 16px; }
+.nj-history { padding-left: 24px; overflow-wrap: anywhere; }
+.nj-history li { padding: 12px 0; border-bottom: 1px solid #d7dedc; }
+.nj-history pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13px; }
+.nj-form fieldset { min-width: 0; display: grid; gap: 12px; }
+.nj-recruitment { min-width: 0; margin-block: 24px; border-block: 1px solid #d7dedc; padding-bottom: 20px; }
+.nj-record { padding-block: 16px; border-bottom: 1px solid #d7dedc; min-width: 0; overflow-wrap: anywhere; }
+.nj-record h3 { font-size: 18px; }
+.nj-record dd { white-space: pre-wrap; }
+.nj-recruitment .nj-actions { align-items: flex-start; }
+.nj-recruitment .nj-actions .nj-form { flex: 1 1 200px; min-width: 0; }

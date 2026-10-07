@@ -9,6 +9,28 @@ export async function resolveResource(db: DB, ctx: Context, type: typeof resourc
   let scope: ResourceScope | null = null;
   let read = "";
   switch (type) {
+    case "NICE_JOBS_ONBOARDING": {
+      const e = await db.niceJobsOnboarding.findUnique({ where: { id }, include: { plan: true, offer: true, application: { include: { company: { include: { company: true } }, area: { include: { division: true, version: { include: { template: { include: { product: true } } } } } } } } } });
+      const a = e?.application;
+      if (!e || !a || a.company.slug !== "aira-skill-city" || a.company.status !== "ACTIVE" || a.company.company?.status !== "ACTIVE" || a.candidateId === ctx.user?.personId || a.companyId !== a.area.division.parentId || a.area.division.status !== "ACTIVE" || a.companyId !== a.area.version.template.companyId || a.area.version.template.product.slug !== "nice-jobs" || a.area.version.template.product.status !== "ACTIVE" || a.area.version.template.product.organizationId !== a.companyId || e.plan.versionId !== a.versionId || e.offer.applicationId !== a.id || e.offer.status !== "ACCEPTED" || !e.offer.acceptedAt || a.status !== "OFFER_ACCEPTED") throw new AccessError("Resource unavailable");
+      scope = { organizationId: a.divisionId };
+      read = (await ctx.decide("nicejobs.onboarding.read", scope)).allowed ? "nicejobs.onboarding.read" : e.reviewerUserId === ctx.user?.id && e.reviewerPersonId === ctx.user?.personId && (await ctx.decide("nicejobs.ojt.review", scope)).allowed ? "nicejobs.ojt.review" : e.readinessReviewerUserId === ctx.user?.id && e.readinessReviewerPersonId === ctx.user?.personId && (await ctx.decide("nicejobs.readiness.review", scope)).allowed ? "nicejobs.readiness.review" : "nicejobs.onboarding.read";
+      break;
+    }
+    case "NICE_JOBS_RECRUITMENT": {
+      const application = await db.niceJobsApplication.findFirst({ where: { id, company: { slug: "aira-skill-city", status: "ACTIVE", company: { is: { status: "ACTIVE" } } }, area: { division: { status: "ACTIVE" }, version: { template: { product: { slug: "nice-jobs", status: "ACTIVE" } } } } }, select: { companyId: true, divisionId: true, candidateId: true, area: { select: { division: { select: { parentId: true } }, version: { select: { template: { select: { companyId: true, product: { select: { organizationId: true } } } } } } } } } });
+      if (!application || application.candidateId === ctx.user?.personId || application.companyId !== application.area.division.parentId || application.companyId !== application.area.version.template.companyId || application.companyId !== application.area.version.template.product.organizationId) throw new AccessError("Resource unavailable");
+      scope = { organizationId: application.divisionId }; read = "nicejobs.application.read"; break;
+    }
+    case "NICE_JOBS_APPLICATION": {
+      const application = await db.niceJobsApplication.findUnique({ where: { id }, include: { area: { include: { version: { select: { template: { select: { productId: true, companyId: true } } } } } } } });
+      if (!application || application.candidateId !== ctx.user?.personId || application.companyId !== application.area.version.template.companyId) throw new AccessError("Resource unavailable");
+      const product = await db.product.findFirst({ where: { id: application.area.version.template.productId, organizationId: application.companyId, slug: "nice-jobs", status: "ACTIVE", organization: { status: "ACTIVE", company: { is: { status: "ACTIVE" } } }, division: { is: { slug: "aira-career-hub", parentId: application.companyId, status: "ACTIVE" } } }, select: { divisionId: true } });
+      if (!product?.divisionId) throw new AccessError("Resource unavailable");
+      scope = { organizationId: product.divisionId };
+      await ctx.requireAccess("organization.read", scope);
+      read = "nicejobs.application.self"; break;
+    }
     case "ORGANIZATION": scope = (await db.organization.findUnique({ where: { id } })) ? { organizationId: id } : null; read = "organization.read"; break;
     case "PROJECT": { const r = await db.project.findUnique({ where: { id } }); scope = r ? { organizationId: r.organizationId, projectId: r.id } : null; read = "project.read"; break; }
     case "TASK": scope = await db.task.findUnique({ where: { id } }); read = "task.read"; break;

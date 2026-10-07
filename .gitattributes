@@ -1,1 +1,5 @@
 prisma/migrations/20261006090000_account_timezone/migration.sql text eol=lf
+prisma/migrations/20261007100000_nicejobs_workforce/migration.sql text eol=lf
+prisma/migrations/20261007120000_nicejobs_applications/migration.sql text eol=lf
+prisma/migrations/20261007140000_nicejobs_recruitment/migration.sql text eol=lf
+prisma/migrations/20261008100000_nicejobs_onboarding/migration.sql text eol=lf

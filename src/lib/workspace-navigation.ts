@@ -13,6 +13,7 @@ export const workspaceGroups: { key: string; label: string; views: BossView[]; h
     ["Approvals", "/app/operations/approvals"], ["Requests", "/app/operations/requests"], ["Notifications", "/app/operations/notifications"], ["Notification preferences", "/app/operations/preferences"], ["Escalations", "/app/operations/escalations"], ["Control points", "/app/operations/controls"], ["SIA proposals", "/app/operations/sia"], ["Decision records", "/app/executive/decisions"], ["Risks", "/app/executive/risks"], ["Opportunities", "/app/executive/opportunities"], ["Performance indicators", "/app/executive/kpis"]
   ].map(([label, href]) => ({ label, href })) },
   { key: "people", label: "People", views: ["people"], href: "/app/workforce/people", modules: [
+    ["Nice Jobs workforce", "/app/nicejobs"],
     ["People", "/app/workforce/people"], ["User accounts", "/app/workforce/users"], ["Departments", "/app/workforce/departments"], ["Teams", "/app/workforce/teams"], ["Memberships", "/app/workforce/memberships"], ["Roles & designations", "/app/workforce/roles"], ["Permissions", "/app/workforce/permissions"], ["Access assignments", "/app/workforce/access"], ["Reporting", "/app/workforce/reporting"], ["Responsibilities", "/app/workforce/responsibilities"], ["Project responsibilities", "/app/execution/responsibilities"], ["Workforce structure", "/app/workforce/organizations"]
   ].map(([label, href]) => ({ label, href })) },
   { key: "system", label: "System", views: ["system", "audit"], href: "/app/security", modules: [

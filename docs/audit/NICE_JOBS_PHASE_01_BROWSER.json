@@ -1,0 +1,29 @@
+{
+  "status": "PASS",
+  "recordedAt": "2026-10-07T08:47:40.885Z",
+  "browser": "154.0.8037.98",
+  "isolated": true,
+  "HTTP": [
+    "corporate authorized and anonymous",
+    "portal authorized and anonymous",
+    "corporate/portal replay rejected"
+  ],
+  "workflows": [
+    "gateway entry",
+    "draft edit",
+    "publication",
+    "prepared assignment",
+    "human lifecycle attestation",
+    "actor/scope audit"
+  ],
+  "screenshots": 16,
+  "widths": [
+    320,
+    390,
+    768,
+    1440
+  ],
+  "noPageOverflow": true,
+  "pageErrors": 0,
+  "limitations": "Development-mode loopback and simulated viewports only. Screenshots are transient private fixture artifacts and are removed during cleanup. No production, live TLS, physical device or screen-reader acceptance."
+}

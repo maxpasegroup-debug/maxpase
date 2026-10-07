@@ -7,6 +7,332 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model NiceJobsTemplate {
+  id                 String            @id @default(cuid())
+  companyId          String
+  company            Organization      @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  productId          String
+  product            Product           @relation(fields: [productId], references: [id], onDelete: Restrict)
+  code               String
+  status             String            @default("DRAFT")
+  visibility         String            @default("INTERNAL")
+  revision           Int               @default(0)
+  publishedVersionId String?           @unique
+  publishedVersion   NiceJobsVersion?  @relation("NiceJobsPublished", fields: [publishedVersionId], references: [id], onDelete: Restrict)
+  versions           NiceJobsVersion[] @relation("NiceJobsVersions")
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+
+  @@unique([companyId, code])
+  @@index([companyId, status, id])
+}
+
+model NiceJobsVersion {
+  trainingPlan NiceJobsTrainingPlan?
+  id            String                @id @default(cuid())
+  templateId    String
+  template      NiceJobsTemplate      @relation("NiceJobsVersions", fields: [templateId], references: [id], onDelete: Restrict)
+  publishedFor  NiceJobsTemplate?     @relation("NiceJobsPublished")
+  number        Int
+  title         String
+  description   String?
+  engagement    String                @default("PART_TIME_INCENTIVE")
+  context       String?
+  configuration String?
+  status        String                @default("DRAFT")
+  revision      Int                   @default(0)
+  publishedAt   DateTime?
+  areas         NiceJobsVersionArea[]
+  assignments   NiceJobsAssignment[]
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
+
+  @@unique([templateId, number])
+  @@index([templateId, status, id])
+}
+
+model NiceJobsVersionArea {
+  applications NiceJobsApplication[]
+  versionId  String
+  version    NiceJobsVersion @relation(fields: [versionId], references: [id], onDelete: Restrict)
+  divisionId String
+  division   Organization    @relation(fields: [divisionId], references: [id], onDelete: Restrict)
+
+  @@id([versionId, divisionId])
+  @@index([divisionId, versionId])
+}
+
+model NiceJobsWorkerProfile {
+  id          String               @id @default(cuid())
+  personId    String
+  person      Person               @relation(fields: [personId], references: [id], onDelete: Restrict)
+  companyId   String
+  company     Organization         @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  assignments NiceJobsAssignment[]
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+
+  @@unique([companyId, personId])
+}
+
+model NiceJobsAssignment {
+  id         String                @id @default(cuid())
+  profileId  String
+  profile    NiceJobsWorkerProfile @relation(fields: [profileId], references: [id], onDelete: Restrict)
+  versionId  String
+  version    NiceJobsVersion       @relation(fields: [versionId], references: [id], onDelete: Restrict)
+  divisionId String
+  division   Organization          @relation(fields: [divisionId], references: [id], onDelete: Restrict)
+  managerId  String?
+  manager    Person?               @relation("NiceJobsManager", fields: [managerId], references: [id], onDelete: Restrict)
+  status     String                @default("PREPARED")
+  lifecycle  String                @default("APPLICANT")
+  revision   Int                   @default(0)
+  startDate  DateTime?
+  endDate    DateTime?
+  createdAt  DateTime              @default(now())
+  updatedAt  DateTime              @updatedAt
+
+  @@unique([profileId, versionId, divisionId])
+  @@index([divisionId, status, id])
+  @@index([divisionId, id])
+  @@index([divisionId, lifecycle, id])
+  @@index([profileId, status, id])
+  @@index([versionId, id])
+}
+
+model NiceJobsApplication {
+  onboarding NiceJobsOnboarding?
+  interviews NiceJobsInterview[]
+  offers NiceJobsOffer[]
+  reviewRequestId String? @unique
+  reviewRequest OperationalRequest? @relation(fields: [reviewRequestId], references: [id], onDelete: Restrict)
+  reviewNeedsMore Boolean @default(false)
+  id                String @id @default(cuid())
+  reference         String @unique @default(uuid())
+  applicationId     String? @unique
+  candidateId       String
+  candidate         Person @relation(fields: [candidateId], references: [id], onDelete: Restrict)
+  creatorUserId     String
+  creator           User @relation(fields: [creatorUserId], references: [id], onDelete: Restrict)
+  companyId         String
+  company           Organization @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  versionId         String
+  divisionId        String
+  area              NiceJobsVersionArea @relation(fields: [versionId, divisionId], references: [versionId, divisionId], onDelete: Restrict)
+  status            String @default("DRAFT")
+  eligibilityStatus String @default("NOT_CONFIGURED")
+  screeningStatus   String @default("NOT_CONFIGURED")
+  answers           String @default("{}")
+  candidateMessage  String?
+  activeKey         String? @unique
+  revision          Int @default(0)
+  submittedAt       DateTime?
+  history           NiceJobsApplicationHistory[]
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([companyId, candidateId, id])
+  @@index([companyId, divisionId, status, id])
+  @@index([companyId, divisionId, id])
+  @@index([companyId, versionId, status, id])
+}
+
+model NiceJobsApplicationSequence {
+  year Int @id
+  value Int
+}
+
+model NiceJobsApplicationHistory {
+  id String @id @default(cuid())
+  applicationId String
+  application NiceJobsApplication @relation(fields: [applicationId], references: [id], onDelete: Restrict)
+  revision Int
+  eventId String @unique
+  action String
+  previousState String
+  nextState String
+  internalReason String?
+  candidateMessage String?
+  evidence String?
+  createdAt DateTime @default(now())
+
+  @@unique([applicationId, revision])
+}
+
+model NiceJobsInterview {
+  id String @id @default(cuid())
+  reference String @unique @default(uuid())
+  applicationId String
+  application NiceJobsApplication @relation(fields: [applicationId], references: [id], onDelete: Restrict)
+  number Int
+  type String
+  status String @default("PENDING")
+  revision Int @default(0)
+  scheduledAt DateTime?
+  duration Int
+  location String?
+  instructions String?
+  completedAt DateTime?
+  createdByUserId String
+  creator User @relation(fields: [createdByUserId], references: [id], onDelete: Restrict)
+  interviewers NiceJobsInterviewer[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@unique([applicationId, number])
+  @@index([applicationId, status, id])
+  @@index([scheduledAt, applicationId])
+}
+
+model NiceJobsInterviewer {
+  interviewId String
+  interview NiceJobsInterview @relation(fields: [interviewId], references: [id], onDelete: Restrict)
+  userId String
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+  personId String
+  evaluation NiceJobsInterviewEvaluation?
+  @@id([interviewId, userId])
+  @@index([userId, interviewId])
+}
+
+model NiceJobsInterviewEvaluation {
+  id String @id @default(cuid())
+  interviewId String
+  userId String
+  interviewer NiceJobsInterviewer @relation(fields: [interviewId, userId], references: [interviewId, userId], onDelete: Restrict)
+  answers String
+  scores String
+  weightedScore Float
+  notes String
+  recommendation String
+  submittedAt DateTime @default(now())
+  @@unique([interviewId, userId])
+}
+
+model NiceJobsOffer {
+  onboarding NiceJobsOnboarding?
+  id String @id @default(cuid())
+  reference String @unique @default(uuid())
+  applicationId String
+  application NiceJobsApplication @relation(fields: [applicationId], references: [id], onDelete: Restrict)
+  number Int
+  status String @default("DRAFT")
+  revision Int @default(0)
+  snapshot String
+  activeKey String? @unique
+  issuedAt DateTime?
+  expiresAt DateTime?
+  viewedAt DateTime?
+  acceptedAt DateTime?
+  declinedAt DateTime?
+  declineReason String?
+  createdByUserId String
+  creator User @relation(fields: [createdByUserId], references: [id], onDelete: Restrict)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@unique([applicationId, number])
+  @@index([applicationId, status, id])
+}
+
+model NiceJobsTrainingPlan {
+  id String @id @default(cuid())
+  versionId String @unique
+  version NiceJobsVersion @relation(fields: [versionId], references: [id], onDelete: Restrict)
+  configuration String
+  fingerprint String
+  enrollments NiceJobsOnboarding[]
+  createdAt DateTime @default(now())
+}
+
+model NiceJobsOnboarding {
+  id String @id @default(cuid())
+  reference String @unique @default(uuid())
+  applicationId String @unique
+  application NiceJobsApplication @relation(fields: [applicationId], references: [id], onDelete: Restrict)
+  offerId String @unique
+  offer NiceJobsOffer @relation(fields: [offerId], references: [id], onDelete: Restrict)
+  planId String
+  plan NiceJobsTrainingPlan @relation(fields: [planId], references: [id], onDelete: Restrict)
+  status String @default("NOT_STARTED")
+  readinessStatus String @default("PENDING")
+  revision Int @default(0)
+  reviewerUserId String?
+  reviewer User? @relation("OjtReviewer", fields: [reviewerUserId], references: [id], onDelete: Restrict)
+  reviewerPersonId String?
+  readinessReviewerUserId String?
+  readinessReviewer User? @relation("ReadinessReviewer", fields: [readinessReviewerUserId], references: [id], onDelete: Restrict)
+  readinessReviewerPersonId String?
+  startedAt DateTime?
+  orientationCompletedAt DateTime?
+  ojtStartedAt DateTime?
+  ojtCompletedAt DateTime?
+  completedAt DateTime?
+  progress NiceJobsTrainingProgress[]
+  reviews NiceJobsTrainingReview[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([status, id])
+  @@index([planId, status, id])
+  @@index([readinessStatus, id])
+  @@index([reviewerUserId, reviewerPersonId, status, id])
+  @@index([readinessReviewerUserId, readinessReviewerPersonId, status, id])
+}
+
+model NiceJobsTrainingProgress {
+  id String @id @default(cuid())
+  onboardingId String
+  onboarding NiceJobsOnboarding @relation(fields: [onboardingId], references: [id], onDelete: Restrict)
+  phase String
+  key String
+  status String @default("PENDING")
+  attempt Int @default(0)
+  revision Int @default(0)
+  dueAt DateTime?
+  assignedAt DateTime @default(now())
+  completedAt DateTime?
+  submissions NiceJobsTrainingSubmission[]
+  @@unique([onboardingId, phase, key])
+  @@index([onboardingId, phase, status, id])
+  @@index([onboardingId, id])
+}
+
+model NiceJobsTrainingSubmission {
+  id String @id @default(cuid())
+  progressId String
+  progress NiceJobsTrainingProgress @relation(fields: [progressId], references: [id], onDelete: Restrict)
+  attempt Int
+  data String
+  result String @default("PENDING")
+  score Float?
+  actorUserId String
+  actor User @relation(fields: [actorUserId], references: [id], onDelete: Restrict)
+  actorPersonId String
+  review NiceJobsTrainingReview?
+  submittedAt DateTime @default(now())
+  @@unique([progressId, attempt])
+}
+
+model NiceJobsTrainingReview {
+  id String @id @default(cuid())
+  onboardingId String
+  onboarding NiceJobsOnboarding @relation(fields: [onboardingId], references: [id], onDelete: Restrict)
+  submissionId String? @unique
+  submission NiceJobsTrainingSubmission? @relation(fields: [submissionId], references: [id], onDelete: Restrict)
+  kind String
+  outcome String
+  privateNotes String
+  feedback String?
+  requirements String?
+  reviewerUserId String
+  reviewer User @relation(fields: [reviewerUserId], references: [id], onDelete: Restrict)
+  reviewerPersonId String
+  eventId String @unique
+  event OperationalEvent @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  reviewedAt DateTime @default(now())
+  @@index([onboardingId, kind, id])
+  @@index([reviewerUserId, kind, outcome, id])
+}
+
 model SecurityRateBucket {
   id          String   @id @default(cuid())
   key         String
@@ -349,6 +675,14 @@ enum GoalStatus {
 }
 
 model User {
+  ojtEnrollments NiceJobsOnboarding[] @relation("OjtReviewer")
+  readinessEnrollments NiceJobsOnboarding[] @relation("ReadinessReviewer")
+  trainingSubmissions NiceJobsTrainingSubmission[]
+  trainingReviews NiceJobsTrainingReview[]
+  niceJobsInterviewsCreated NiceJobsInterview[]
+  niceJobsInterviewAssignments NiceJobsInterviewer[]
+  niceJobsOffersCreated NiceJobsOffer[]
+  niceJobsApplications NiceJobsApplication[]
   integrations            Integration[]
   communicationMessages   CommunicationMessage[]
   automationRules         AutomationRule[]
@@ -393,6 +727,9 @@ model Session {
 }
 
 model Person {
+  niceJobsApplications NiceJobsApplication[]
+  niceJobsProfiles       NiceJobsWorkerProfile[]
+  managedJobAssignments  NiceJobsAssignment[]    @relation("NiceJobsManager")
   communicationMessages  CommunicationMessage[]
   automationRules        AutomationRule[]
   communicationConsents  CommunicationConsent[]
@@ -431,6 +768,11 @@ model Person {
 }
 
 model Organization {
+  niceJobsApplications NiceJobsApplication[]
+  niceJobsTemplates        NiceJobsTemplate[]
+  niceJobsAreas            NiceJobsVersionArea[]
+  niceJobsProfiles         NiceJobsWorkerProfile[]
+  niceJobsAssignments      NiceJobsAssignment[]
   integrations             Integration[]
   communicationPolicies    CommunicationPolicy[]
   communicationConsents    CommunicationConsent[]
@@ -606,26 +948,27 @@ model Brand {
 }
 
 model Product {
-  id               String           @id @default(cuid())
-  organizationId   String
-  divisionId       String?
-  division         Organization?    @relation("ProductDivision", fields: [divisionId], references: [id], onDelete: Restrict)
-  brandId          String?
-  organization     Organization     @relation(fields: [organizationId], references: [id], onDelete: Restrict)
-  brand            Brand?           @relation(fields: [brandId], references: [id], onDelete: SetNull)
-  name             String
-  slug             String
-  description      String?
-  type             String           @default("PRODUCT")
-  lifecycle        String           @default("CONCEPT")
-  status           LifecycleStatus  @default(ACTIVE)
-  metadata         String?
-  projects         Project[]
-  goals            Goal[]
-  responsibilities Responsibility[]
-  programs         Program[]
-  createdAt        DateTime         @default(now())
-  updatedAt        DateTime         @updatedAt
+  niceJobsTemplates NiceJobsTemplate[]
+  id                String             @id @default(cuid())
+  organizationId    String
+  divisionId        String?
+  division          Organization?      @relation("ProductDivision", fields: [divisionId], references: [id], onDelete: Restrict)
+  brandId           String?
+  organization      Organization       @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  brand             Brand?             @relation(fields: [brandId], references: [id], onDelete: SetNull)
+  name              String
+  slug              String
+  description       String?
+  type              String             @default("PRODUCT")
+  lifecycle         String             @default("CONCEPT")
+  status            LifecycleStatus    @default(ACTIVE)
+  metadata          String?
+  projects          Project[]
+  goals             Goal[]
+  responsibilities  Responsibility[]
+  programs          Program[]
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
 
   @@unique([organizationId, slug])
 }
@@ -1297,6 +1640,7 @@ model SiaApproval {
 }
 
 model OperationalEvent {
+  trainingReviews NiceJobsTrainingReview[]
   integrationEvents IntegrationEvent[]
   id                String             @id @default(cuid())
   eventType         String
@@ -1452,6 +1796,7 @@ model ApprovalRule {
 }
 
 model OperationalRequest {
+  niceJobsApplication NiceJobsApplication?
   communicationMessage CommunicationMessage?
   siaAction            SiaAction?
   id                   String                @id @default(cuid())

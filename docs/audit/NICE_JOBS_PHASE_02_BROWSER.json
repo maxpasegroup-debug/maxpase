@@ -1,0 +1,31 @@
+{
+  "status": "PASS",
+  "recordedAt": "2026-10-07T14:53:19.470Z",
+  "browser": "154.0.8037.98",
+  "isolated": true,
+  "HTTP": [
+    "anonymous denied",
+    "corporate/portal replay denied"
+  ],
+  "workflows": [
+    "candidate creates draft",
+    "review remains draft",
+    "reviews and submits",
+    "human eligibility",
+    "human screening",
+    "human shortlist",
+    "candidate privacy and navigation",
+    "no workforce activation",
+    "draft configuration editor"
+  ],
+  "screenshots": 16,
+  "widths": [
+    320,
+    390,
+    768,
+    1440
+  ],
+  "noPageOverflow": true,
+  "pageErrors": 0,
+  "limitations": "Local development server and simulated viewports only. No physical devices, live TLS, production or screen-reader acceptance. Sessions generated using existing authentication service in an isolated fixture."
+}

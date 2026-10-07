@@ -1,4 +1,12 @@
+Phase 03 recruitment extension: [Nice Jobs interview, human approval and offer architecture](NICE_JOBS_INTERVIEW_APPROVAL_OFFER_ARCHITECTURE.md). Existing Phase01/02 identity, scope, audit and human authority boundaries remain in force. Offer acceptance does not activate workforce assignments.
+
 # Security Model
+
+Nice Jobs applications use existing realm/session/origin controls, source-scoped ownership predicates, strict form/rule validation, database uniqueness and transactional revision/audit checks. Candidate responses exclude hidden rules, scores, management notes and evaluator/audit details. `nicejobs.*` reported events are reserved. Application notifications validate real ownership and recipient scope. See [Phase 02](NICE_JOBS_APPLICATION_SCREENING_ARCHITECTURE.md).
+
+## Nice Jobs Workforce Phase 01
+
+Nice Jobs management reuses current session/audience/origin checks and the scoped authorization engine. Actual company, product, business areas, person membership and publication are resolved server-side; client actor identity and arbitrary lifecycle changes are not accepted. Revision CAS and database uniqueness reject stale/replayed/duplicate mutations. Canonical audit/event insertion is transactionally required. Worker query visibility is enforced before paging and DTOs expose no credentials or extra contact/profile data. No autonomous disciplinary or termination endpoint exists. See NICE_JOBS_WORKFORCE_ARCHITECTURE.md.
 
 ## Phase 10 Runtime And Privacy
 

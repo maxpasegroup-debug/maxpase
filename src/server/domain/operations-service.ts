@@ -265,11 +265,15 @@ export function createOperationsService(client: PrismaClient = prisma, createAcc
       await event(db, ctx, r, "notification.expired", "Notification", n.id, { requestId: r.id });
     }
   }
-  async function submitRequest(userId: string, id: string) {
-    return client.$transaction(async db => {
+  async function submitRequest(userId: string, id: string, transaction?: DB) {
+    const run = async (db: DB) => {
       const ctx = await context(db, userId); const r = await db.operationalRequest.findUniqueOrThrow({ where: { id } });
       await boundResource(db, ctx, r, "request.manage");
       if (r.requesterUserId !== userId || r.status !== "DRAFT") throw new AccessError("Only the requester may submit a draft once");
+      if (r.resourceType === "NICE_JOBS_RECRUITMENT") {
+        const application = await db.niceJobsApplication.findUnique({ where: { id: r.resourceId } });
+        if (application?.status !== "MANAGEMENT_REVIEW" || application.reviewRequestId !== id) throw new AccessError("Recruitment review binding changed");
+      }
       if (r.expiresAt && r.expiresAt <= new Date()) throw new AccessError("Request expired");
       const policy = await point(db, ctx, r.controlPointId, r);
       if (!policy.rules.length) throw new AccessError("No approvers configured");
@@ -288,11 +292,12 @@ export function createOperationsService(client: PrismaClient = prisma, createAcc
       if (changed.count !== 1) throw new AccessError("Request was already submitted");
       await event(db, ctx, r, "approval.requested", "OperationalRequest", id);
       await approvalNotifications(db, ctx, r, Math.min(...policy.rules.map(a => a.stageIndex)));
-    });
+    };
+    return transaction ? run(transaction) : client.$transaction(run);
   }
-  async function decide(userId: string, raw: unknown) {
+  async function decide(userId: string, raw: unknown, transaction?: DB) {
     const data = input.decisionInput.parse(raw);
-    return client.$transaction(async db => {
+    const run = async (db: DB) => {
       const ctx = await context(db, userId);
       const approval = await db.siaApproval.findUniqueOrThrow({ where: { id: data.approvalId }, include: { request: { include: { controlPoint: true } } } });
       const r = approval.request;
@@ -302,6 +307,11 @@ export function createOperationsService(client: PrismaClient = prisma, createAcc
       const identity = JSON.parse(approval.metadata ?? "{}");
       if (identity.approverPersonId && identity.approverPersonId !== ctx.user!.personId) throw new AccessError("Approval is assigned to a different human identity");
       await ctx.requireAccess(r.controlPoint.requiredPermission, r);
+      if (r.resourceType === "NICE_JOBS_RECRUITMENT") {
+        const application = await db.niceJobsApplication.findUnique({ where: { id: r.resourceId }, include: { area: { include: { version: { include: { template: true } } } } } });
+        if (application?.status !== "MANAGEMENT_REVIEW" || application.reviewRequestId !== r.id || application.area.version.status !== "PUBLISHED" || application.area.version.template.status !== "PUBLISHED") throw new AccessError("Recruitment review is no longer valid");
+        await ctx.requireAccess(data.decision === "APPROVED" ? "nicejobs.management.approve" : "nicejobs.management.reject", r);
+      }
       if (r.controlPoint.status !== "ACTIVE" || approval.status !== "PENDING" || r.status !== "SUBMITTED" || r.expiresAt && r.expiresAt <= new Date()) throw new AccessError("Approval is not pending or has expired");
       if (r.workflowInstanceId && (await db.workflowInstance.findUniqueOrThrow({ where: { id: r.workflowInstanceId } })).version !== r.instanceVersion) throw new AccessError("Approval no longer matches workflow state");
       const earlier = await db.siaApproval.count({ where: { requestId: r.id, stageIndex: { lt: approval.stageIndex }, status: { not: "APPROVED" } } });
@@ -319,10 +329,11 @@ export function createOperationsService(client: PrismaClient = prisma, createAcc
         await notify(db, userId, r.requesterUserId, r, "APPROVAL_COMPLETED", "Approval " + data.decision.toLowerCase(), r.title, "request-decision:" + r.id, "NORMAL", r.expiresAt);
       } else if (!pending.some(a => a.stageIndex === approval.stageIndex)) await approvalNotifications(db, ctx, r, pending[0].stageIndex);
       return { status: data.decision, executionEnabled: false };
-    });
+    };
+    return transaction ? run(transaction) : client.$transaction(run);
   }
-  async function cancelRequest(userId: string, id: string) {
-    return client.$transaction(async db => {
+  async function cancelRequest(userId: string, id: string, transaction?: DB) {
+    const run = async (db: DB) => {
       const ctx = await context(db, userId); const r = await db.operationalRequest.findUniqueOrThrow({ where: { id } });
       await boundResource(db, ctx, r, "request.manage");
       if (!["DRAFT", "SUBMITTED"].includes(r.status)) throw new AccessError("Request is already decided");
@@ -330,7 +341,8 @@ export function createOperationsService(client: PrismaClient = prisma, createAcc
       await db.siaApproval.updateMany({ where: { requestId: id, status: "PENDING" }, data: { status: "CANCELLED", decidedAt: new Date() } });
       await expireApprovalAlerts(db, ctx, r);
       await event(db, ctx, r, "request.cancelled", "OperationalRequest", id);
-    });
+    };
+    return transaction ? run(transaction) : client.$transaction(run);
   }
   async function siaBoundary(userId: string, id: string, transaction?: DB) {
     const run = async (db: DB) => {
@@ -350,7 +362,7 @@ export function createOperationsService(client: PrismaClient = prisma, createAcc
   }
   async function registerEvent(userId: string, raw: unknown) {
     const parsed = input.eventInput.parse(raw);
-    if (/^(integration|communication|automation|webhook)\./.test(parsed.eventType)) throw new AccessError("Lifecycle events can only be emitted by their domain mutation");
+    if (/^(integration|communication|automation|webhook|nicejobs)\./.test(parsed.eventType)) throw new AccessError("Lifecycle events can only be emitted by their domain mutation");
     if (/^(task|project|goal|milestone|workflow|approval|request|notification|reminder|recurrence|escalation|control|sia|person|user|membership|role|permission|responsibility|reporting|program|batch|location|participant|company|organization|executive|attention|decision|kpi|risk|opportunity|organizations|companies|departments|teams|groups|people|users|memberships|roles|permissions|responsibilities|brands|products|relationships|ownership)\./.test(parsed.eventType)) throw new AccessError("Lifecycle events can only be emitted by their domain mutation");
     return client.$transaction(async db => {
       const ctx = await context(db, userId); const scope = await boundResource(db, ctx, parsed, "event.manage");
@@ -698,6 +710,6 @@ export function createOperationsService(client: PrismaClient = prisma, createAcc
     const result = sort && sort !== "reference" && !recordId ? sortedResultPage(rows, sort, page) : resultPage(rows.filter(r => !recordId || r.id === recordId), recordId ? {} : page);
     return kind === "approvals" ? inboxDetails(userId, result) : result;
   }
-  return { listPage, requireApprovedRequest, saveControl, saveWorkflow, publishWorkflow, startWorkflow, transition, checkControl, createRequest, updateRequest, submitRequest, decide, cancelRequest, siaBoundary, registerEvent, preference, markRead, generateNotification, saveReminder, saveRecurring, escalate, changeStatus, processDue, list, overview, workspace };
+  return { listPage, requireApprovedRequest, approvedAuthority, saveControl, saveWorkflow, publishWorkflow, startWorkflow, transition, checkControl, createRequest, updateRequest, submitRequest, decide, cancelRequest, siaBoundary, registerEvent, preference, markRead, generateNotification, saveReminder, saveRecurring, escalate, changeStatus, processDue, list, overview, workspace };
 }
 export const operationsService = createOperationsService();

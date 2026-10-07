@@ -1,4 +1,12 @@
+Phase 03 recruitment extension: [Nice Jobs interview, human approval and offer architecture](NICE_JOBS_INTERVIEW_APPROVAL_OFFER_ARCHITECTURE.md). Existing Phase01/02 identity, scope, audit and human authority boundaries remain in force. Offer acceptance does not activate workforce assignments.
+
 # Database Model
+
+Nice Jobs Phase 02 adds `NiceJobsApplication`, `NiceJobsApplicationSequence` and `NiceJobsApplicationHistory` in additive migration `20261007120000_nicejobs_applications`. UUID references, unique submitted IDs/active keys, revisioned evidence and a restrictive version-area composite FK protect integrity. Candidate/division/status/version keyset indexes support bounded reads. See [Phase 02](NICE_JOBS_APPLICATION_SCREENING_ARCHITECTURE.md).
+
+## Nice Jobs Phase 01
+
+`20261007100000_nicejobs_workforce` adds five restrictive relational tables for template/version/area/profile/assignment and scoped paging indexes. Existing identities and prior migrations are preserved. Runtime readiness verifies its explicit checksum; migration never runs at startup. Published snapshots and assignments retain historical references; nullable dates/configuration remain unknown. See NICE_JOBS_WORKFORCE_ARCHITECTURE.md for the release/restore boundary.
 
 ## Account Timezone Preference
 
