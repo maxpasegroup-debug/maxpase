@@ -28,7 +28,7 @@ export function createBossService(client: PrismaClient = prisma) {
   async function dashboard(userId: string, companyId?: string, rawFilters: unknown = {}) {
     const { ctx, root } = await authority(userId);
     const filters = bossFilter.parse(rawFilters);
-    const companies = await boundedRead(take => client.companyProfile.findMany({ take, where: { organization: { parentId: root.id, type: "COMPANY", id: { in: ctx.organizationIds("company.read").filter(id => ctx.organizationIds("executive.read").includes(id) && ctx.organizationIds("organization.read").includes(id)) } } }, select: { organizationId: true, legalName: true, displayName: true, status: true }, orderBy: { displayName: "asc" } }));
+    const companies = await boundedRead(take => client.companyProfile.findMany({ take, where: { organization: { parentId: root.id, type: "COMPANY", id: { in: ctx.organizationIds("company.read").filter(id => ctx.organizationIds("executive.read").includes(id) && ctx.organizationIds("organization.read").includes(id)) } } }, select: { organizationId: true, legalName: true, displayName: true, status: true, organization: { select: { slug: true } } }, orderBy: { displayName: "asc" } }));
     if (companyId && !companies.some(c => c.organizationId === companyId)) throw new AccessError("Company context unavailable");
     const scope = { organizationId: companyId ?? root.id };
     const access = (id: string, db?: Prisma.TransactionClient) => createAccessContext(id, db ?? client, undefined, scope);
@@ -92,12 +92,13 @@ export function createBossService(client: PrismaClient = prisma) {
     await authority(userId);
     const readable = Object.fromEntries(["brand", "product", "project", "goal", "task", "decision", "risk", "opportunity", "membership", "person", "ownership", "company", "integration", "automation", "audit", "organization"].map(key => [key, scoped.organizationIds(key + ".read").length > 0 || snapshot.metrics.some(m => m.source === key.toUpperCase() && m.value !== null)]));
     const account = await createAccountPreferences(client).account(userId);
+    const nexa = { initialized: !!(await client.nexaIdentity.findFirst({ where: { name: "NEXA", status: "ACTIVE" }, select: { id: true } })), directiveCount: await client.nexaDirective.count({ where: { bossUserId: userId } }) };
     const overview = buildBossOverview(snapshot, account.timezone, readable.decision);
     const nextActions = [];
     for (const [permission, label, href] of [["project.manage", "Plan work", "/app/execution/projects"], ["decision.manage", "Record a decision request", "/app/executive/decisions"], ["brand.manage", "Review domain records", "/app/business/brands"]]) if ((await scoped.decide(permission, scope)).allowed) nextActions.push({ label, href });
     const shortcuts = [];
     for (const [permission, label, href] of [["project.manage", "New project", "/app/execution/projects?create=true"], ["task.manage", "New task", "/app/execution/tasks?create=true"], ["goal.manage", "New goal", "/app/execution/goals?create=true"], ["request.manage", "New request", "/app/operations/requests?create=true"], ["approval.read", "Approval inbox", "/app/operations/approvals?status=PENDING"], ["task.read", "My assignments", "/app/operations/my-tasks"], ["reminder.read", "Reminders", "/app/operations/reminders?status=PENDING"], ["escalation.read", "Open escalations", "/app/operations/escalations?status=OPEN"], ["activity.read", "Activity history", "/app/operations/activity?sort=newest"]]) if ((await scoped.decide(permission, scope)).allowed) shortcuts.push({ label, href });
-    return { companies, cards, selectedCompanyId: companyId, groupId: root.id, executive: qualifiedExecutive, snapshot, overview, nextActions, shortcuts, readable, brands, products,
+    return { companies, cards, selectedCompanyId: companyId, groupId: root.id, executive: qualifiedExecutive, snapshot, overview, nextActions, shortcuts, readable, brands, products, nexa,
       graph: { organizations: organizations.map(o => ({ id: o.id, name: "name" in o ? String(o.name) : "NO DATA", type: "type" in o ? String(o.type) : "", parentId: "parentId" in o ? o.parentId : null })), brands, products, ownership, relationships },
       members: people.map(m => ({ id: m.id, name: "person" in m ? (m.person as { displayName: string }).displayName : "NO DATA", organizationId: "organizationId" in m ? String(m.organizationId) : "", projectId: "projectId" in m ? m.projectId : null })),
       sia: { status: siaStatus, href: siaHref, canAsk, provider: provider.name, capabilities, autonomousExecution: false }, integrations, jobs, audit,

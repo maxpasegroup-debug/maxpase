@@ -2,7 +2,7 @@ import type { Prisma } from "@prisma/client";
 import { AccessError, createAccessContext } from "@/server/authorization/engine";
 import { siteById, type PortalId } from "./sites";
 
-export async function requirePortalAccess(db: Prisma.TransactionClient, userId: string, id: PortalId) {
+export async function requirePortalAccess(db: Prisma.TransactionClient, userId: string, id: PortalId, credentialSetup = false) {
   const site = siteById(id);
   if (!site) throw new AccessError("Gateway unavailable");
   if (id === "skillcity") {
@@ -22,5 +22,9 @@ export async function requirePortalAccess(db: Prisma.TransactionClient, userId: 
   const scope = { organizationId: division.id };
   const ctx = await createAccessContext(userId, db, undefined, scope);
   await ctx.requireAccess("organization.read", scope);
+  if (id === "labs" && !credentialSetup) {
+    const user = await db.user.findUnique({ where: { id: userId }, select: { person: { select: { metadata: true } } } });
+    if (JSON.parse(user?.person?.metadata ?? "{}").labsPinChangeRequired === true) throw new AccessError("Change the initial PIN before entering the workspace");
+  }
   return { site, divisionId: division.id, companyId: division.parent.id, ctx };
 }

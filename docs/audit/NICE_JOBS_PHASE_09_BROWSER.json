@@ -1,0 +1,30 @@
+{
+  "status": "PASS",
+  "recordedAt": "2026-10-09T12:12:10.459Z",
+  "browser": "154.0.8037.98",
+  "isolated": true,
+  "screenshots": 68,
+  "widths": [
+    320,
+    390,
+    768,
+    1440
+  ],
+  "noPageOverflow": true,
+  "pageErrors": 0,
+  "workflows": [
+    "canonical readiness activation",
+    "explicit policy configuration/review/publication",
+    "wallet opening",
+    "real task evidence calculation",
+    "independent incentive approval",
+    "wallet posting",
+    "private adjustment proposal",
+    "statement generation/approval/posting",
+    "internal payout intent without provider",
+    "reconciliation",
+    "read-only financial SIA",
+    "corporate/jobs session isolation"
+  ],
+  "limitations": "Local Chrome and simulated viewports only. Physical devices, screen readers, complete keyboard/usability and production NOT RUN."
+}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bossViews, groupForPath, groupForView, navigationBossHref, workspaceGroups, workspaceHref } from "@/lib/workspace-navigation";
+import { bossViews, groupForPath, groupForView, navigationBossHref, primaryBossViews, workspaceGroups, workspaceHref, workspacePageLabel } from "@/lib/workspace-navigation";
 import { formatUserTime, isTimezone } from "@/lib/timezone";
 import { statusTone } from "@/lib/status";
 describe("Manager navigation and presentation", () => {
@@ -33,6 +33,12 @@ describe("Manager navigation and presentation", () => {
     expect(registry.searchParams.get("bossCompanyId")).toBe("company");
     const people = new URL(workspaceHref("/app/workforce/people", "company", "people", query), "https://test.invalid");
     expect(people.searchParams.get("organization")).toBe("company");
+    expect(Object.values(primaryBossViews)).toEqual(["Overview", "Companies & Brands", "NEXA Command", "Performance", "Approvals & Risks", "Settings"]);
+    const nexa = new URL(navigationBossHref("nexa", query), "https://test.invalid");
+    expect(nexa.searchParams.get("view")).toBe("nexa");
+    expect(nexa.searchParams.get("companyId")).toBe("company");
+    expect(workspacePageLabel("/app/boss", "nexa")).toBe("NEXA Command");
+    expect(workspaceHref("/app/operations/requests", "company", "settings")).toContain("returnView=settings");
   });
   it("formats the same instant in the selected timezone, including DST and day boundaries", () => {
     const instant = "2024-01-01T22:00:00.000Z";

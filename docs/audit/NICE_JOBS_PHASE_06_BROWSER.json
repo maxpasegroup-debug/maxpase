@@ -1,0 +1,28 @@
+{
+  "status": "PASS",
+  "recordedAt": "2026-10-08T14:41:25.655Z",
+  "browser": "154.0.8037.98",
+  "isolated": true,
+  "workflows": [
+    "canonical readiness activation",
+    "manual lead creation",
+    "duplicate warning, retained inputs and explicit separate-record decision",
+    "authorized assignment",
+    "worker contact and outcome",
+    "follow-up schedule and completion",
+    "server-derived daily report",
+    "grounded read-only SIA",
+    "company context with separated workforce and lead filters",
+    "corporate/jobs session isolation"
+  ],
+  "screenshots": 28,
+  "widths": [
+    320,
+    390,
+    768,
+    1440
+  ],
+  "noPageOverflow": true,
+  "pageErrors": 0,
+  "limitations": "Local Chrome and simulated viewports only; physical devices, screen readers and production NOT RUN."
+}

@@ -1,0 +1,9 @@
+import { randomUUID } from "node:crypto";
+import { Bot, ShieldCheck } from "lucide-react";
+import { nexaService } from "@/server/group/nexa-service";
+import { NexaInstructionForm } from "./nexa-form";
+
+export async function NexaCommand({ userId }: { userId: string }) {
+  const desk = await nexaService.bossDesk(userId);
+  return <section className="executive-band"><header><h2><Bot size={19}/> NEXA Command</h2><span>{desk.identity?.status === "ACTIVE" ? "ACTIVE / DRAFT PLANNING" : "NOT INITIALIZED"}</span></header><p>Group plans are structured drafts from your instruction. NEXA has no role grants, SIA permissions or direct execution tool.</p><NexaInstructionForm companies={desk.companies} directors={desk.directors} reference={randomUUID()}/>{!desk.directors.length && <p role="status">No verified, authorized director account is available. Directive creation remains blocked.</p>}<h3>Directives</h3>{!desk.directives.length && <p>No group directives recorded.</p>}{desk.directives.map(row => <div key={row.id} className="boss-structure-company"><h4>{row.organization.name} / {row.director.email}</h4><p>Status: {row.status.replaceAll("_", " ")} / Outcome: {row.action?.status === "VERIFIED" ? "TASK VERIFIED" : row.action?.request?.status ?? row.outcome.replaceAll("_", " ")}</p><details><summary>Private group plan</summary><p>Instruction: {row.bossInstruction}</p><p>Director brief: {row.directorBrief}</p><p>Plan type: structured draft; no model-generated inference.</p></details>{row.siaPreparation && <p>SIA preparation recorded; director decision: {row.decisionReason ?? "Pending"}.</p>}{row.action?.id && <p>Controlled SIA action: {row.action.id} / {row.action.status}</p>}</div>)}<p className="muted"><ShieldCheck size={16}/> Director review and independent action approval remain separate human gates.</p></section>;
+}

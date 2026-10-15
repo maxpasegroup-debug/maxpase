@@ -139,10 +139,11 @@ describe("Nice Jobs workforce and versioned job foundation", () => {
     expect((await db.niceJobsAssignment.findUniqueOrThrow({ where: { id: a.id } })).lifecycle).toBe("APPROVED");
   });
   it("filters workforce by actual company, division, job, status, lifecycle and person search", async () => {
-    await change("PUBLISHED"); await change("PUBLISHED", jobs[0].id);
+    const scopedFixture = await service.create(admin, { code: "FILTER-STARTUP", title: "Synthetic workforce filter role", divisionIds: [startup] });
+    await change("PUBLISHED"); await change("PUBLISHED", scopedFixture.id);
     await service.assign(admin, { personId: worker, versionId: job().id, divisionId: labs });
     const second = await human("second-worker@test.invalid", startup, []);
-    await service.assign(admin, { personId: second.personId, versionId: jobs[0].id, divisionId: startup });
+    await service.assign(admin, { personId: second.personId, versionId: scopedFixture.id, divisionId: startup });
     expect((await service.workforce(admin, { companyId: company, divisionId: labs, jobId: job().templateId, assignmentStatus: "PREPARED", lifecycle: "APPLICANT", search: "known-worker" })).records).toHaveLength(1);
     expect((await service.workforce(limited)).records).toHaveLength(1);
     expect((await service.workforce(admin, { divisionId: labs, search: "no matching human" })).records).toEqual([]);

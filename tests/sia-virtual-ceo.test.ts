@@ -232,6 +232,7 @@ describe("Phase 08 SIA controlled Virtual CEO", () => {
       expect(data.provider).toBe("DETERMINISTIC_DEVELOPMENT");
       expect(JSON.stringify(data.facts)).not.toContain("Secret B");
       expect(JSON.stringify(data.context.graph)).not.toContain("Secret B");
+      if(tool.key==="get_training_management"){expect(data.context.sourceState).toBe("UNAVAILABLE_IN_SCOPE");expect(data.facts).toEqual([]);expect(data.signals).toEqual([]);expect(data.actions).toEqual([]);}
     }
     await expect(sia.preview(admin, scope(), "create_task")).rejects.toThrow("Read-only");
   }, 60000);

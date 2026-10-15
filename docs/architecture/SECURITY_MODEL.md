@@ -2,6 +2,16 @@ Phase 03 recruitment extension: [Nice Jobs interview, human approval and offer a
 
 # Security Model
 
+## AIRA Labs Business Operations
+
+Labs PINs use the existing hashed credential/session and durable login limits; real account provisioning is unconfigured. Public enquiry data remains in scoped private records, while audit summaries omit contact details. Origin, realm, ownership, independent approval, legal issuer and delivery evidence are enforced server-side. No commercial email, invoice, payment or autonomous SIA tool is active. See [AIRA Labs Business Operations](AIRA_LABS_BUSINESS_OPERATIONS.md).
+
+Nice Jobs now requires email/password plus a single-use email OTP before issuing its portal session. Jobs-realm OTP reset atomically changes the password, revokes sessions and records audit; it cannot reset corporate credentials. Codes are keyed hashes with expiry, attempt limits and durable issuance budgets. Resend delivery is configuration-gated and live verification is outstanding. See [Email Authentication](NICE_JOBS_EMAIL_AUTHENTICATION.md). Email control is not legal identity, pilot approval or phishing-resistant MFA.
+
+## Nice Jobs Phase 10
+
+Phase 10 keeps automation allowlisted to internal low-risk notification/reminder actions. Replay, cross-company scope, immutable publication, bounded jobs and audit are enforced server-side. No financial/employment write tool or autonomous SIA execution is added. See [Nice Jobs Automation and Command Architecture](NICE_JOBS_AUTOMATION_WORKFORCE_COMMAND_CENTER_ARCHITECTURE.md).
+
 Nice Jobs applications use existing realm/session/origin controls, source-scoped ownership predicates, strict form/rule validation, database uniqueness and transactional revision/audit checks. Candidate responses exclude hidden rules, scores, management notes and evaluator/audit details. `nicejobs.*` reported events are reserved. Application notifications validate real ownership and recipient scope. See [Phase 02](NICE_JOBS_APPLICATION_SCREENING_ARCHITECTURE.md).
 
 ## Nice Jobs Workforce Phase 01
@@ -63,3 +73,29 @@ Person/account suspension blocks authentication and all permission resolution. A
 Scope IDs, query parameters, project references and assignment form payloads are untrusted. Services resolve actual resources, check parent context and capability, reject cross-company/department/project access and prohibit broader delegation. Archived ancestors revoke even GLOBAL grants sourced beneath them. Invalid/cyclic ancestry fails closed.
 
 Canonical agent roles cannot be assigned to human memberships. SIA cannot receive GLOBAL capabilities and has no execution path in Phase 03. Role titles, reporting, responsibility and equity grant no implicit access. Every sensitive mutation and its audit event share a transaction. See PEOPLE_ACCESS.md and PHASE_03_VALIDATION.md for the implementation and tests.
+
+## Nice Jobs Phase 04
+
+See [Nice Jobs Orientation & OJT Architecture](NICE_JOBS_ORIENTATION_OJT_ARCHITECTURE.md) for the accepted-offer gate, immutable shared JobVersion training plans, worker-specific progress, private evidence, assigned human reviews and readiness. READY is activation-ready only; this extension creates no active workforce assignment, production tasks, compensation or autonomous SIA execution. Existing Phase 01-03 boundaries remain in force.
+
+## Nice Jobs Phase 05
+
+See [Nice Jobs Employee Workspace & SIA Architecture](NICE_JOBS_EMPLOYEE_WORKSPACE_SIA_ARCHITECTURE.md) for explicit readiness-backed human activation on the existing Assignment, canonical task/evidence and blocker integration, immutable daily report corrections, bounded employee/management views and registered read-only worker SIA context. Existing identities, source authorization, human/agent intersection, transactional audit and notification controls are preserved. Legacy attestations do not unlock this workspace; no automatic grants, employment-status executor or Phase 06+ features are enabled.
+
+## Nice Jobs Phase 06
+
+Daily lead work and follow-ups extend the canonical workforce, workflow, audit, notification and read-only SIA boundaries. See [Phase 06 architecture](NICE_JOBS_DAILY_WORK_LEADS_FOLLOWUPS_ARCHITECTURE.md) for scoped policies, ownership history, controlled transitions, reports, indexed queues and deferred provider execution. No Phase 07 or autonomous SIA authority is introduced.
+
+Nice Jobs Phase 07 extends the canonical model with scoped immutable SOP/resource versions and internal workforce publications backed by existing communication templates, notifications and audit. See [SOP, Resources And Internal Communication](NICE_JOBS_SOP_RESOURCES_COMMUNICATION_ARCHITECTURE.md) for audience, acknowledgement, storage and human/agent source boundaries. No provider or autonomous authority is added.
+
+## Nice Jobs Phase 08
+
+See [Performance, Reports And PIP](NICE_JOBS_PERFORMANCE_REPORTS_PIP_ARCHITECTURE.md) for version-bound configurable expectations, canonical source evidence, immutable snapshots/corrections, scoped reporting, private/released reviews and human-governed improvement plans. Existing identity, source authorization, transactional audit/notification and human/agent intersection remain authoritative. Seven additive models; no invented real targets, automatic discipline, compensation system or autonomous SIA PIP authority.
+
+## Nice Jobs Phase 09 Financial Boundary
+
+See [Nice Jobs Incentive, Wallet and Settlement Architecture](NICE_JOBS_INCENTIVE_WALLET_SETTLEMENT_ARCHITECTURE.md). Versioned explicit policies and evidence-backed calculations use canonical independent human approvals. Exact minor-unit, append-only wallets separate pending/available/review-reserved/payout-reserved funds from unconfirmed external payment. Immutable statements, approved compensating reversals, scoped reconciliation and audit-backed commands preserve company isolation. No real rates are seeded, no financial SIA write tool is registered, and no payout provider or Phase 10 automation is enabled.
+
+## Training Control Boundary
+
+Training interventions require actor-bound replay checks, enrollment revisions, scoped independent humans and atomic audit persistence. Paused work cannot progress or gain readiness. Reminder scheduling and processing revalidate the participant source instead of widening self-only application access. Programme change approval is not an enrollment transfer. See [Phase 6 policy](NICE_JOBS_TRAINING_MANAGEMENT_PHASE_6.md).

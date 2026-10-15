@@ -4,6 +4,7 @@ import { prisma } from "@/server/db";
 import { createAccessContext as defaultAccessContext, AccessError, type ResourceScope } from "@/server/authorization/engine";
 import { activeMembershipWhere, ancestry } from "@/server/authorization/business-scope";
 import * as input from "./execution-input";
+import { isCareerGoal } from "@/server/nicejobs/goal-plan";
 import { createWorkforceService } from "./workforce-service";
 import { operationalEvent, notify } from "./operational-events";
 import { READ_BUDGET, databasePage, checkRows, boundedRead, resultPage, sortedResultPage, type PageInput } from "./query-bounds";
@@ -142,8 +143,11 @@ export function createExecutionService(client: PrismaClient = prisma, createAcce
       const ctx = await createAccessContext(userId, db);
       const domain = domains[kind];
       const previous = recordId ? await target(db, ctx, kind, recordId, domain + ".manage") : null;
+      if (kind === "goals" && previous && "metadata" in previous && isCareerGoal(previous.metadata)) throw new AccessError("Career goal changes require a new participant proposal and manager approval");
       let row: { id: string; organizationId?: string; projectId?: string | null; status: string };
       const parsed = kind === "projects" ? input.projectInput.parse(raw) : kind === "milestones" ? input.milestoneInput.parse(raw) : kind === "tasks" ? input.taskInput.parse(raw) : input.goalInput.parse(raw);
+      if (kind === "projects" && !transaction && ["metadata" in (previous ?? {}) ? (previous as { metadata?: string | null }).metadata : null, parsed.metadata].some(value => value && JSON.parse(value).kind === "AIRALABS_PROJECT")) throw new AccessError("Use the AIRA Labs delivery boundary for controlled projects");
+      if (kind === "goals" && isCareerGoal(parsed.metadata)) throw new AccessError("Career plans must be prepared through the participant planning service");
       const scope: ResourceScope = { organizationId: parsed.organizationId, projectId: kind === "projects" ? recordId : "projectId" in parsed ? parsed.projectId : null };
       await ctx.requireAccess(domain + ".manage", scope);
       if ("programId" in parsed && parsed.programId) {
@@ -187,6 +191,12 @@ export function createExecutionService(client: PrismaClient = prisma, createAcce
         case "tasks": {
           const { reopen: _reopen, ...data } = input.taskInput.parse(raw); void _reopen;
           await person(db, ctx, data.assigneePersonId, scope);
+          const workforceTask = recordId ? await db.task.findUnique({ where: { id: recordId }, select: { niceJobsAssignmentId: true, evidenceRequired: true, assigneePersonId: true, updatedAt: true } }) : null;
+          if (workforceTask?.niceJobsAssignmentId) {
+            const assignment = await db.niceJobsAssignment.findUnique({ where: { id: workforceTask.niceJobsAssignmentId }, include: { profile: true, onboarding: true, readinessReview: true } });
+            if (!assignment || assignment.status !== "ACTIVE" || assignment.lifecycle !== "ACTIVE" || !assignment.activatedAt || !assignment.startDate || assignment.startDate > new Date() || assignment.endDate && assignment.endDate <= new Date() || assignment.onboarding?.status !== "READY" || assignment.readinessReview?.outcome !== "READY" || assignment.divisionId !== data.organizationId || assignment.profile.personId !== data.assigneePersonId) throw new AccessError("Production work requires the same active readiness-backed assignment");
+          }
+          if (data.status === "COMPLETED" && workforceTask?.evidenceRequired && (!recordId || !data.assigneePersonId || !await db.taskEvidence.findFirst({ where: { taskId: recordId, actorPersonId: data.assigneePersonId, createdAt: { gte: workforceTask.updatedAt } }, select: { id: true } }))) throw new AccessError("Current assigned-worker evidence is required before completion");
           if (previous?.status === "COMPLETED" && parsed.reopen && recordId && await db.taskDependency.count({ where: { prerequisiteId: recordId, task: { status: { in: ["IN_PROGRESS", "COMPLETED"] } } } })) throw new AccessError("Cannot reopen a prerequisite of started or completed work");
           if (data.milestoneId) {
             const milestone = await target(db, ctx, "milestones", data.milestoneId, "milestone.read");
@@ -199,7 +209,7 @@ export function createExecutionService(client: PrismaClient = prisma, createAcce
             if (terminal(goal.status)) throw new AccessError("Closed goal cannot accept changed tasks");
           }
           if (recordId && ["IN_PROGRESS", "COMPLETED"].includes(data.status) && await db.taskDependency.count({ where: { taskId: recordId, prerequisite: { status: { not: "COMPLETED" } } } })) throw new AccessError("Unresolved prerequisites prevent starting or completing this task");
-          row = recordId ? await db.task.update({ where: { id: recordId }, data: { ...data, completionDate } }) : await db.task.create({ data: { ...data, completionDate, creatorPersonId: ctx.user?.personId } });
+          row = recordId ? await db.task.update({ where: { id: recordId }, data: { ...data, completionDate, revision: { increment: 1 } } }) : await db.task.create({ data: { ...data, completionDate, creatorPersonId: ctx.user?.personId } });
           break;
         }
         case "goals": {
@@ -262,6 +272,7 @@ export function createExecutionService(client: PrismaClient = prisma, createAcce
     return client.$transaction(async db => {
       const ctx = await createAccessContext(userId, db);
       const goal = await target(db, ctx, "goals", goalId, "goal.progress");
+      if ("metadata" in goal && isCareerGoal(goal.metadata)) throw new AccessError("Career outcome evidence is not a manual progress estimate");
       if (terminal(goal.status)) throw new AccessError("Closed goal is read-only");
       await recordProgress(db, ctx, goalId, value, reason);
     });

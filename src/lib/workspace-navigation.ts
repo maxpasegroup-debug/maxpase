@@ -1,4 +1,7 @@
 export const bossViews = { overview: "Master Command Center", companies: "Companies", brands: "Brands & Domains", people: "People", projects: "Projects", goals: "Goals", operations: "Operations", decisions: "Decisions", attention: "Attention", communications: "Communications", graph: "Business Graph", audit: "Audit & Security", system: "System", briefing: "Briefing", risks: "Risks", opportunities: "Opportunities", changes: "Changes" };
+export const primaryBossViews = { overview: "Overview", companies: "Companies & Brands", nexa: "NEXA Command", performance: "Performance", approvals: "Approvals & Risks", settings: "Settings" } as const;
+export type PrimaryBossView = keyof typeof primaryBossViews;
+export function isPrimaryBossView(value: string): value is PrimaryBossView { return Object.hasOwn(primaryBossViews, value); }
 export type BossView = keyof typeof bossViews;
 type Module = { label: string; href: string };
 export const workspaceGroups: { key: string; label: string; views: BossView[]; href: string; modules: Module[] }[] = [
@@ -35,7 +38,7 @@ export function groupForPath(path: string, view?: string) {
     ?? (path.startsWith("/app/executive") ? workspaceGroups[0] : workspaceGroups[2]);
 }
 export function workspacePageLabel(path: string, view?: string) {
-  if (path === "/app/boss") return bossViews[isBossView(view ?? "") ? view as BossView : "overview"];
+  if (path === "/app/boss") return isPrimaryBossView(view ?? "") ? primaryBossViews[view as PrimaryBossView] : bossViews[isBossView(view ?? "") ? view as BossView : "overview"];
   if (path === "/app/executive") return "Executive Command Center";
   const detail = path.split("/")[3];
   if (path.startsWith("/app/executive/") && isBossView(detail)) return bossViews[detail];
@@ -43,7 +46,7 @@ export function workspacePageLabel(path: string, view?: string) {
   return workspaceGroups.flatMap(g => g.modules).find(m => m.href === path)?.label ?? groupForPath(path).label;
 }
 export function navigationBossHref(view: string, query: URLSearchParams, companyId?: string) {
-  const params = new URLSearchParams({ view: isBossView(view) ? view : "overview" });
+  const params = new URLSearchParams({ view: isBossView(view) || isPrimaryBossView(view) ? view : "overview" });
   const company = companyId ?? (query.has("returnView") ? query.get("bossCompanyId") : query.get("companyId") ?? query.get("organizationId"));
   if (company) params.set("companyId", company);
   for (const key of filterKeys) { const value = filterValue(query, key); if (value) params.set(key, value); }
@@ -57,7 +60,7 @@ export function workspaceHref(href: string, companyId?: string, view?: string, q
     params.set("companyId", companyId);
     if (href.startsWith("/app/workforce/")) params.set("organization", companyId);
   }
-  if (view && isBossView(view)) {
+  if (view && (isBossView(view) || isPrimaryBossView(view))) {
     params.set("returnView", view);
     const originCompany = query?.has("returnView") ? query.get("bossCompanyId") : companyId;
     if (originCompany) params.set("bossCompanyId", originCompany);

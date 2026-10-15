@@ -80,9 +80,9 @@ function AccessInspector({ users, workspace }: { users: WorkforceRow[]; workspac
     {state.error && <p className="error wide-field" role="alert">{state.error}</p>}{state.decision && <p className="wide-field" role="status">{state.decision}</p>}
   </form></section>;
 }
-export function WorkforceManager({ kind, rows, workspace, activeOrganization, search, status, accounts = [] }: { kind: WorkforceKind; rows: WorkforceRow[]; workspace: Workspace; activeOrganization: string; search: string; status: string; accounts?: WorkforceRow[] }) {
+export function WorkforceManager({ kind, rows, workspace, activeOrganization, search, status, initialCreate = false, accounts = [] }: { kind: WorkforceKind; rows: WorkforceRow[]; workspace: Workspace; activeOrganization: string; search: string; status: string; initialCreate?: boolean; accounts?: WorkforceRow[] }) {
   const returnQuery = useSearchParams();
-  const [editing, setEditing] = useState<WorkforceRow | null | undefined>();
+  const [editing, setEditing] = useState<WorkforceRow | null | undefined>(initialCreate ? null : undefined);
   const [details, setDetails] = useState<WorkforceRow | undefined>();
   useEffect(() => { setDetails(previous => previous ? rows.find(r => r.id === previous.id) : undefined); }, [rows]);
   const [siaScope, setSiaScope] = useState(activeOrganization);
@@ -97,7 +97,7 @@ export function WorkforceManager({ kind, rows, workspace, activeOrganization, se
       <select name="organization" aria-label="Active organization" defaultValue={activeOrganization}><option value="">All authorized organizations</option>{workspace.organizations.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}</select>
       <select name="status" aria-label="Status" defaultValue={status}><option value="">All statuses</option>{["ACTIVE", "INACTIVE", "SUSPENDED", "ARCHIVED", "INVITED", "ENDED"].map(s => <option key={s} value={s}>{text(s)}</option>)}</select><button className="button secondary">Apply</button>
     </form>
-    {editing !== undefined && <Editor key={editing?.id ?? "new"} kind={kind} row={editing ?? undefined} workspace={workspace} activeOrganization={activeOrganization} close={() => setEditing(undefined)}/>}
+    {editing !== undefined && canCreate && <Editor key={editing?.id ?? "new"} kind={kind} row={editing ?? undefined} workspace={workspace} activeOrganization={activeOrganization} close={() => setEditing(undefined)}/>}
     {kind === "access" && workspace.scopes["access.explain"]?.length > 0 && <AccessInspector users={accounts} workspace={workspace}/>}
     {details && <section className="editor-band"><div className="view-heading"><h2>{identity(details)}</h2><button className="icon-button" title="Close details" aria-label="Close details" onClick={() => setDetails(undefined)}><X size={18}/></button></div>
       <dl className="record-details">{(workforceFields[kind] ?? []).filter(f => !["password", "copyRoleId"].includes(f.key)).map(f => <div key={f.key}><dt>{f.label}</dt><dd>{f.source ? options[f.source]?.find(o => o.id === details[f.key])?.name ?? "Not recorded" : text(details[f.key])}</dd></div>)}</dl>

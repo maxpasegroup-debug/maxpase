@@ -1,1 +1,3 @@
-export default function Loading() { return <p role="status">Loading Nice Jobs...</p>; }
+export default function NiceJobsLoading() {
+  return <section className="nj-workspace" aria-busy="true"><p role="status">Loading your authorized Nice Jobs workspace...</p></section>;
+}

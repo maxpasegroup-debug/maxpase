@@ -9,6 +9,7 @@ import { createAccessContext as defaultAccessContext } from "@/server/authorizat
 import { setHumanMembershipRole, validateMembershipAuthority } from "@/server/authorization/assignments";
 import { createExecutionService } from "./execution-service";
 import { validateProductDivision, protectCanonicalDivision } from "./company-structure";
+import { airaProductDrafts, assertControlledProductDraft, isControlledAiraProduct } from "@/server/group/product-drafts";
 
 export class BusinessError extends Error {}
 type DB = Prisma.TransactionClient;
@@ -221,7 +222,22 @@ export function createBusinessService(client: PrismaClient = prisma, createAcces
             }
           }
           if (kind === "brands") { const d = input.brandInput.parse(raw); resource = recordId ? await db.brand.update({ where: { id: recordId }, data: d }) : await db.brand.create({ data: d }); }
-          else { const d = input.productInput.parse(raw); resource = recordId ? await db.product.update({ where: { id: recordId }, data: d }) : await db.product.create({ data: d }); }
+          else {
+            const d = input.productInput.parse(raw);
+            const prior = recordId ? await db.product.findUniqueOrThrow({ where: { id: recordId } }) : null;
+            if (prior && isControlledAiraProduct(org.slug, prior.slug) && (d.slug !== prior.slug || d.name !== prior.name || d.divisionId && d.divisionId !== prior.divisionId || d.brandId !== undefined && d.brandId !== prior.brandId)) throw new BusinessError("Controlled product identity and ownership require a reviewed setup change");
+            const controlled = org.slug === "aira-skill-city" ? airaProductDrafts.find(item => item.slug === d.slug) : undefined;
+            if (controlled) {
+              const division = d.divisionId ? await db.organization.findUnique({ where: { id: d.divisionId } }) : null;
+              const brand = d.brandId ? await db.brand.findUnique({ where: { id: d.brandId } }) : null;
+              if (d.name !== controlled.name || division?.slug !== controlled.divisionSlug || (brand?.slug ?? null) !== controlled.brandSlug) throw new BusinessError("Controlled product identity and ownership require a reviewed setup change");
+            }
+            try {
+              assertControlledProductDraft(org.slug, d.slug, d.status, d.lifecycle);
+              if (prior) assertControlledProductDraft(org.slug, prior.slug, d.status, d.lifecycle);
+            } catch { throw new BusinessError("Product requires reviewed terms and independent publication approval"); }
+            resource = recordId ? await db.product.update({ where: { id: recordId }, data: d }) : await db.product.create({ data: d });
+          }
         }
       }
       await db.auditEvent.create({ data: buildAuditEventData({ actorUserId: userId, actorPersonId: ctx.user.personId, organizationId, action: kind + (recordId ? ".updated" : ".created"), entityType: kind, entityId: resource.id, result: "SUCCESS" }) });

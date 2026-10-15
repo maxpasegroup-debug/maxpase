@@ -1,0 +1,32 @@
+{
+  "status": "PASS",
+  "recordedAt": "2026-10-07T21:22:15.118Z",
+  "browser": "154.0.8037.98",
+  "isolated": true,
+  "HTTP": [
+    "anonymous denied",
+    "corporate/portal session replay denied"
+  ],
+  "workflows": [
+    "canonical accepted-offer fixture via real services",
+    "onboarding enrollment",
+    "ordered orientation acknowledgement",
+    "server-graded quiz",
+    "scoped independent reviewer assignments",
+    "OJT evidence and assigned review",
+    "practical assessment",
+    "independent readiness",
+    "no activation or production tasks",
+    "responsive management filters and training configuration"
+  ],
+  "screenshots": 12,
+  "widths": [
+    320,
+    390,
+    768,
+    1440
+  ],
+  "noPageOverflow": true,
+  "pageErrors": 0,
+  "limitations": "Local dev server and simulated viewports only. No physical devices, screen readers, production TLS or production deployment. Isolated reviewed sessions; no production credentials used."
+}

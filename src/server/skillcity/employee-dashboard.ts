@@ -1,0 +1,73 @@
+import { PrismaClient, type Prisma } from "@prisma/client";
+import { prisma } from "@/server/db";
+import { AccessError } from "@/server/authorization/engine";
+import { requirePortalAccess } from "@/server/portals/policy";
+import { leadPayload } from "@/server/labs/input";
+
+export const employeeViews = ["advisor", "director", "developer"] as const;
+export type EmployeeView = typeof employeeViews[number];
+
+export function createSkillCityEmployeeDashboard(client: PrismaClient = prisma) {
+  async function dashboard(userId: string, requested?: string) {
+    const access = await requirePortalAccess(client, userId, "skillcity");
+    const { ctx, companyId } = access;
+    const personId = ctx.user?.personId;
+    if (!personId) throw new AccessError("Employee identity unavailable");
+    const divisions = await client.organization.findMany({ where: { parentId: companyId, type: "DIVISION", status: "ACTIVE", slug: { in: ["aira-labs", "aira-startup-school", "aira-skill-studio", "aira-career-hub"] } }, select: { id: true, slug: true, name: true }, take: 4 });
+    const labs = divisions.find(d => d.slug === "aira-labs");
+    const hasRole = (scopes: string[], ...names: string[]) => ctx.grants.some(grant => scopes.includes(grant.organizationId ?? "") && names.includes(grant.roleName ?? ""));
+    const can = (key: string, organizationId: string) => ctx.decide(key, { organizationId }).then(result => result.allowed);
+    const allowed = {
+      director: hasRole([companyId], "Director") && await can("organization.manage", companyId) && await can("executive.read", companyId),
+      advisor: !!labs && hasRole([companyId, labs.id], "Senior Academic Advisor") && await can("labs.sales.self", labs.id) && await can("organization.read", labs.id),
+      developer: !!labs && hasRole([companyId, labs.id], "Software Developer", "Full Stack Developer", "Junior Developer") && await can("labs.delivery.assignee", labs.id) && await can("organization.read", labs.id)
+    };
+    const available = employeeViews.filter(view => allowed[view]);
+    if (requested && !employeeViews.includes(requested as EmployeeView)) throw new AccessError("Employee view unavailable");
+    if (requested && !allowed[requested as EmployeeView]) throw new AccessError("Employee view unavailable");
+    const view = (requested as EmployeeView | undefined) ?? (allowed.director ? "director" : available[0]);
+    if (!view) return { view: null, available, companyId, name: ctx.user?.id ?? "", data: null };
+
+    if (view === "advisor") {
+      const base: Prisma.ExecutiveRecordWhereInput = { kind: "LABS_LEAD", organizationId: labs!.id, ownerPersonId: personId, status: { notIn: ["WON", "LOST"] } };
+      const select = { id: true, title: true, status: true, dueAt: true, payload: true, version: true } as const;
+      const scheduled = await client.executiveRecord.findMany({ where: { ...base, dueAt: { not: null } }, orderBy: [{ dueAt: "asc" }, { id: "asc" }], take: 30, select });
+      const undated = scheduled.length < 30 ? await client.executiveRecord.findMany({ where: { ...base, dueAt: null }, orderBy: [{ updatedAt: "desc" }, { id: "asc" }], take: 30 - scheduled.length, select }) : [];
+      const rows = [...scheduled, ...undated];
+      const leads = rows.map(row => { let detail; try { detail = leadPayload.safeParse(JSON.parse(row.payload)); } catch { detail = null; } return { id: row.id, title: row.title, status: row.status, dueAt: row.dueAt, version: row.version, outcome: detail?.success ? detail.data.outcome : "", qualification: detail?.success ? detail.data.qualification : "", nextFollowUp: detail?.success ? detail.data.nextFollowUp : null }; });
+      const products = await client.product.findMany({ where: { organizationId: companyId, slug: { in: ["bgos", "pba", "genz-builder"] } }, select: { slug: true, name: true, status: true, lifecycle: true, description: true }, take: 3 });
+      const productReadable = await can("product.read", companyId);
+      return { view, available, companyId, name: "Senior Academic Advisor", data: { leads, products: productReadable ? products : [], productReadable, canUpdateLabs: await can("labs.sales.perform", labs!.id), labsId: labs!.id } };
+    }
+    if (view === "developer") {
+      const rows = await client.project.findMany({ where: { organizationId: labs!.id, ownerPersonId: personId }, orderBy: [{ targetDate: "asc" }, { id: "asc" }], take: 20, select: { id: true, name: true, status: true, description: true, targetDate: true, metadata: true } });
+      const projects = [];
+      for (const row of rows) {
+        if (!(await ctx.decide("project.read", { organizationId: labs!.id, projectId: row.id })).allowed || !(await ctx.decide("task.read", { organizationId: labs!.id, projectId: row.id })).allowed) continue;
+        let metadata: Record<string, unknown> = {};
+        try { metadata = JSON.parse(row.metadata ?? "{}"); } catch { continue; }
+        if (metadata.kind !== "AIRALABS_PROJECT") continue;
+        const tasks = await client.task.findMany({ where: { projectId: row.id, organizationId: labs!.id, OR: [{ assigneePersonId: personId }, { assigneePersonId: null }] }, select: { id: true, title: true, description: true, status: true, dueDate: true }, orderBy: [{ dueDate: "asc" }, { id: "asc" }], take: 30 });
+        projects.push({ id: row.id, name: row.name, status: row.status, specification: row.description, targetDate: row.targetDate, reviewEvidence: typeof metadata.reviewEvidence === "string" ? metadata.reviewEvidence : null, acceptanceEvidence: typeof metadata.acceptanceEvidence === "string" ? metadata.acceptanceEvidence : null, canManageTasks: (await ctx.decide("task.manage", { organizationId: labs!.id, projectId: row.id })).allowed, tasks });
+      }
+      return { view, available, companyId, name: "Labs Developer", data: { projects, labsId: labs!.id } };
+    }
+    const divisionRows = [];
+    for (const division of divisions) {
+      divisionRows.push({ id: division.id, name: division.name,
+        projects: await can("project.read", division.id) ? await client.project.count({ where: { organizationId: division.id, status: { in: ["PLANNED", "ACTIVE", "BLOCKED"] } } }) : null,
+        tasks: await can("task.read", division.id) ? await client.task.count({ where: { organizationId: division.id, status: { notIn: ["COMPLETED", "CANCELLED"] } } }) : null,
+        programs: await can("program.read", division.id) ? await client.program.count({ where: { organizationId: division.id, status: "ACTIVE" } }) : null,
+        people: await can("membership.read", division.id) ? await client.membership.count({ where: { organizationId: division.id, projectId: null, status: "ACTIVE" } }) : null,
+        blockers: await can("project.read", division.id) ? await client.project.count({ where: { organizationId: division.id, status: "BLOCKED" } }) : null,
+        sales: division.slug === "aira-labs" && await can("labs.sales.read", division.id) ? await client.executiveRecord.count({ where: { organizationId: division.id, kind: "LABS_LEAD", status: { notIn: ["WON", "LOST"] } } }) : null });
+    }
+    const approvals = await client.siaApproval.findMany({ where: { approverUserId: userId, status: "PENDING", request: { organizationId: { in: divisions.map(d => d.id).concat(companyId) }, status: "SUBMITTED", OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }] } }, include: { request: { select: { id: true, title: true, organizationId: true, projectId: true, expiresAt: true } } }, orderBy: { createdAt: "asc" }, take: 25 });
+    const decisions = [];
+    for (const approval of approvals) if (approval.request && (await ctx.decide("approval.read", { organizationId: approval.request.organizationId, projectId: approval.request.projectId })).allowed && (await ctx.decide("approval.decide", { organizationId: approval.request.organizationId, projectId: approval.request.projectId })).allowed && (await ctx.decide(approval.requiredPermission, { organizationId: approval.request.organizationId, projectId: approval.request.projectId })).allowed) decisions.push({ id: approval.id, title: approval.request.title, organizationId: approval.request.organizationId, expiresAt: approval.request.expiresAt });
+    return { view, available, companyId, name: "Director", data: { divisions: divisionRows, decisions } };
+  }
+  return { dashboard };
+}
+
+export const skillCityEmployeeDashboard = createSkillCityEmployeeDashboard();

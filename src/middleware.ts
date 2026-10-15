@@ -20,9 +20,15 @@ export async function middleware(request: NextRequest) {
     requestHeaders.set("x-forwarded-host", host);
     requestHeaders.set("x-maxpase-portal-context", forwarded ? request.headers.get("x-maxpase-portal-context")! : await signPortalContext(site, host, process.env.AUTH_SECRET));
     const prefix = `/sites/${site.id}`;
-    const internalPath = !!forwarded && [prefix, prefix + "/login", prefix + "/gateway"].includes(request.nextUrl.pathname);
+    const labsDocumentPath = site.id === "labs" && /^\/quotations\/[a-zA-Z0-9_-]{1,120}$/.test(request.nextUrl.pathname);
+    const internalLabsDocumentPath = site.id === "labs" && request.nextUrl.pathname.startsWith(prefix) && /^\/quotations\/[a-zA-Z0-9_-]{1,120}$/.test(request.nextUrl.pathname.slice(prefix.length));
+    const offerPath = /^\/offers\/[a-f0-9-]{36}$/.test(request.nextUrl.pathname);
+    const internalOfferPath = site.id === "jobs" && request.nextUrl.pathname.startsWith(prefix) && /^\/offers\/[a-f0-9-]{36}$/.test(request.nextUrl.pathname.slice(prefix.length));
+    const contentPath = site.id === "jobs" && /^\/content\/(?:upload|[a-zA-Z0-9_-]{1,120})$/.test(request.nextUrl.pathname);
+    const internalContentPath = site.id === "jobs" && request.nextUrl.pathname.startsWith(prefix) && /^\/content\/(?:upload|[a-zA-Z0-9_-]{1,120})$/.test(request.nextUrl.pathname.slice(prefix.length));
+    const internalPath = !!forwarded && ([prefix, prefix + "/login", prefix + "/gateway", ...(site.id === "jobs" ? [prefix + "/opportunities", prefix + "/signup", prefix + "/reset-password"] : []), ...(site.id === "labs" ? [prefix + "/pin"] : [])].includes(request.nextUrl.pathname) || internalOfferPath || internalContentPath || internalLabsDocumentPath);
     const path = internalPath ? request.nextUrl.pathname.slice(prefix.length) || "/" : request.nextUrl.pathname;
-    if (["/", "/login", "/gateway"].includes(path)) {
+    if (["/", "/login", "/gateway", ...(site.id === "jobs" ? ["/opportunities", "/signup", "/reset-password"] : []), ...(site.id === "labs" ? ["/pin"] : [])].includes(path) || site.id === "jobs" && (offerPath || contentPath || internalPath && (internalOfferPath || internalContentPath)) || site.id === "labs" && (labsDocumentPath || internalPath && internalLabsDocumentPath)) {
       if (path === "/gateway" && !request.cookies.get(site.cookie)?.value) return NextResponse.redirect(new URL(portalPaths(site).login, "https://" + host));
       const target = request.nextUrl.clone(); target.pathname = `/sites/${site.id}${path === "/" ? "" : path}`;
       const response = internalPath ? NextResponse.next({ request: { headers: requestHeaders } }) : NextResponse.rewrite(target, { request: { headers: requestHeaders } }); response.headers.set("Vary", "Host");

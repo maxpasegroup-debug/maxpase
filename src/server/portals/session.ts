@@ -11,7 +11,7 @@ export async function getPortalSession(site: PortalSite) {
   if (!token) return null;
   const session = await authenticationService.validate(token, config.AUTH_SECRET, site.id);
   if (!session) return null;
-  try { await requirePortalAccess(prisma, session.userId, site.id); return session; } catch (e) { if (e instanceof AccessError) return null; throw e; }
+  try { await requirePortalAccess(prisma, session.userId, site.id, site.id === "labs" && session.needsPinChange); return session; } catch (e) { if (e instanceof AccessError) return null; throw e; }
 }
 export async function setPortalCookie(site: PortalSite, token: string, expires: Date) {
   (await cookies()).set(site.cookie, token, { httpOnly: true, secure: config.AUTH_COOKIE_SECURE, sameSite: "lax", path: "/", expires });

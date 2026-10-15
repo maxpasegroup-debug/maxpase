@@ -1,0 +1,26 @@
+{
+  "status": "PASS",
+  "recordedAt": "2026-10-08T09:16:52.880Z",
+  "browser": "154.0.8037.98",
+  "isolated": true,
+  "workflows": [
+    "real-service readiness fixture",
+    "human activation",
+    "canonical task assignment/start/evidence/completion",
+    "daily report",
+    "worker blocker and human resolution",
+    "governed worker SIA run",
+    "default My Day",
+    "session replay protection"
+  ],
+  "screenshots": 12,
+  "widths": [
+    320,
+    390,
+    768,
+    1440
+  ],
+  "noPageOverflow": true,
+  "pageErrors": 0,
+  "limitations": "Local Chrome and simulated viewports only; no physical devices, screen readers, production TLS or deployment."
+}

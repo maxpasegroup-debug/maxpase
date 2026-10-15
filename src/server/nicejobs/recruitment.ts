@@ -5,10 +5,14 @@ import { createOperationsService } from "@/server/domain/operations-service";
 import { notify } from "@/server/domain/operational-events";
 import { createApplicationService } from "./applications";
 import { configuration, NiceJobsError } from "./input";
+import { opportunityProfile, publicationIssues } from "./opportunity-configuration";
+import { requirePreOffer } from "./pre-offer";
+import { enableAcceptedApplicantTraining } from "./applicant-training-access";
 import { formConfiguration } from "./application-configuration";
 import { createNiceJobsService } from "./service";
 import * as input from "./recruitment-input";
 import { z } from "zod";
+import { programmeOfferSummary, requireOfferProgramme } from "./training-programme";
 
 const interviewInclude = { interviewers: { take: 10, include: { evaluation: true, user: { select: { person: { select: { displayName: true } } } } } } } satisfies Prisma.NiceJobsInterviewInclude;
 export function createRecruitmentService(client: PrismaClient = prisma, now: () => Date = () => new Date()) {
@@ -207,13 +211,16 @@ export function createRecruitmentService(client: PrismaClient = prisma, now: () 
             if (changed.count !== 1) throw new NiceJobsError("Offer changed");
           } else if (active) throw new NiceJobsError("An active offer already exists");
           const last = await db.niceJobsOffer.findFirst({ where: { applicationId: a.id }, select: { number: true }, orderBy: { number: "desc" } });
-          const snapshot = { title: c.title, reference: c.reference ?? null, company: a.company.name, division: a.area.division.name, jobTitle: a.area.version.title, jobVersion: a.area.version.number, engagement: a.area.version.engagement, ...c.content, ...(prior ? JSON.parse(prior.snapshot) : {}), ...(data.content ?? {}), validityDays: c.validityDays, declineReasonRequired: c.declineReasonRequired };
+          const profile = opportunityProfile(a.area.version.configuration);
+          const snapshot = { title: c.title, reference: c.reference ?? null, company: profile?.legalEmployer.legalName ?? a.company.name, division: profile?.divisionLabel ?? a.area.division.name, jobTitle: a.area.version.title, jobVersion: a.area.version.number, engagement: a.area.version.engagement, ...c.content, compensation: c.content.compensation ?? profile?.compensation.text ?? null, incentives: c.content.incentives ?? profile?.incentives.text ?? null, ...(prior ? JSON.parse(prior.snapshot) : {}), ...(data.content ?? {}), validityDays: c.validityDays, declineReasonRequired: c.declineReasonRequired };
           const offer = await db.niceJobsOffer.create({ data: { applicationId: a.id, number: (last?.number ?? 0) + 1, snapshot: JSON.stringify(snapshot), activeKey: a.id, createdByUserId: userId } });
           updated = await advance(db, b, a, op, "APPROVED", data.reason, { offerReference: offer.reference, number: offer.number, ...(prior ? { previousOfferReference: prior.reference, previousStatus: "WITHDRAWN" } : {}) });
         } else {
           const o = await getOffer(db, a, data.offerReference);
           if (o.activeKey !== a.id || data.recordRevision !== o.revision) throw new NiceJobsError("Offer changed or is no longer active");
           const snapshot = JSON.parse(o.snapshot);
+          const profile = opportunityProfile(a.area.version.configuration);
+          if (profile && ["READY_OFFER", "ISSUE_OFFER", "ACCEPT_OFFER"].includes(op) && (publicationIssues(profile, a.area.version.description, a.area.version.engagement).length || snapshot.company !== profile.legalEmployer.legalName || snapshot.engagement !== a.area.version.engagement || typeof snapshot.compensation !== "string" || !snapshot.compensation.trim())) throw new NiceJobsError("Confirmed legal employer, engagement and disclosed compensation are required before this offer action");
           const patch: Prisma.NiceJobsOfferUpdateManyMutationInput = { revision: { increment: 1 } };
           let stage = a.status;
           if (op === "READY_OFFER") {
@@ -221,12 +228,25 @@ export function createRecruitmentService(client: PrismaClient = prisma, now: () 
             if (o.status !== "DRAFT" || !snapshot.terms?.trim()) throw new NiceJobsError("Review configured offer terms before marking ready"); patch.status = "READY";
           } else if (op === "ISSUE_OFFER") {
             await approvalValid(db, a);
+            const programme=programmeOfferSummary(a.area.version.configuration,a.versionId);
+            const preOffer = await requirePreOffer(db, a.id, a.area.version.configuration);
+            if (preOffer) {
+              const legalName = profile?.legalEmployer.legalName ?? (await db.companyProfile.findUnique({ where: { organizationId: a.companyId }, select: { legalName: true } }))?.legalName;
+              if (!legalName) throw new NiceJobsError("Verified issuing legal employer required");
+              patch.snapshot = JSON.stringify({ ...snapshot, ...(programme?{programme}:{}), company: legalName, preOffer, legalEmployer: { organizationId: a.companyId, legalName }, candidateName: a.candidate.displayName });
+            }
+            if(programme && !preOffer)patch.snapshot=JSON.stringify({...snapshot,programme,candidateName:a.candidate.displayName});
             if (o.status !== "READY") throw new NiceJobsError("Reviewed ready offer required"); patch.status = "ISSUED"; patch.issuedAt = now(); patch.expiresAt = snapshot.validityDays ? new Date(now().getTime() + snapshot.validityDays * 86400000) : null; stage = "OFFER"; candidateNotice = "Offer issued. Review your offer.";
           } else if (["VIEW_OFFER", "ACCEPT_OFFER", "DECLINE_OFFER"].includes(op)) {
             if (a.status !== "OFFER" || !["ISSUED", "VIEWED"].includes(o.status) || o.expiresAt && o.expiresAt <= now()) throw new NiceJobsError("Offer is not active or has expired");
             await approvalValid(db, a);
             if (op === "VIEW_OFFER") { patch.status = "VIEWED"; patch.viewedAt = now(); }
-            if (op === "ACCEPT_OFFER") { patch.status = "ACCEPTED"; patch.acceptedAt = now(); stage = "OFFER_ACCEPTED"; candidateNotice = "Offer accepted. Enroll in orientation from My Applications."; }
+            if (op === "ACCEPT_OFFER") {
+              requireOfferProgramme(snapshot,programmeOfferSummary(a.area.version.configuration,a.versionId));
+              const preOffer = await requirePreOffer(db, a.id, a.area.version.configuration);
+              if (preOffer && snapshot.preOffer?.fingerprint !== preOffer.fingerprint) throw new NiceJobsError("Offer policy snapshot mismatch");
+              patch.status = "ACCEPTED"; patch.acceptedAt = now(); stage = "OFFER_ACCEPTED"; candidateNotice = "Offer accepted. Enroll in orientation from My Applications.";
+            }
             if (op === "DECLINE_OFFER") { if (snapshot.declineReasonRequired && !data.reason) throw new NiceJobsError("A decline reason is required"); patch.status = "DECLINED"; patch.declinedAt = now(); patch.declineReason = data.reason ?? null; patch.activeKey = null; stage = "OFFER_DECLINED"; candidateNotice = "Offer declined"; }
           } else if (op === "WITHDRAW_OFFER" || op === "EXPIRE_OFFER") {
             if (!["DRAFT", "READY", "ISSUED", "VIEWED"].includes(o.status) || op === "EXPIRE_OFFER" && (!["ISSUED", "VIEWED"].includes(o.status) || !o.expiresAt || o.expiresAt > now())) throw new NiceJobsError("Offer cannot be withdrawn or expired");
@@ -235,6 +255,7 @@ export function createRecruitmentService(client: PrismaClient = prisma, now: () 
           const changed = await db.niceJobsOffer.updateMany({ where: { id: o.id, revision: o.revision, status: o.status, activeKey: a.id }, data: patch });
           if (changed.count !== 1) throw new NiceJobsError("Offer changed. Refresh before retrying.");
           updated = await advance(db, b, a, op, stage, data.reason, { offerReference: o.reference, number: o.number, status: String(patch.status) }, stage === "OFFER_DECLINED" && formConfiguration(config(a)).duplicatePolicy === "ACTIVE_PER_VERSION" ? { activeKey: null } : {});
+          if (op === "ACCEPT_OFFER") await enableAcceptedApplicantTraining(db, userId, b.personId, b.product.division!.id, a.id, now());
           if (["READY_OFFER", "ACCEPT_OFFER", "DECLINE_OFFER"].includes(op)) await managerNotification(db, b, updated, o.createdByUserId, op.replaceAll("_", " "));
         }
       }
@@ -258,6 +279,9 @@ export function createRecruitmentService(client: PrismaClient = prisma, now: () 
       if (q.interviewsAfter && !interviewCursor || q.offersAfter && !offerCursor) throw new AccessError("History cursor unavailable");
       const interviews = own || permissions["nicejobs.interview.read"] ? await db.niceJobsInterview.findMany({ where: { ...interviewScope, ...(interviewCursor ? { number: { lt: interviewCursor.number } } : {}) }, include: interviewInclude, orderBy: { number: "desc" }, take: 26 }) : [];
       const offers = own || permissions["nicejobs.offer.read"] ? await db.niceJobsOffer.findMany({ where: { ...offerScope, ...(offerCursor ? { number: { lt: offerCursor.number } } : {}) }, orderBy: { number: "desc" }, take: 26 }) : [];
+      const activeOffer=own?await db.niceJobsOffer.findFirst({where:{applicationId:a.id,activeKey:a.id,issuedAt:{not:null}},select:{reference:true,status:true,snapshot:true,acceptedAt:true,issuedAt:true,expiresAt:true}}):null;
+      const currentOffer=activeOffer?{...activeOffer,snapshot:JSON.parse(activeOffer.snapshot),expired:!!activeOffer.expiresAt && activeOffer.expiresAt<=now() && activeOffer.status!=="ACCEPTED"}:null;
+      const completedInterview=own?!!await db.niceJobsInterview.findFirst({where:{applicationId:a.id,status:"COMPLETED"},select:{id:true}}):false;
       const interviewParsed = input.interviewConfiguration.safeParse(config(a)?.interview), offerParsed = input.offerConfiguration.safeParse(config(a)?.offer);
       const request = !own && permissions["nicejobs.management.review"] && a.reviewRequestId ? await db.operationalRequest.findUnique({ where: { id: a.reviewRequestId }, select: { status: true, approvals: { take: 100, orderBy: [{ stageIndex: "asc" }, { id: "asc" }], select: { id: true, status: true, approverUserId: true, approver: { select: { person: { select: { displayName: true } } } }, stageIndex: true, comment: true, decidedAt: true } } } }) : null;
       const manager = !own && permissions["nicejobs.management.review"];
@@ -265,7 +289,7 @@ export function createRecruitmentService(client: PrismaClient = prisma, now: () 
       if (manager) { try { await policy(db, a); managementConfigured = true; } catch (e) { if (!(e instanceof NiceJobsError)) throw e; } }
       const account = await db.user.findUniqueOrThrow({ where: { id: userId }, select: { timezone: true } });
       const panelRows = permissions["nicejobs.interview.schedule"] ? await db.user.findMany({ where: { status: "ACTIVE", ...(q.interviewersAfter ? { id: { gt: q.interviewersAfter } } : {}), person: { status: "ACTIVE", ...(q.interviewerSearch ? { displayName: { contains: q.interviewerSearch } } : {}), id: { not: a.candidateId }, memberships: { some: { status: "ACTIVE", projectId: null, OR: [{ organizationId: a.divisionId }, { organizationId: b.company.id, scope: "DESCENDANTS" }], roles: { some: { role: { status: "ACTIVE", permissions: { some: { permission: { key: "nicejobs.interview.evaluate" } } } } } } } } } }, select: { id: true, person: { select: { displayName: true } } }, orderBy: { id: "asc" }, take: 26 }) : [];
-      return { status: a.status, revision: a.revision, timezone: account.timezone, panelOptions: panelRows.slice(0, 25), nextPanel: panelRows.length > 25 ? panelRows[24].id : null, permissions, interviewConfigured: interviewParsed.success, interviewRequired: interviewParsed.success ? interviewParsed.data.enabled : null, offerConfigured: offerParsed.success, review: own ? null : { status: a.reviewNeedsMore ? "NEEDS_REVIEW" : request?.status === "SUBMITTED" ? "PENDING" : request?.status ?? (managementConfigured ? "NOT_REQUESTED" : "NOT_CONFIGURED"), request, actorUserId: userId }, interviews: interviews.slice(0, 25).map(i => ({ reference: i.reference, number: i.number, type: i.type, status: i.status, revision: i.revision, scheduledAt: i.scheduledAt, duration: i.duration, location: i.location, instructions: i.instructions, completedAt: i.completedAt, ...(own ? {} : { questions: interviewParsed.success && (manager || i.interviewers.some(p => p.userId === userId && p.personId === b.personId)) ? interviewParsed.data.questions : [], assigned: i.interviewers.some(p => p.userId === userId && p.personId === b.personId), evaluations: i.interviewers.filter(p => manager || p.userId === userId && p.personId === b.personId).map(p => ({ userId: p.userId, name: p.user.person?.displayName ?? "Recorded interviewer", submitted: !!p.evaluation, evaluation: p.evaluation ? { answers: JSON.parse(p.evaluation.answers), scores: JSON.parse(p.evaluation.scores), notes: p.evaluation.notes, recommendation: p.evaluation.recommendation, weightedScore: p.evaluation.weightedScore, submittedAt: p.evaluation.submittedAt } : null })) }) })), offers: offers.slice(0, 25).map(o => ({ reference: o.reference, number: o.number, status: o.status, revision: o.revision, snapshot: JSON.parse(o.snapshot), issuedAt: o.issuedAt, expiresAt: o.expiresAt, acceptedAt: o.acceptedAt, declinedAt: o.declinedAt, expired: !!o.expiresAt && o.expiresAt <= now() && !["ACCEPTED", "DECLINED", "WITHDRAWN"].includes(o.status), active: o.activeKey === a.id })), nextInterviews: interviews.length > 25 ? interviews[24].id : null, nextOffers: offers.length > 25 ? offers[24].id : null };
+      return { currentOffer, completedInterview, status: a.status, revision: a.revision, timezone: account.timezone, panelOptions: panelRows.slice(0, 25), nextPanel: panelRows.length > 25 ? panelRows[24].id : null, permissions, interviewConfigured: interviewParsed.success, interviewRequired: interviewParsed.success ? interviewParsed.data.enabled : null, offerConfigured: offerParsed.success, review: own ? null : { status: a.reviewNeedsMore ? "NEEDS_REVIEW" : request?.status === "SUBMITTED" ? "PENDING" : request?.status ?? (managementConfigured ? "NOT_REQUESTED" : "NOT_CONFIGURED"), request, actorUserId: userId }, interviews: interviews.slice(0, 25).map(i => ({ reference: i.reference, number: i.number, type: i.type, status: i.status, revision: i.revision, scheduledAt: i.scheduledAt, duration: i.duration, location: i.location, instructions: i.instructions, completedAt: i.completedAt, ...(own ? {} : { questions: interviewParsed.success && (manager || i.interviewers.some(p => p.userId === userId && p.personId === b.personId)) ? interviewParsed.data.questions : [], assigned: i.interviewers.some(p => p.userId === userId && p.personId === b.personId), evaluations: i.interviewers.filter(p => manager || p.userId === userId && p.personId === b.personId).map(p => ({ userId: p.userId, name: p.user.person?.displayName ?? "Recorded interviewer", submitted: !!p.evaluation, evaluation: p.evaluation ? { answers: JSON.parse(p.evaluation.answers), scores: JSON.parse(p.evaluation.scores), notes: p.evaluation.notes, recommendation: p.evaluation.recommendation, weightedScore: p.evaluation.weightedScore, submittedAt: p.evaluation.submittedAt } : null })) }) })), offers: offers.slice(0, 25).map(o => ({ reference: o.reference, number: o.number, status: o.status, revision: o.revision, snapshot: JSON.parse(o.snapshot), issuedAt: o.issuedAt, expiresAt: o.expiresAt, acceptedAt: o.acceptedAt, declinedAt: o.declinedAt, expired: !!o.expiresAt && o.expiresAt <= now() && !["ACCEPTED", "DECLINED", "WITHDRAWN"].includes(o.status), active: o.activeKey === a.id })), nextInterviews: interviews.length > 25 ? interviews[24].id : null, nextOffers: offers.length > 25 ? offers[24].id : null };
     });
   }
   async function configurationChoices(userId: string, versionId: string) {

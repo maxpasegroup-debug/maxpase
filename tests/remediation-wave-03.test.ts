@@ -154,6 +154,36 @@ describe("Wave 03 readiness and routing boundaries", () => {
     try { await expect(verifyDatabaseReadiness(db)).rejects.toThrow(); expect((await ready()).status).toBe(503); }
     finally { await db.$executeRawUnsafe("ALTER TABLE ScheduledJob RENAME COLUMN oldCursor TO scanCursor"); }
   });
+  it("fails readiness on missing OTP and media schemas even when their migration entries claim success",async()=>{
+    for(const table of ["EmailAuthChallenge","NiceJobsContentFile"]){
+      await db.$executeRawUnsafe(`ALTER TABLE ${table} RENAME TO Phase7Hidden${table}`);
+      try{await expect(verifyDatabaseReadiness(db)).rejects.toThrow();expect((await ready()).status).toBe(503);}
+      finally{await db.$executeRawUnsafe(`ALTER TABLE Phase7Hidden${table} RENAME TO ${table}`);}
+    }
+    await db.$executeRawUnsafe("ALTER TABLE NiceJobsKnowledgeVersion RENAME COLUMN transcript TO Phase7HiddenTranscript");
+    try{await expect(verifyDatabaseReadiness(db)).rejects.toThrow();expect((await ready()).status).toBe(503);}
+    finally{await db.$executeRawUnsafe("ALTER TABLE NiceJobsKnowledgeVersion RENAME COLUMN Phase7HiddenTranscript TO transcript");}
+    await expect(verifyDatabaseReadiness(db)).resolves.toBeUndefined();
+  });
+  it("detects a missing Phase 10 column even when its migration ledger remains intact", async () => {
+    await db.$executeRawUnsafe("ALTER TABLE AutomationRun RENAME COLUMN workflowVersionId TO oldWorkflowVersionId");
+    try { await expect(verifyDatabaseReadiness(db)).rejects.toThrow(); expect((await ready()).status).toBe(503); }
+    finally { await db.$executeRawUnsafe("ALTER TABLE AutomationRun RENAME COLUMN oldWorkflowVersionId TO workflowVersionId"); }
+    await expect(verifyDatabaseReadiness(db)).resolves.toBeUndefined();
+  });
+  it("detects a missing Phase 10 table without changing the migration ledger", async () => {
+    await db.$executeRawUnsafe("ALTER TABLE NiceJobsOperationalException RENAME TO HiddenNiceJobsOperationalException");
+    try { await expect(verifyDatabaseReadiness(db)).rejects.toThrow(); expect((await ready()).status).toBe(503); }
+    finally { await db.$executeRawUnsafe("ALTER TABLE HiddenNiceJobsOperationalException RENAME TO NiceJobsOperationalException"); }
+    await expect(verifyDatabaseReadiness(db)).resolves.toBeUndefined();
+  });
+  it("detects removal of a Phase 10 published-version immutability trigger", async () => {
+    const [{ sql }] = await db.$queryRawUnsafe<{ sql: string }[]>("SELECT sql FROM sqlite_master WHERE type='trigger' AND name='NiceJobsAutomationPublishedMaterialImmutable'");
+    await db.$executeRawUnsafe("DROP TRIGGER NiceJobsAutomationPublishedMaterialImmutable");
+    try { await expect(verifyDatabaseReadiness(db)).rejects.toThrow("Automation safeguards unavailable"); expect((await ready()).status).toBe(503); }
+    finally { await db.$executeRawUnsafe(sql); }
+    await expect(verifyDatabaseReadiness(db)).resolves.toBeUndefined();
+  });
   it("keeps liveness up but readiness closed for insecure production configuration", async () => {
     vi.stubEnv("NODE_ENV", "production"); vi.stubEnv("AUTH_SECRET", "");
     try { expect((await ready()).status).toBe(503); expect(health().status).toBe(200); }

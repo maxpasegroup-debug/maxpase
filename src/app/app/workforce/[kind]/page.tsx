@@ -20,5 +20,5 @@ export default async function WorkforcePage({ params, searchParams }: { params: 
     return { ...r, organizationId: ["organizations", "departments", "teams"].includes(kind) ? r.id : r.organizationId ?? memberships?.[0]?.organizationId ?? organizationId };
   });
   const accounts = kind === "access" ? await workforceService.list(session.userId, "users", { organizationId }) : [];
-  return <WorkforceManager kind={kind} rows={JSON.parse(JSON.stringify(normalized)) as WorkforceRow[]} workspace={workspace as Workspace} activeOrganization={organizationId ?? ""} search={scalar("search") ?? ""} status={scalar("status") ?? ""} accounts={JSON.parse(JSON.stringify(accounts)) as WorkforceRow[]}/>;
+  return <WorkforceManager kind={kind} rows={JSON.parse(JSON.stringify(normalized)) as WorkforceRow[]} workspace={workspace as Workspace} activeOrganization={organizationId ?? ""} search={scalar("search") ?? ""} status={scalar("status") ?? ""} initialCreate={scalar("create") === "true"} accounts={JSON.parse(JSON.stringify(accounts)) as WorkforceRow[]}/>;
 }

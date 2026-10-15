@@ -11,9 +11,12 @@ import { createExecutionService } from "@/server/domain/execution-service";
 import { createCommunicationsService } from "@/server/communications/service";
 import { messageInput } from "@/server/communications/input";
 import { selection, conversationInput, personalityInput, defaultPersonality, memoryInput, actionInput, taskParameters } from "./input";
-import { registeredTool, siaToolRegistry, type SiaResponse } from "./registry";
+import { registeredTool, allSiaToolRegistry, type SiaResponse } from "./registry";
 import { configuredProvider, type SiaProvider } from "./provider";
 import { buildToolContext, memorySource, resolver, toolAuthority, type Selection, type Context } from "./context";
+import { workerQuestion } from "./worker-context";
+import { applicantQuestion } from "@/server/nicejobs/application-guidance";
+import { createApplicationService } from "@/server/nicejobs/applications";
 const hash = (v: unknown) => createHash("sha256").update(JSON.stringify(v)).digest("hex");
 type DB = Prisma.TransactionClient;
 
@@ -87,9 +90,8 @@ export function createSiaService(client: PrismaClient = prisma, provider: SiaPro
       await event(db, ctx, s, "sia.memory_reviewed", "SiaContext", id, { status, version: expectedVersion + 1 });
     });
   }
-  async function propose(userId: string, raw: unknown) {
+  async function proposeWithin(db: DB, userId: string, raw: unknown) {
     const v = actionInput.parse(raw), fingerprint = hash(v);
-    return client.$transaction(async db => {
       const ctx = await toolAuthority(db, userId, v, v.toolKey); await ctx.requireAccess("task.read", v);
       const h = await human(db, userId, v, "sia.propose");
       if (!h.user?.personId) throw new AccessError("Human requester required");
@@ -99,7 +101,9 @@ export function createSiaService(client: PrismaClient = prisma, provider: SiaPro
       const row = await db.siaAction.create({ data: { siaId: v.siaId, requesterUserId: userId, requesterPersonId: h.user.personId, organizationId: v.organizationId, projectId: v.projectId, toolKey: v.toolKey, parameters: JSON.stringify(v.parameters), reason: v.reason, risk: "LOW_RISK_WRITE", status: "APPROVAL_REQUIRED", authorization: "AUTHORIZED", approvalRequired: true, requestId: request.id, idempotencyKey: v.idempotencyKey, fingerprint } });
       const audit = await event(db, h, v, "sia.action_authorized", "SiaAction", row.id, { toolKey: row.toolKey, risk: row.risk, requestId: request.id });
       return db.siaAction.update({ where: { id: row.id }, data: { auditId: audit.auditId } });
-    });
+  }
+  async function propose(userId: string, raw: unknown) {
+    return client.$transaction(db => proposeWithin(db, userId, raw));
   }
   async function proposeCommunication(userId: string, rawSelection: unknown, rawMessage: unknown) {
     const s = selection.parse(rawSelection), message = messageInput.parse(rawMessage);
@@ -151,7 +155,7 @@ export function createSiaService(client: PrismaClient = prisma, provider: SiaPro
   }
   async function converse(userId: string, raw: unknown): Promise<SiaResponse> {
     const v = conversationInput.parse(raw), started = Date.now();
-    const ctx = await human(client, userId, v); await ctx.requireAccess("executive.read", v);
+    const ctx = await human(client, userId, v); await ctx.requireAccess(v.audience === "WORKER" ? "nicejobs.workspace.self" : v.audience === "APPLICANT" ? "nicejobs.application.self" : "executive.read", v);
     const fingerprint = hash(v);
     let run = await client.$transaction(async db => {
       const h = await human(db, userId, v);
@@ -162,7 +166,7 @@ export function createSiaService(client: PrismaClient = prisma, provider: SiaPro
       return r;
     });
     try {
-      const selected = await provider.selectIntent(v.message), tool = selected.toolKey && registeredTool(selected.toolKey);
+      const selected = await provider.selectIntent(v.message), key = v.audience === "WORKER" ? workerQuestion(v.message) ? "get_worker_day" : null : v.audience === "APPLICANT" ? applicantQuestion(v.message) ? "get_application_guide" : null : selected.toolKey, tool = key && registeredTool(key);
       if (!tool) throw new AccessError("UNSUPPORTED_INTENT");
       let result: SiaResponse;
       if (tool.risk !== "READ_ONLY") {
@@ -182,7 +186,7 @@ export function createSiaService(client: PrismaClient = prisma, provider: SiaPro
         }
       });
       if (!fresh.active) throw new AccessError("Access denied");
-      return result;
+      return ["get_workforce_command","get_training_management"].includes(tool.key) ? { ...result, context: { ...result.context, runId: run.id, auditId: run.auditId, authority: "READ_ONLY_HUMAN_AGENT_INTERSECTION" } } : result;
     } catch (e) {
       const failureCode = e instanceof AccessError && e.message === "UNSUPPORTED_INTENT" ? "UNSUPPORTED_INTENT" : provider.name === "UNAVAILABLE" ? "MODEL_UNAVAILABLE" : e instanceof AccessError ? "TOOL_OR_ACCESS_UNAVAILABLE" : "DATA_UNAVAILABLE";
       await client.$transaction(async db => {
@@ -192,6 +196,21 @@ export function createSiaService(client: PrismaClient = prisma, provider: SiaPro
       });
       throw new AccessError(failureCode === "UNSUPPORTED_INTENT" ? "Request not supported in deterministic mode. Choose a registered business question." : failureCode === "MODEL_UNAVAILABLE" ? "Model unavailable. No answer or action was invented." : "Tool, authorized context or data unavailable. No business action was executed.");
     }
+  }
+  async function applicantAvailability(userId: string, applicationReference: string) {
+    const applications = createApplicationService(client);
+    await applications.detail(userId, applicationReference, true);
+    const b = await applications.internal.boundary(client, userId, true);
+    const organizationId = b.product.division!.id;
+    if (provider.name === "UNAVAILABLE") return { available: false, siaId: null, organizationId };
+    const identities = await client.siaIdentity.findMany({ where: { status: "ACTIVE", tools: { some: { key: "get_application_guide", enabled: true } } }, select: { id: true }, orderBy: { id: "asc" }, take: 10 });
+    for (const identity of identities) {
+      try {
+        await toolAuthority(client, userId, { siaId: identity.id, organizationId, applicationReference }, "get_application_guide");
+        return { available: true, siaId: identity.id, organizationId };
+      } catch (error) { if (!(error instanceof AccessError)) throw error; }
+    }
+    return { available: false, siaId: null, organizationId };
   }
   async function workspace(userId: string, raw?: unknown) {
     const ctx = await createAccessContext(userId, client);
@@ -214,7 +233,7 @@ export function createSiaService(client: PrismaClient = prisma, provider: SiaPro
     }
     const enabled = await boundedRead(take => client.siaTool.findMany({ take, where: { siaId: s.siaId } }));
     const tools = [];
-    for (const t of siaToolRegistry) tools.push({ key: t.key, name: t.name, risk: t.risk, permission: t.requiredPermission, enabled: enabled.some(e => e.key === t.key && e.enabled && e.permissionKey === t.requiredPermission), available: (await access.decide(t.requiredPermission, s)).allowed, approvalRequired: t.requiresApproval });
+    for (const t of allSiaToolRegistry) tools.push({ key: t.key, name: t.name, risk: t.risk, permission: t.requiredPermission, enabled: enabled.some(e => e.key === t.key && e.enabled && e.permissionKey === t.requiredPermission), available: (await access.decide(t.requiredPermission, s)).allowed, approvalRequired: t.requiresApproval });
     const policies = await boundedRead(take => client.controlPoint.findMany({ take, where: { organizationId: s.organizationId, projectId: s.projectId ?? null, status: "ACTIVE", kind: { in: ["APPROVAL", "HUMAN_DECISION"] }, allowSelfApproval: false }, select: { id: true, name: true } }));
     const runs = await client.siaRun.findMany({ where: { siaId: s.siaId, userId, organizationId: s.organizationId, projectId: s.projectId ?? null }, select: { id: true, toolKey: true, status: true, createdAt: true }, orderBy: { createdAt: "desc" }, take: 30 });
     let canConfigure = false; try { await manageIdentity(client, userId, s); canConfigure = true; } catch (e) { if (!(e instanceof AccessError)) throw e; }
@@ -233,6 +252,6 @@ export function createSiaService(client: PrismaClient = prisma, provider: SiaPro
     const providers = await client.siaRun.groupBy({ by: ["provider", "model", "status"], where, _count: true });
     return { requests: aggregate._count, inputTokens: aggregate._sum.inputTokens, outputTokens: aggregate._sum.outputTokens, estimatedCost: aggregate._sum.estimatedCost, averageLatencyMs: aggregate._avg.latencyMs, providers };
   }
-  return { proposeCommunication, workspace, configure, setTool, saveMemory, reviewMemory, propose, execute, converse, preview, usage };
+  return { proposeCommunication, workspace, configure, setTool, saveMemory, reviewMemory, propose, proposeWithin, execute, converse, applicantAvailability, preview, usage };
 }
 export const siaService = createSiaService();

@@ -2,8 +2,8 @@
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { ArrowLeft, Bell, Building2, ChevronDown, ChevronRight, ClipboardList, Gavel, LayoutDashboard, Menu, Settings, Users, X } from "lucide-react";
-import { bossViews, groupForPath, isBossView, navigationBossHref, workspaceGroups, workspaceHref, workspacePageLabel } from "@/lib/workspace-navigation";
+import { ArrowLeft, BarChart3, Bell, Bot, Building2, ChevronDown, ChevronRight, ClipboardList, Gavel, LayoutDashboard, Menu, Settings, Users, X } from "lucide-react";
+import { bossViews, groupForPath, isBossView, isPrimaryBossView, navigationBossHref, primaryBossViews, workspaceGroups, workspaceHref, workspacePageLabel } from "@/lib/workspace-navigation";
 import { timezoneLabel } from "@/lib/timezone";
 import { TimezoneContext } from "./ui/user-time";
 
@@ -14,6 +14,7 @@ export function WorkspaceShell({ boss, email, name, timezone, unread, companies,
   const companyId = query.get("companyId") ?? query.get("organization") ?? query.get("organizationId") ?? undefined;
   const company = companies.find(c => c.id === companyId);
   const view = query.get("view") ?? "overview";
+  const onBossPage = boss && path === "/app/boss";
   const page = workspacePageLabel(path, view);
   const dialog = useRef<HTMLDialogElement>(null), menu = useRef<HTMLButtonElement>(null);
   const [open, setOpen] = useState(false);
@@ -29,19 +30,19 @@ export function WorkspaceShell({ boss, email, name, timezone, unread, companies,
     return boss ? navigationBossHref(target.views[0], new URLSearchParams(query.toString())) : workspaceHref(target.href, companyId);
   };
   const returnView = query.get("returnView");
-  const backHref = boss ? navigationBossHref(returnView && isBossView(returnView) ? returnView : group.views[0], new URLSearchParams(query.toString())) : workspaceHref(group.href, companyId);
+  const backHref = boss ? navigationBossHref(returnView && (isBossView(returnView) || isPrimaryBossView(returnView)) ? returnView : group.views[0], new URLSearchParams(query.toString())) : workspaceHref(group.href, companyId);
   function Navigation({ mobile = false }: { mobile?: boolean }) {
     return <nav aria-label={mobile ? "Mobile navigation" : "Main navigation"}>
-      <div className="workspace-primary">{workspaceGroups.map((g, i) => { const Icon = icons[i]; return <Link prefetch={false} key={g.key} href={groupHref(g.key)} aria-current={g.key === group.key ? "true" : undefined} onClick={mobile ? close : undefined}><Icon size={19}/>{g.label}</Link>; })}</div>
-      <div className="workspace-secondary"><p>{group.label}</p>{boss && group.views.map(v => <Link prefetch={false} key={v} href={navigationBossHref(v, new URLSearchParams(query.toString()))} aria-current={path === "/app/boss" && view === v ? "page" : undefined} onClick={mobile ? close : undefined}>{bossViews[v]}</Link>)}
+      <div className="workspace-primary">{onBossPage ? (Object.entries(primaryBossViews) as [keyof typeof primaryBossViews, string][]).map(([key,label],i) => { const Icon=[LayoutDashboard,Building2,Bot,BarChart3,Gavel,Settings][i]; return <Link prefetch={false} key={key} href={navigationBossHref(key,new URLSearchParams(query.toString()))} aria-current={view===key?"page":undefined} onClick={mobile?close:undefined}><Icon size={19}/>{label}</Link>; }) : workspaceGroups.map((g, i) => { const Icon = icons[i]; return <Link prefetch={false} key={g.key} href={groupHref(g.key)} aria-current={g.key === group.key ? "true" : undefined} onClick={mobile ? close : undefined}><Icon size={19}/>{g.label}</Link>; })}</div>
+      {!onBossPage && <div className="workspace-secondary"><p>{group.label}</p>{boss && group.views.map(v => <Link prefetch={false} key={v} href={navigationBossHref(v, new URLSearchParams(query.toString()))} aria-current={path === "/app/boss" && view === v ? "page" : undefined} onClick={mobile ? close : undefined}>{bossViews[v]}</Link>)}
         <details key={group.key} open={!boss}><summary>Detailed modules<ChevronDown size={16} aria-hidden="true"/></summary>{group.modules.map(m => <Link prefetch={false} key={m.href} href={workspaceHref(m.href, companyId, path === "/app/boss" ? view : returnView ?? group.views[0], new URLSearchParams(query.toString()))} aria-current={path === m.href ? "page" : undefined} onClick={mobile ? close : undefined}>{m.label}</Link>)}</details>
-      </div>
+      </div>}
     </nav>;
   }
   return <TimezoneContext.Provider value={timezone}><div className="app-shell workspace-shell"><a className="skip-link" href="#main-content">Skip to content</a>
     <aside className="sidebar workspace-sidebar"><Link prefetch={false} className="workspace-brand" href={boss ? "/app/boss" : "/app/executive"}>MAXPASE<span>{boss ? "Master Command Center" : "Group workspace"}</span></Link><Navigation/><div className="workspace-sidebar-footer">MAXPASE GROUP</div></aside>
     <div className="workspace-stage"><header className="workspace-header"><button ref={menu} type="button" className="icon-button mobile-menu" aria-label="Open navigation" aria-controls="workspace-drawer" aria-expanded={open} onClick={() => { dialog.current?.showModal(); setOpen(true); }}><Menu size={22}/></button><div className="workspace-context"><strong>{company?.name ?? (companyId ? "Selected scope" : "MAXPASE GROUP")}</strong><span>{companyId ? "Company workspace" : "Group workspace"} / {timezoneLabel(timezone)}</span></div><Link className="workspace-account" href={workspaceHref("/app/account", companyId, path === "/app/boss" ? view : returnView ?? group.views[0], new URLSearchParams(query.toString()))} prefetch={false}><span>{name}</span><small>{email}</small></Link><Link prefetch={false} className="icon-button notification-indicator" title={unread === null ? "Unread notifications unavailable" : `${unread} unread notifications across accessible scopes`} aria-label={unread === null ? "Notifications: unread count unavailable" : `Notifications: ${unread} unread`} href={workspaceHref("/app/operations/notifications?read=unread", companyId, path === "/app/boss" ? view : returnView ?? group.views[0], new URLSearchParams(query.toString()))}><Bell size={20}/><span>{unread === null ? "?" : unread > 99 ? "99+" : unread}</span></Link>{logout}</header>
-      <main className="main workspace-main" id="main-content" tabIndex={-1}><nav className="workspace-breadcrumbs" aria-label="Breadcrumb"><Link prefetch={false} href={boss ? navigationBossHref("overview", new URLSearchParams(query.toString())) : "/app/executive"}>MAXPASE</Link><ChevronRight size={14}/><Link prefetch={false} href={groupHref(group.key)}>{group.label}</Link>{page !== group.label && <><ChevronRight size={14}/><span aria-current="page">{page}</span></>}</nav>{!(path === "/app/boss" && view === group.views[0]) && <Link className="workspace-back" prefetch={false} href={backHref}><ArrowLeft size={16}/>Back to {returnView && isBossView(returnView) ? bossViews[returnView] : group.label}</Link>}{children}</main>
+      <main className="main workspace-main" id="main-content" tabIndex={-1}><nav className="workspace-breadcrumbs" aria-label="Breadcrumb"><Link prefetch={false} href={boss ? navigationBossHref("overview", new URLSearchParams(query.toString())) : "/app/executive"}>MAXPASE</Link><ChevronRight size={14}/><Link prefetch={false} href={onBossPage?"/app/boss":groupHref(group.key)}>{onBossPage?"Boss":group.label}</Link>{(onBossPage||page!==group.label)&&<><ChevronRight size={14}/><span aria-current="page">{page}</span></>}</nav>{!onBossPage && !(path === "/app/boss" && view === group.views[0]) && <Link className="workspace-back" prefetch={false} href={backHref}><ArrowLeft size={16}/>Back to {returnView && isPrimaryBossView(returnView)?primaryBossViews[returnView]:returnView && isBossView(returnView) ? bossViews[returnView] : group.label}</Link>}{children}</main>
     </div>
     <dialog id="workspace-drawer" ref={dialog} className="workspace-drawer" aria-labelledby="drawer-title" onClose={() => { setOpen(false); menu.current?.focus(); }} onKeyDown={event => {
       if (event.key !== "Tab") return;

@@ -2,6 +2,16 @@ Phase 03 recruitment extension: [Nice Jobs interview, human approval and offer a
 
 # Architecture
 
+Current Boss structure phase: [Boss Group Structure Phase 1](BOSS_GROUP_STRUCTURE_PHASE_1.md). The six-destination Boss view reuses the existing source-authorized services; staff-domain migration and NEXA execution remain gated.
+
+## AIRA Labs Business Operations
+
+The `airalabs.online` public site and six-section staff workspace provide a scoped first enquiry-to-delivery slice using canonical operations, approval, people, executive record, and project services. See [AIRA Labs Business Operations](AIRA_LABS_BUSINESS_OPERATIONS.md). Production activation is blocked by unverified accounts, independent approval, legal issuer, and commercial delivery configuration.
+
+## Nice Jobs Phase 10
+
+Phase 10 Nice Jobs automation and Workforce Command Center reuse canonical events, jobs, notifications, authorization and SIA. See [Nice Jobs Automation and Command Architecture](NICE_JOBS_AUTOMATION_WORKFORCE_COMMAND_CENTER_ARCHITECTURE.md). The scheduler/provider remains unconfigured.
+
 Nice Jobs Phase 02 adds a version-bound candidate application/screening service and scoped gateway views, reusing identity, authorization, publication, events and notifications. See [Application And Screening](NICE_JOBS_APPLICATION_SCREENING_ARCHITECTURE.md). This boundary stops at shortlist and adds no SIA recruitment authority.
 
 ## Nice Jobs Workforce Phase 01
@@ -97,3 +107,29 @@ See BUSINESS_GRAPH.md for exact semantic and authorization rules and PHASE_02_VA
 workforce-input.ts and workforce-service.ts extend the existing domain boundary. authorization/engine.ts supplies explainable resource decisions and delegation; authorization/assignments.ts shares role checks with Phase 02. registry.ts defines the added capabilities. SIA's access.ts inspects scoped identity/tool eligibility without execution.
 
 Workforce App Router views use server actions and domain DTOs. Search and active-organization filters are validated server-side. No UI component directly queries Prisma. See PEOPLE_ACCESS.md and PHASE_03_VALIDATION.md.
+
+## Nice Jobs Phase 04
+
+See [Nice Jobs Orientation & OJT Architecture](NICE_JOBS_ORIENTATION_OJT_ARCHITECTURE.md) for the accepted-offer gate, immutable shared JobVersion training plans, worker-specific progress, private evidence, assigned human reviews and readiness. READY is activation-ready only; this extension creates no active workforce assignment, production tasks, compensation or autonomous SIA execution. Existing Phase 01-03 boundaries remain in force.
+
+## Nice Jobs Phase 05
+
+See [Nice Jobs Employee Workspace & SIA Architecture](NICE_JOBS_EMPLOYEE_WORKSPACE_SIA_ARCHITECTURE.md) for explicit readiness-backed human activation on the existing Assignment, canonical task/evidence and blocker integration, immutable daily report corrections, bounded employee/management views and registered read-only worker SIA context. Existing identities, source authorization, human/agent intersection, transactional audit and notification controls are preserved. Legacy attestations do not unlock this workspace; no automatic grants, employment-status executor or Phase 06+ features are enabled.
+
+## Nice Jobs Phase 06
+
+Daily lead work and follow-ups extend the canonical workforce, workflow, audit, notification and read-only SIA boundaries. See [Phase 06 architecture](NICE_JOBS_DAILY_WORK_LEADS_FOLLOWUPS_ARCHITECTURE.md) for scoped policies, ownership history, controlled transitions, reports, indexed queues and deferred provider execution. No Phase 07 or autonomous SIA authority is introduced.
+
+Nice Jobs Phase 07 extends the canonical model with scoped immutable SOP/resource versions and internal workforce publications backed by existing communication templates, notifications and audit. See [SOP, Resources And Internal Communication](NICE_JOBS_SOP_RESOURCES_COMMUNICATION_ARCHITECTURE.md) for audience, acknowledgement, storage and human/agent source boundaries. No provider or autonomous authority is added.
+
+## Nice Jobs Phase 08
+
+See [Performance, Reports And PIP](NICE_JOBS_PERFORMANCE_REPORTS_PIP_ARCHITECTURE.md) for version-bound configurable expectations, canonical source evidence, immutable snapshots/corrections, scoped reporting, private/released reviews and human-governed improvement plans. Existing identity, source authorization, transactional audit/notification and human/agent intersection remain authoritative. Seven additive models; no invented real targets, automatic discipline, compensation system or autonomous SIA PIP authority.
+
+## Nice Jobs Phase 09 Financial Boundary
+
+See [Nice Jobs Incentive, Wallet and Settlement Architecture](NICE_JOBS_INCENTIVE_WALLET_SETTLEMENT_ARCHITECTURE.md). Versioned explicit policies and evidence-backed calculations use canonical independent human approvals. Exact minor-unit, append-only wallets separate pending/available/review-reserved/payout-reserved funds from unconfirmed external payment. Immutable statements, approved compensating reversals, scoped reconciliation and audit-backed commands preserve company isolation. No real rates are seeded, no financial SIA write tool is registered, and no payout provider or Phase 10 automation is enabled.
+
+## Nice Jobs Training Management
+
+The job/programme Phase 6 manager workspace reuses canonical enrollment/progress/review, reminder, notification, SIA and audit services. Accepted plans remain frozen; independently reviewed interventions never activate workers or approve money. See [Manager Control Phase 6](NICE_JOBS_TRAINING_MANAGEMENT_PHASE_6.md).

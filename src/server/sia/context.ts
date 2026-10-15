@@ -7,6 +7,11 @@ import { createExecutionService } from "@/server/domain/execution-service";
 import { resolveResource } from "@/server/domain/operations-scope";
 import { selection } from "./input";
 import { registeredTool, resultSchema, type SiaResponse } from "./registry";
+import { workerContext } from "./worker-context";
+import { applicantContext } from "./applicant-context";
+import { advisorContext } from "./advisor-context";
+import { createWorkforceCommandCenter } from "@/server/nicejobs/command-center";
+import { createOnboardingService } from "@/server/nicejobs/onboarding";
 import type { z } from "zod";
 import { READ_BUDGET, QueryBudgetError, boundedRead } from "@/server/domain/query-bounds";
 export const RECENT_DECISION_HISTORY = 50;
@@ -19,7 +24,7 @@ async function decisionHistory(db: Prisma.TransactionClient, recordId: string) {
   return { history: rows.slice(0, RECENT_DECISION_HISTORY).reverse(), historyTruncated: rows.length > RECENT_DECISION_HISTORY };
 }
 type HistoryCache = Map<string, Awaited<ReturnType<typeof decisionHistory>>>;
-export type Selection = z.infer<typeof selection>;
+export type Selection = z.infer<typeof selection> & { applicationReference?: string };
 export type Context = Awaited<ReturnType<typeof createAccessContext>>;
 export function resolver(s: Selection) { return (userId: string, db?: Prisma.TransactionClient) => createAccessContext(userId, db, s); }
 
@@ -32,7 +37,7 @@ export async function toolAuthority(db: Prisma.TransactionClient, userId: string
   if (!allow?.enabled || allow.permissionKey !== tool.requiredPermission) throw new AccessError("Tool unavailable or disabled");
   const ctx = await createAccessContext(userId, db, s);
   await ctx.requireAccess(tool.requiredPermission, s);
-  await ctx.requireAccess("executive.read", s);
+  await ctx.requireAccess(tool.category === "WORKFORCE" ? "nicejobs.workspace.self" : tool.category === "APPLICANT" ? "nicejobs.application.self" : tool.category === "ADVISORY" ? "labs.sales.self" : "executive.read", s);
   return ctx;
 }
 
@@ -95,6 +100,40 @@ export async function retrieveMemory(db: Prisma.TransactionClient, ctx: Context,
 
 export async function buildToolContext(client: PrismaClient, userId: string, s: Selection, toolKey: string): Promise<SiaResponse> {
   const ctx = await toolAuthority(client, userId, s, toolKey), access = resolver(s);
+  if (toolKey === "get_worker_day") return workerContext(client, userId, s, ctx);
+  if (toolKey === "get_application_guide") return applicantContext(client, userId, s);
+  if (toolKey === "get_advisor_day") return advisorContext(client, userId, s);
+  if(toolKey==="get_training_management"){
+    const selected=ctx.nodes.find(n=>n.id===s.organizationId);
+    if(!selected || !["COMPANY","DIVISION"].includes(selected.type) || s.projectId)throw new AccessError("Select an authorized training scope");
+    const companyId=selected.type==="DIVISION"?selected.parentId:selected.id;
+    const source=await client.product.findFirst({where:{organizationId:companyId??"__none__",slug:"nice-jobs",status:"ACTIVE",organization:{slug:"aira-skill-city",status:"ACTIVE",company:{is:{status:"ACTIVE"}}},division:{is:{slug:"aira-career-hub",parentId:companyId??"__none__",status:"ACTIVE"}}},select:{id:true}});
+    if(!source)return resultSchema.parse({facts:[],signals:[],recommendations:[],actions:[],approvals:[],limitations:["Training context is unavailable in the selected company scope. No records, counts, recommendations or business actions were invented."],provider:"DETERMINISTIC_DEVELOPMENT",calculatedAt:new Date().toISOString(),context:{graph:[],sourceState:"UNAVAILABLE_IN_SCOPE",companyId,divisionId:selected.type==="DIVISION"?selected.id:null}});
+    const overview=await createOnboardingService(client).list(userId,false,{activeOnly:true,limit:10,...(selected.type==="DIVISION"?{divisionId:selected.id}:{companyId:selected.id})},false,s);
+    return resultSchema.parse({
+      facts:overview.records.map(r=>({label:r.applicationId+" / "+r.title,value:r.status,source:"NICE_JOBS_ONBOARDING:"+r.id})),
+      signals:overview.records.map(r=>({id:r.id,title:r.title,severity:r.overdue?"HIGH":"MEDIUM",explanation:`Recorded status: ${r.status}; awaiting review: ${r.reviewQueue}; overdue: ${r.overdue}; training control: ${r.paused?"paused":"active"}.`,nextAction:"Review training evidence and ownership",href:"/app/nicejobs?view=training-management&reference="+r.reference,owner:r.reviewer})),
+      recommendations:overview.records.map(r=>({observation:r.attention,evidence:["NICE_JOBS_ONBOARDING:"+r.id],interpretation:"Recorded training state, not a competence or employment judgment.",recommendation:"Draft guidance: Review the current lesson and evidence with the assigned trainer, describe any blocker and agree the next permitted practice. A human must review this wording.",expectedBenefit:"Clarify the next training action",risk:"Draft only; no approval, message, schedule or employment/financial mutation.",affectedEntities:[r.id],confidence:"RULE_BASED",nextAction:"/app/nicejobs?view=training-management&reference="+r.reference})),
+      actions:["Review pending evidence and milestone decisions with the assigned human reviewer.","Readiness approval and worker activation remain separate human actions."],approvals:[],
+      limitations:["Read-only human/agent permission intersection. Latest bounded page of at most 10 active enrollments.",overview.nextCursor?"Additional records exist; use the management workspace.":"No additional records in this scope.","No private evidence, report narrative, offer terms or financial information is included.","Guidance is deterministic and draft-only. No external messages or employment, compensation or payment decisions."],
+      provider:"DETERMINISTIC_DEVELOPMENT",calculatedAt:new Date().toISOString(),context:{graph:[],sourceState:"AVAILABLE",companyId:overview.company.id,divisionId:selected.type==="DIVISION"?selected.id:null}
+    });
+  }
+  if (toolKey === "get_workforce_command") {
+    const selected = ctx.nodes.find(n => n.id === s.organizationId);
+    if (!selected || !["COMPANY", "DIVISION"].includes(selected.type)) throw new AccessError("Select an authorized workforce scope first");
+    let overview: Awaited<ReturnType<ReturnType<typeof createWorkforceCommandCenter>["overview"]>> | null = null;
+    try { overview = await createWorkforceCommandCenter(client).overview(userId, selected.type === "DIVISION" ? { divisionId: selected.id } : {}, s); }
+    catch (error) { if (!(error instanceof AccessError)) throw error; }
+    return resultSchema.parse({
+      facts: overview?.metrics.map(m => ({ label: m.label, value: m.value, source: `NICE_JOBS:${m.key}:${m.state}` })) ?? [],
+      signals: [...(overview?.items.map(i => ({ id: i.id, title: i.title, severity: i.kind === "BLOCKER" ? "HIGH" : "MEDIUM", explanation: i.detail, nextAction: "Open the authorized record", href: i.href, owner: null })) ?? []), ...(overview?.screening?.map(a => ({ id: a.reference, title: a.title, severity: "MEDIUM", explanation: `Recorded application: ${a.status}; eligibility: ${a.eligibility}; screening: ${a.screening}. No new evaluation has been performed.`, nextAction: "Review source criteria and evidence before deciding", href: a.href, owner: null })) ?? [])],
+      recommendations: overview?.items.map(i => ({ observation: i.detail, evidence: [i.kind + ":" + i.id], interpretation: "Recorded work requires human review, not an automatic employment or money decision.", recommendation: i.kind === "FOLLOWUP" ? "Draft follow-up: Please review the recorded follow-up, confirm the next step and report any blocker. Review the recipient and wording before any external message." : "Review the source record with its responsible manager, confirm the blocker or deadline, then assign a permitted next step.", expectedBenefit: "Resolve the next recorded operational exception", risk: "Draft only. No message sent, task assigned, offer issued or funds posted.", affectedEntities: [i.id], confidence: "RULE_BASED", nextAction: i.href })) ?? [],
+      actions: overview ? ["Review submitted applications and recorded eligibility/screening outcomes before making a human decision.", "Resolve recorded blockers and overdue work first.", "Review readiness-backed activations, incentive decisions and settlement reviews in their controlled workspaces.", "Confirm today's responsibilities with the assigned manager; participant daily goal plans retain their separate approval."] : [], approvals: [],
+      limitations: [overview ? "Read-only snapshot of authorized Nice Jobs records." : "Nice Jobs evidence is unavailable in the selected scope.", overview?.screening === null ? "Application screening evidence is not authorized." : overview?.screeningTruncated ? "Screening summaries show the oldest 10 records in this scope; use the application workspace for subsequent records." : "Screening summaries describe recorded states, not recommendations to hire or reject.", "Scheduling and payout providers are not configured.", "No autonomous employment or financial actions are available."],
+      provider: "DETERMINISTIC_DEVELOPMENT", calculatedAt: (overview?.asOf ?? new Date()).toISOString(), context: { graph: [], companyId: overview?.companyId ?? null, divisionId: overview?.divisionId ?? null, scheduler: overview?.scheduler ?? "NOT_CONFIGURED" }
+    });
+  }
   if (toolKey === "get_tasks") return taskContext(client, userId, s, ctx);
   if (toolKey === "get_project_status" && !s.projectId) throw new AccessError("Select a project first");
   if (["get_company_overview", "get_company_health"].includes(toolKey)) {
