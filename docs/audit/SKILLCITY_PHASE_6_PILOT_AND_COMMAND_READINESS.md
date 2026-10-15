@@ -2,6 +2,8 @@
 
 Status: **BLOCKED for real pilot and staff traffic migration**. This register records local evidence only. No production account, role, listing, compensation policy, customer record or deployment was changed.
 
+Update: the local staff/CRM implementation is described in [Skill City staff and CRM rollout](../architecture/SKILLCITY_STAFF_AND_CRM_ROLLOUT.md). The table below records the original pilot evidence; new code has not been live-piloted or browser-tested and does not remove the blocked gates.
+
 ## Implemented control surface
 
 - `maxpase.com` uses the existing Boss-only account and explicit provisioning path. Provisioning is operator-initiated; the dashboard does not create or reset Boss credentials.
@@ -14,12 +16,12 @@ Status: **BLOCKED for real pilot and staff traffic migration**. This register re
 | Flow or gate | Local evidence | Real pilot status / next action |
 | --- | --- | --- |
 | Advisor BGOS queue | Existing Labs assigned-lead flow and isolated SIA read-only tests | **BLOCKED**: confirm an authorized Senior Academic Advisor account, manager and real lead scope. |
-| Advisor PBA and GenZ Builder queues | Dashboard currently reports these pipelines as not configured | **BLOCKED**: implement and approve product-specific pipelines on the shared CRM foundation before a three-pipeline pilot. |
+| Advisor PBA and GenZ Builder queues | Local division-scoped, assigned `AIRA_CRM_LEAD` queues and audited transitions are implemented; no real records were activated | **BLOCKED**: verify product configuration, owners, consent, manager assignment and approved commercial rules before a three-pipeline pilot. |
 | One Labs developer project | Existing assignment-scoped developer view | **BLOCKED**: verify developer identity, director assignment and an approved test project. |
 | Director decisions and Boss directives | Isolated NEXA/SIA replay, authorization, approval and audit tests | **BLOCKED**: nominate verified director and independent approver accounts; approve scope and test instruction. |
 | Labs customer isolation | Existing explicit customer grant and revocation tests | **BLOCKED**: identify consenting pilot customer accounts and confirm access to only their own records. |
 | Domain sessions and revocation | Isolated portal realm and access tests; local host routing smoke | **NOT VERIFIED** on deployed domains; test live TLS, cookies, logout and revocation with authorized accounts. |
-| HR and portal activation | Existing audited People, Accounts, Memberships and Roles controls | **BLOCKED**: verify each employee, approve role/scope, establish credential delivery and verify domain sign-in. No automatic account activation from a person record. |
+| HR and portal activation | Local scoped staff drafts, explicit role setup and gated email invitation/activation are implemented; no invitation was sent | **BLOCKED**: verify each employee and manager, approve role/scope, configure and verify the Resend sender, then verify live domain sign-in and revocation. A draft alone cannot sign in. |
 | Real-data reporting | Boss and director views derive from authorized records | **NOT VERIFIED** with pilot records. Confirm source quality, freshness and manager interpretation. |
 | Mobile, keyboard and screen reader | Responsive CSS added for hierarchy and command tiles | **NOT VERIFIED** in a browser or on physical devices; complete accessibility and mobile walkthroughs. |
 | Employment, commercial and financial decisions | Existing human approval and execution boundaries | **BLOCKED** until authorized approvers, terms and audit evidence are confirmed. NEXA/SIA have no autonomous approval or payment authority. |

@@ -42,6 +42,7 @@ export default async function Gateway({ params, searchParams }: { params: Promis
     const data = await skillCityEmployeeDashboard.dashboard(session.userId, typeof query.view === "string" ? view : undefined);
     return <SkillCityWorkspace data={data} email={session.email} userId={session.userId} base={paths.gateway} home={paths.home}/>;
   }
+  if (site.id === "skillcity") notFound();
   if (site.id === "labs" && await labsCustomerService.isCustomer(session.userId)) {
     if (view !== "overview") notFound();
     return <LabsCustomerWorkspace userId={session.userId} email={session.email} home={paths.home}/>;

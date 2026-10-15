@@ -5,6 +5,12 @@ import { requireSession } from "@/server/auth/guards";
 import { AccessError } from "@/server/authorization/engine";
 import { brandCommandService } from "@/server/group/brand-command";
 import { workspaceHref } from "@/lib/workspace-navigation";
+import { staffOnboardingService } from "@/server/skillcity/staff-onboarding";
+import { StaffDraftForm } from "@/components/staff-draft-form";
+import { bossStaffDraftAction, bossStaffInviteAction } from "../../staff-actions";
+import { RoleTemplateForm } from "../../role-template-form";
+import { staffInvite } from "@/server/skillcity/staff-invite";
+import { StaffInvitePanel } from "@/components/staff-invite-panel";
 
 export default async function BrandCommandPage({ params }: { params: Promise<{ company: string; unit: string }> }) {
   const session = await requireSession();
@@ -18,6 +24,8 @@ export default async function BrandCommandPage({ params }: { params: Promise<{ c
     if (url.pathname.startsWith("/app/workforce/")) url.searchParams.set("organization", data.scopeId);
     return url.pathname + url.search;
   };
+  const staff = company === "aira-skill-city" && data.canManagePeople ? await staffOnboardingService.options(session.userId, data.scopeId) : null;
+  const drafts = staff?.canPrepare ? await staffInvite.drafts(session.userId, data.scopeId) : [];
   return <main className="boss-view boss-command">
     <nav aria-label="Breadcrumb" className="boss-command-breadcrumb"><Link href="/app/boss?view=companies"><ArrowLeft size={16}/> Companies</Link><span>/</span><span>{data.companyName}</span><span>/</span><strong>{data.label}</strong></nav>
     <header className="boss-heading"><div><p className="eyebrow">{data.companyName}</p><h1>{data.label}</h1><p className="muted">Command centre / {data.companyStatus}</p></div><Building2 size={24}/></header>
@@ -31,5 +39,8 @@ export default async function BrandCommandPage({ params }: { params: Promise<{ c
     <p className="muted">Access requires a verified person, account credentials, active scoped membership and an approved role. The People &amp; Access workspace records each step and audits changes; creating a person alone grants no sign-in.</p>
     {data.canReadPeople && <nav className="boss-detail-links" aria-label="Access setup"><Link href={hr("/app/workforce/users")}>Accounts</Link><Link href={hr("/app/workforce/memberships")}>Memberships</Link><Link href={hr("/app/workforce/access")}>Roles and access</Link></nav>}
     </section>
+    {staff?.canPrepare && <section className="executive-band"><h2>Employee onboarding</h2><StaffDraftForm action={bossStaffDraftAction} organizationId={data.scopeId} roles={staff.roles} managers={staff.managers}/></section>}
+    {staff?.canPrepare && <section className="executive-band"><h2>Invitations awaiting activation</h2><StaffInvitePanel rows={drafts} action={bossStaffInviteAction} deliveryReady={staffInvite.deliveryReady()}/></section>}
+    {company === "aira-skill-city" && unit === "aira-skill-city" && <section className="executive-band"><h2>Access role setup</h2><RoleTemplateForm/></section>}
   </main>;
 }

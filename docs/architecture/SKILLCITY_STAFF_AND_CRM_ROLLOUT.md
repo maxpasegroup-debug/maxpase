@@ -1,0 +1,27 @@
+# Skill City staff and CRM rollout
+
+Status: implemented locally, **not activated for real staff**. The Boss remains on `maxpase.com`. AIRA company and brand staff sign in on `airaskillcity.com`; Labs customers, Startup School students and Nice Jobs part-time participants retain their own portals. TEARN and TopRank staff domains are not specified here.
+
+## Five delivery phases
+
+1. **Staff onboarding:** Boss and authorized AIRA directors prepare an inactive, invited person/account/membership for a scoped staff role. Only the prepared company Director, division Director, Senior Academic Advisor, division Junior Academic Advisor and Labs developer roles are available. A verified manager is required before a non-director invitation; only the Boss may invite a Director. A person draft does not confer access.
+2. **Director authority:** the Boss explicitly prepares AIRA role templates and reviews any existing Director appointments before changing their shared capabilities. Role assignment still uses the Phase 3 delegation checks. A company Director has AIRA descendant scope; a division Director has only the appointed division scope. Directors cannot create another Director.
+3. **Three product pipelines:** the advisor gateway presents assigned BGOS records from the existing Labs lead service and PBA/GenZ Builder records from the shared, division-scoped `AIRA_CRM_LEAD` foundation. New PBA/GenZ leads require consent, a verified advisor owner, product/division configuration, idempotency reference and audited transitions. Qualified is not a sale; draft products cannot be offered or sold. This is one advisor work queue, but BGOS retains its established lead model to preserve records and integration behavior; full engine convergence is a later migration, not a claim of this rollout.
+4. **Employee workspaces:** the Senior Advisor sees authorized assigned product queues, the Director sees decisions, scope summaries, CRM ownership and employee drafts, and Labs developers see their assigned projects and tasks only. Junior advisors are division-scoped. Generic Skill City gateway views are closed so an employee cannot enter an unrelated portal workspace through a query parameter.
+5. **Boss and activation:** each AIRA Boss command centre offers staff drafting/invitation; the primary AIRA company centre offers explicit role setup. Invitations use a six-digit email code and a new password, are time-limited and single-use, and do not activate the account until the role, manager and portal checks succeed transactionally. The invite sender is disabled until `SKILLCITY_EMAIL_AUTH_ENABLED=true`, `SKILLCITY_AUTH_FROM`, `SKILLCITY_OTP_SECRET` and `RESEND_API_KEY` are configured. No account was provisioned or email sent by this change.
+
+## Activation sequence
+
+1. Verify the AIRA company/division records, existing Director assignments and Boss authority. Run the explicit role-template action from the Boss AIRA command centre only after review.
+2. Nominate and verify Directors and managers, then prepare draft accounts in the correct AIRA scope. Use the approved HR process for identity checks and record the evidence when sending an invitation.
+3. Verify the Resend sender domain and configure the Skill City environment variables securely. Send one invitation to a verified account, then have that person activate it on Skill City and confirm the intended scope and revocation behavior.
+4. Confirm the BGOS, PBA and GenZ Builder product owners, sales rules and publication approvals. Pilot assigned records without treating qualification as a sale.
+5. Conduct live domain, mobile/accessibility, session-isolation, authorization and end-to-end pilot checks with consenting users before moving staff traffic. No live checks are claimed in this document.
+
+## Boundaries
+
+- AIRA staff credentials are separate from Labs customer, Startup student, Nice Jobs participant and Boss sessions. Existing Labs staff records are not silently migrated or elevated; identity, membership, records, files and audit history must be mapped and reviewed before any staff move.
+- The four mapped AIRA divisions have independent staff scopes. Brand-only entries in the Boss hierarchy are still company-level records and cannot receive invented division authority until an approved organization mapping is recorded.
+- `SKILLCITY_OTP_SECRET` is a dedicated high-entropy secret and must never be committed. Email delivery failure leaves the account inactive; an expired or lost invitation may be resent after the cooldown.
+- The stated Senior Academic Advisor salary requirement is INR 18,000/month and the Junior Developer requirement is INR 15,000/month. Neither amount is a payroll instruction; verified agreements, pay rules and approvals remain prerequisites.
+- SIA and NEXA may prepare scoped work. They do not approve employment, compensation, quotes, financial actions or deployment.

@@ -3,6 +3,9 @@ import { prisma } from "@/server/db";
 import { AccessError } from "@/server/authorization/engine";
 import { requirePortalAccess } from "@/server/portals/policy";
 import { leadPayload } from "@/server/labs/input";
+import { staffOnboardingService } from "./staff-onboarding";
+import { advisorCrm } from "./crm";
+import { staffInvite } from "./staff-invite";
 
 export const employeeViews = ["advisor", "director", "developer"] as const;
 export type EmployeeView = typeof employeeViews[number];
@@ -18,8 +21,8 @@ export function createSkillCityEmployeeDashboard(client: PrismaClient = prisma) 
     const hasRole = (scopes: string[], ...names: string[]) => ctx.grants.some(grant => scopes.includes(grant.organizationId ?? "") && names.includes(grant.roleName ?? ""));
     const can = (key: string, organizationId: string) => ctx.decide(key, { organizationId }).then(result => result.allowed);
     const allowed = {
-      director: hasRole([companyId], "Director") && await can("organization.manage", companyId) && await can("executive.read", companyId),
-      advisor: !!labs && hasRole([companyId, labs.id], "Senior Academic Advisor") && await can("labs.sales.self", labs.id) && await can("organization.read", labs.id),
+      director: hasRole([companyId], "Director") && await can("executive.read", companyId) && await can("decision.decide", companyId) || (await Promise.all(divisions.map(async division => hasRole([division.id], "Division Director") && await can("executive.read", division.id) && await can("decision.decide", division.id)))).some(Boolean),
+      advisor: hasRole([companyId, ...divisions.map(d => d.id)], "Senior Academic Advisor", "Junior Academic Advisor") && (await Promise.all(divisions.map(async d => d.slug === "aira-labs" ? await can("labs.sales.self", d.id) : await can("aira.crm.self", d.id)))).some(Boolean),
       developer: !!labs && hasRole([companyId, labs.id], "Software Developer", "Full Stack Developer", "Junior Developer") && await can("labs.delivery.assignee", labs.id) && await can("organization.read", labs.id)
     };
     const available = employeeViews.filter(view => allowed[view]);
@@ -29,15 +32,21 @@ export function createSkillCityEmployeeDashboard(client: PrismaClient = prisma) 
     if (!view) return { view: null, available, companyId, name: ctx.user?.id ?? "", data: null };
 
     if (view === "advisor") {
-      const base: Prisma.ExecutiveRecordWhereInput = { kind: "LABS_LEAD", organizationId: labs!.id, ownerPersonId: personId, status: { notIn: ["WON", "LOST"] } };
+      const labsAccess = !!labs && await can("labs.sales.self", labs.id) && await can("organization.read", labs.id);
+      const base: Prisma.ExecutiveRecordWhereInput = { kind: "LABS_LEAD", organizationId: labs?.id ?? "", ownerPersonId: personId, status: { notIn: ["WON", "LOST"] } };
       const select = { id: true, title: true, status: true, dueAt: true, payload: true, version: true } as const;
-      const scheduled = await client.executiveRecord.findMany({ where: { ...base, dueAt: { not: null } }, orderBy: [{ dueAt: "asc" }, { id: "asc" }], take: 30, select });
-      const undated = scheduled.length < 30 ? await client.executiveRecord.findMany({ where: { ...base, dueAt: null }, orderBy: [{ updatedAt: "desc" }, { id: "asc" }], take: 30 - scheduled.length, select }) : [];
+      const scheduled = labsAccess ? await client.executiveRecord.findMany({ where: { ...base, dueAt: { not: null } }, orderBy: [{ dueAt: "asc" }, { id: "asc" }], take: 30, select }) : [];
+      const undated = labsAccess && scheduled.length < 30 ? await client.executiveRecord.findMany({ where: { ...base, dueAt: null }, orderBy: [{ updatedAt: "desc" }, { id: "asc" }], take: 30 - scheduled.length, select }) : [];
       const rows = [...scheduled, ...undated];
       const leads = rows.map(row => { let detail; try { detail = leadPayload.safeParse(JSON.parse(row.payload)); } catch { detail = null; } return { id: row.id, title: row.title, status: row.status, dueAt: row.dueAt, version: row.version, outcome: detail?.success ? detail.data.outcome : "", qualification: detail?.success ? detail.data.qualification : "", nextFollowUp: detail?.success ? detail.data.nextFollowUp : null }; });
+      const pipelines = [];
+      for (const target of [{ slug: "pba", divisionSlug: "aira-startup-school" }, { slug: "genz-builder", divisionSlug: "aira-skill-studio" }]) {
+        const division = divisions.find(d => d.slug === target.divisionSlug);
+        if (division && await can("aira.crm.self", division.id) && await can("organization.read", division.id)) pipelines.push({ slug: target.slug, ...(await advisorCrm.list(userId, target.slug)) });
+      }
       const products = await client.product.findMany({ where: { organizationId: companyId, slug: { in: ["bgos", "pba", "genz-builder"] } }, select: { slug: true, name: true, status: true, lifecycle: true, description: true }, take: 3 });
       const productReadable = await can("product.read", companyId);
-      return { view, available, companyId, name: "Senior Academic Advisor", data: { leads, products: productReadable ? products : [], productReadable, canUpdateLabs: await can("labs.sales.perform", labs!.id), labsId: labs!.id } };
+      return { view, available, companyId, name: "Academic Advisor", data: { leads, pipelines, products: productReadable ? products : [], productReadable, canUpdateLabs: labsAccess && await can("labs.sales.perform", labs!.id), labsId: labsAccess ? labs!.id : null } };
     }
     if (view === "developer") {
       const rows = await client.project.findMany({ where: { organizationId: labs!.id, ownerPersonId: personId }, orderBy: [{ targetDate: "asc" }, { id: "asc" }], take: 20, select: { id: true, name: true, status: true, description: true, targetDate: true, metadata: true } });
@@ -65,7 +74,17 @@ export function createSkillCityEmployeeDashboard(client: PrismaClient = prisma) 
     const approvals = await client.siaApproval.findMany({ where: { approverUserId: userId, status: "PENDING", request: { organizationId: { in: divisions.map(d => d.id).concat(companyId) }, status: "SUBMITTED", OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }] } }, include: { request: { select: { id: true, title: true, organizationId: true, projectId: true, expiresAt: true } } }, orderBy: { createdAt: "asc" }, take: 25 });
     const decisions = [];
     for (const approval of approvals) if (approval.request && (await ctx.decide("approval.read", { organizationId: approval.request.organizationId, projectId: approval.request.projectId })).allowed && (await ctx.decide("approval.decide", { organizationId: approval.request.organizationId, projectId: approval.request.projectId })).allowed && (await ctx.decide(approval.requiredPermission, { organizationId: approval.request.organizationId, projectId: approval.request.projectId })).allowed) decisions.push({ id: approval.id, title: approval.request.title, organizationId: approval.request.organizationId, expiresAt: approval.request.expiresAt });
-    return { view, available, companyId, name: "Director", data: { divisions: divisionRows, decisions } };
+    const staff = [];
+    for (const target of [{ id: companyId, name: "AIRA Skill City" }, ...divisions]) {
+      const options = await staffOnboardingService.options(userId, target.id);
+      if (options.canPrepare) staff.push({ organizationId: target.id, name: target.name, roles: options.roles, managers: options.managers, drafts: await staffInvite.drafts(userId, target.id) });
+    }
+    const crm = [];
+    for (const target of [{ slug: "pba", divisionSlug: "aira-startup-school", label: "PBA" }, { slug: "genz-builder", divisionSlug: "aira-skill-studio", label: "GenZ Builder" }]) {
+      const division = divisions.find(d => d.slug === target.divisionSlug);
+      if (division && await can("aira.crm.manage", division.id)) crm.push({ slug: target.slug, label: target.label, owners: await advisorCrm.eligibleOwners(userId, target.slug), pipeline: await advisorCrm.list(userId, target.slug) });
+    }
+    return { view, available, companyId, name: "Director", data: { divisions: divisionRows, decisions, staff, crm, inviteDeliveryReady: staffInvite.deliveryReady() } };
   }
   return { dashboard };
 }
