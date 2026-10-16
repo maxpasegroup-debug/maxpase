@@ -1060,6 +1060,9 @@ progress { width: 120px; accent-color: var(--accent); }
 .nj-dashboard-content .nj-workspace { padding: 0; max-width: none; }
 .nj-dashboard-content .nj-participant-nav { display: none; }
 .nj-dashboard-menu, .nj-dashboard-bottom { display: none; }
+.nj-dashboard-candidate { background: #fff; }
+.nj-dashboard-candidate .nj-dashboard-header { justify-content: flex-end; }
+.nj-dashboard-candidate .nj-dashboard-sidebar nav a:last-child { border: 0; border-radius: 6px; margin-top: 0; padding-top: 10px; }
 @media (max-width: 1100px) { .nj-dashboard { grid-template-columns: 180px minmax(0, 1fr); } .nj-dashboard-content { padding: 18px; } .nj-dashboard-header { padding: 16px 18px; gap: 10px; } .nj-dashboard-actions { gap: 10px; } .nj-dashboard-action { padding: 16px 12px 40px; } .nj-dashboard-account summary > span:nth-child(2) { display: none; } }
 @media (max-width: 900px) { .nj-dashboard-grid { grid-template-columns: minmax(0, 1fr); } .nj-dashboard-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 760px) {
@@ -1070,6 +1073,7 @@ progress { width: 120px; accent-color: var(--accent); }
   .nj-dashboard-content { padding: 16px 16px 100px; }.nj-dashboard-home { gap: 16px; }
   .nj-dashboard-welcome { min-height: 215px; }.nj-dashboard-welcome > div { padding: 20px; }.nj-dashboard-welcome h1 { font-size: 28px; }.nj-dashboard-welcome p { font-size: 13px; max-width: 250px; }
   .nj-dashboard-bottom { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); position: fixed; z-index: 25; bottom: 0; left: 0; right: 0; background: #fff; border-top: 1px solid #dce5e0; padding: 6px 8px max(8px, env(safe-area-inset-bottom)); }
+  .nj-dashboard-candidate .nj-dashboard-bottom { grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .nj-dashboard-bottom a { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-height: 54px; font-size: 11px; border-radius: 6px; }.nj-dashboard-panel { padding-block: 14px; }
   .nj-dashboard-row { flex-wrap: wrap; }.nj-dashboard-row .nj-dashboard-button { margin-left: 48px; }
 }

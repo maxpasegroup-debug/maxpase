@@ -50,9 +50,9 @@ describe("Separate brand domains and authenticated gateways", () => {
     const personId = (await db.user.findUniqueOrThrow({ where: { id: userId } })).personId!;
     const dashboard = createSkillCityEmployeeDashboard(db);
     await expect(dashboard.dashboard(userId, "director")).rejects.toThrow();
-    const keys = ["organization.read", "organization.manage", "executive.read", "labs.sales.self", "labs.sales.perform", "labs.delivery.assignee", "project.read", "task.read", "task.manage"];
+    const keys = ["organization.read", "organization.manage", "executive.read", "decision.decide", "labs.sales.self", "labs.sales.perform", "labs.delivery.assignee", "project.read", "task.read", "task.manage"];
     for (const key of keys) await db.permission.upsert({ where: { key }, create: { key, name: key, scope: "GROUP" }, update: {} });
-    const companyRole = await db.role.create({ data: { organizationId: company.id, key: "staff-phase3-director", name: "Director", permissions: { create: ["organization.read", "organization.manage", "executive.read"].map(key => ({ permission: { connect: { key } } })) } } });
+    const companyRole = await db.role.create({ data: { organizationId: company.id, key: "staff-phase3-director", name: "Director", permissions: { create: ["organization.read", "organization.manage", "executive.read", "decision.decide"].map(key => ({ permission: { connect: { key } } })) } } });
     const companyMember = await db.membership.create({ data: { personId, organizationId: company.id, scope: "DESCENDANTS", roles: { create: { roleId: companyRole.id } } } });
     const advisorRole = await db.role.create({ data: { organizationId: labsId, key: "staff-phase3-advisor", name: "Senior Academic Advisor", permissions: { create: ["organization.read", "labs.sales.self", "labs.sales.perform"].map(key => ({ permission: { connect: { key } } })) } } });
     const developerRole = await db.role.create({ data: { organizationId: labsId, key: "staff-phase3-developer", name: "Software Developer", permissions: { create: ["organization.read", "labs.delivery.assignee", "project.read", "task.read", "task.manage"].map(key => ({ permission: { connect: { key } } })) } } });
@@ -102,7 +102,7 @@ describe("Separate brand domains and authenticated gateways", () => {
     try {
       for (const slug of ["aira-skill-city", "aira-career-hub"]) {
         const org = await db.organization.findUniqueOrThrow({ where: { slug } });
-        const role = await db.role.create({ data: { organizationId: org.id, key: "launch-realm-fixture", name: "Isolated realm fixture", permissions: { create: { permissionId: permission.id } } } });
+        const role = await db.role.create({ data: { organizationId: org.id, key: "launch-realm-fixture", name: slug === "aira-skill-city" ? "Director" : "Isolated realm fixture", permissions: { create: { permissionId: permission.id } } } });
         roles.push(role.id);
         const member = await db.membership.create({ data: { personId: person.personId!, organizationId: org.id, roles: { create: { roleId: role.id } } } });
         members.push(member.id);
@@ -140,7 +140,7 @@ describe("Separate brand domains and authenticated gateways", () => {
     const company = await db.organization.findUniqueOrThrow({ where: { slug: "aira-skill-city" } });
     const permission = await db.permission.findUniqueOrThrow({ where: { key: "organization.read" } });
     const person = await db.user.findUniqueOrThrow({ where: { id: userId } });
-    const role = await db.role.create({ data: { organizationId: company.id, key: "skillcity-test", name: "Company portal fixture", permissions: { create: { permissionId: permission.id } } } });
+    const role = await db.role.create({ data: { organizationId: company.id, key: "skillcity-test", name: "Director", permissions: { create: { permissionId: permission.id } } } });
     const member = await db.membership.create({ data: { personId: person.personId!, organizationId: company.id, roles: { create: { roleId: role.id } } } });
     try {
       const session = await auth.loginPortal(credentials(), secret, "skillcity"); expect(session).not.toBeNull();

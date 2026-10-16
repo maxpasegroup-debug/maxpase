@@ -1,7 +1,10 @@
 import Link from "next/link";
+import { Suspense } from "react";
 import { participantDashboard } from "@/server/nicejobs/participant-dashboard";
 import { DashboardShell } from "./dashboard-shell";
 import { DashboardHome, DashboardState } from "./dashboard-home";
+import { CandidateHome } from "./candidate-home";
+import { ExploreLoading, ExploreOpportunities } from "./explore-opportunities";
 import { ApplicationWorkspace } from "./application-workspace";
 import { OnboardingWorkspace } from "./onboarding-workspace";
 import { EmployeeWorkspace } from "./employee-workspace";
@@ -21,7 +24,7 @@ export async function ParticipantDashboard({ userId, realm, base, query }: Props
   const shared = { userId, realm, base, query };
   const href = (next: string) => `${base}?view=${next}`;
   let content;
-  if (["home", "overview"].includes(view)) content = <DashboardHome userId={userId} base={base} worker={worker} name={context.account.name} timezone={context.account.timezone} />;
+  if (["home", "overview"].includes(view)) content = worker ? <DashboardHome userId={userId} base={base} worker name={context.account.name} timezone={context.account.timezone} /> : <CandidateHome userId={userId} base={base} name={context.account.name} />;
   else if (view === "search") {
     const search = typeof query.search === "string" ? query.search : "";
     const results = await participantDashboard.search(userId, worker, search);
@@ -34,9 +37,10 @@ export async function ParticipantDashboard({ userId, realm, base, query }: Props
     const read = query.read === "read" || query.read === "unread" ? query.read : undefined;
     const page = await participantDashboard.notificationPage(userId, read, typeof query.cursor === "string" ? query.cursor : undefined);
     content = <section><h1>Notifications</h1><form method="get" action={base} className="nj-filters"><input type="hidden" name="view" value="notifications" /><label>Read status<select name="read" defaultValue={read ?? ""}><option value="">All</option><option value="unread">Unread</option><option value="read">Read</option></select></label><button className="nj-dashboard-button">Filter</button></form>{!page.data?.records.length && <DashboardState result={page} empty="No notifications match this view." base={href("notifications")} />}{page.data?.records.map(n => <article key={n.id} className="nj-dashboard-notification"><h2>{String(n.title ?? "Notification")}</h2><p>{String(n.message ?? "")}</p><small>{n.createdAt instanceof Date ? formatUserTime(n.createdAt, context.account.timezone) : ""} · {n.readAt ? "Read" : "Unread"}</small><DashboardNotificationButton id={n.id} realm={realm} read={!!n.readAt} /></article>)}{page.data?.nextCursor && <Link href={`${href("notifications")}${read ? `&read=${read}` : ""}&cursor=${encodeURIComponent(page.data.nextCursor)}`}>More notifications</Link>}</section>;
-  } else if (view === "worker-profile") content = <section><h1>My Profile</h1><dl className="nj-detail"><dt>Name</dt><dd>{context.account.name}</dd><dt>Email</dt><dd>{context.account.email}</dd><dt>Timezone</dt><dd>{context.account.timezone}</dd><dt>Workspace access</dt><dd>{worker ? "Active worker assignment verified" : context.navigation.status === "UNAVAILABLE" ? "Temporarily unavailable" : "No active worker assignment verified"}</dd></dl><Link href={href("my-applications")}>My applications and offers</Link>{realm === "jobs" ? <p><Link href={base.startsWith("/sites/") ? "/sites/jobs/reset-password" : "/reset-password"}>Reset my password</Link></p> : <p><Link href="/app/account">Account preferences</Link></p>}</section>;
+  } else if (view === "worker-profile") content = <section><h1>My Profile</h1><dl className="nj-detail"><dt>Name</dt><dd>{context.account.name}</dd><dt>Email</dt><dd>{context.account.email}</dd><dt>Timezone</dt><dd>{context.account.timezone}</dd><dt>Account</dt><dd>{worker ? "Active worker assignment verified" : context.navigation.status === "UNAVAILABLE" ? "Temporarily unavailable" : "Candidate account"}</dd></dl><Link href={href("my-applications")}>My applications and offers</Link>{realm === "jobs" ? <p><Link href={base.startsWith("/sites/") ? "/sites/jobs/reset-password" : "/reset-password"}>Reset my password</Link></p> : <p><Link href="/app/account">Account preferences</Link></p>}</section>;
   else if (view === "worker-help" && !worker) content = <section><h1>Help &amp; Support</h1><p>Check your application’s recorded next step and any candidate-visible message from management.</p><Link href={href("my-applications")}>My applications</Link><p>No support messaging channel has been configured for applicants. This page does not send messages.</p></section>;
-  else if (["opportunities", "my-applications"].includes(view)) content = <ApplicationWorkspace {...shared} />;
+  else if (view === "opportunities") content = <Suspense fallback={<ExploreLoading />}><ExploreOpportunities userId={userId} base={base} query={query} /></Suspense>;
+  else if (view === "my-applications") content = <ApplicationWorkspace {...shared} />;
   else if (financeViews.includes(view)) content = <FinanceWorkspace {...shared} />;
   else if (["my-onboarding", "worker-training"].includes(view) || view === "my-day" && !worker) content = <OnboardingWorkspace {...shared} query={{ ...query, view: view === "my-day" ? "my-day" : "my-onboarding" }} />;
   else if (!worker) content = <section><h1>{view === "my-work" ? "My Work" : "Your workspace"}</h1><p>{context.navigation.status === "UNAVAILABLE" ? "Worker access could not be verified. Try again before continuing." : "This workspace requires an authorized active worker assignment. Offer acceptance and training alone do not grant work access."}</p><Link href={href("my-applications")}>My applications</Link><Link href={href("my-onboarding")}>My learning</Link></section>;
@@ -45,5 +49,5 @@ export async function ParticipantDashboard({ userId, realm, base, query }: Props
   else if (leadViews.includes(view)) content = <LeadWorkspace {...shared} />;
   else content = <EmployeeWorkspace {...shared} />;
   const logout = realm === "jobs" ? <form action={portalLogoutAction}><input type="hidden" name="site" value="jobs" /><button type="submit">Logout</button></form> : <form action={logoutAction}><button type="submit">Logout</button></form>;
-  return <DashboardShell base={base} view={view} search={typeof query.search === "string" ? query.search.slice(0, 120) : ""} {...context.account} unread={context.notifications.data?.length ?? null} logout={logout}>{content}</DashboardShell>;
+  return <DashboardShell base={base} view={view} candidate={!worker} search={typeof query.search === "string" ? query.search.slice(0, 120) : ""} {...context.account} unread={context.notifications.data?.length ?? null} logout={logout}>{content}</DashboardShell>;
 }

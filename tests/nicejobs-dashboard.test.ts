@@ -148,12 +148,17 @@ describe("Nice Jobs participant dashboard", () => {
     const paths = { home: "/sites/jobs", login: "/sites/jobs/login", opportunities: "/sites/jobs/opportunities", signup: "/sites/jobs/signup", gateway: "/sites/jobs/gateway" };
     const site = { id: "jobs", theme: "jobs", name: "Nice Jobs", image: "/images/nice-jobs.jpg", eyebrow: "Test catalogue", description: "Synthetic catalogue", domain: "jobs.example.invalid", focus: [] };
     const requestPortal = async () => ({ site, paths });
+    const landingOpportunities = vi.fn(async () => ({ records: [], nextCursor: null }));
     const { default: PortalLanding } = loadComponent<{ default: (props: { params: Promise<{ site: string }> }) => Promise<ReactNode> }>("src/app/sites/[site]/page.tsx", {
       "@/server/portals/request": { requestPortal }, "@/server/portals/sites": { portalSites: [] },
       "../labs-ui/landing": { LabsLanding: () => { throw new Error("Labs landing must not render for Nice Jobs"); } },
+      "../jobs-ui/landing": { JobsLanding: ({ paths: landingPaths }: { paths: typeof paths }) => createElement("a", { href: landingPaths.opportunities }, "Explore Opportunities") },
+      "@/server/nicejobs/applications": { applicationService: { publicOpportunities: landingOpportunities } },
+      "@/server/nicejobs/input": { NiceJobsUnavailable },
     });
     const landing = renderToStaticMarkup(await PortalLanding({ params: Promise.resolve({ site: "jobs" }) }));
-    expect(landing).toContain('aria-label="Job opportunities"');
+    expect(landing).toContain("Explore Opportunities");
+    expect(landingOpportunities).toHaveBeenCalledWith({ kind: "jobs", limit: 3 });
     expect(landing).not.toContain("Internships");
     const publicOpportunities = vi.fn(async () => ({ records: [], nextCursor: null }));
     const { default: Opportunities, metadata } = loadComponent<{ default: (props: { params: Promise<{ site: string }>; searchParams: Promise<{ kind?: string }> }) => Promise<ReactNode>; metadata: { description: string } }>("src/app/sites/[site]/opportunities/page.tsx", {

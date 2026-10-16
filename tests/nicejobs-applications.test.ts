@@ -209,6 +209,22 @@ describe("Nice Jobs applications and screening", () => {
     const a = await submitted(); expect(a.applicationId).toMatch(/^NJ-\d{4}-000001$/);
     expect(await db.person.count()).toBe(people); expect(await db.user.count()).toBe(users); expect(await db.niceJobsAssignment.count()).toBe(0);
   });
+  it("filters the candidate catalogue by recorded title and area without exposing restricted jobs", async () => {
+    const internal = await jobs.create(manager, { code: "INTERNAL-CATALOGUE", title: "Internal role", description: "Internal test role", visibility: "INTERNAL", divisionIds: [labs], configuration: { schemaVersion: 1, opportunity: await fixtureOpportunity(db, manager) } });
+    await jobs.changeJob(manager, { id: internal.id, revision: 0, to: "PUBLISHED", reason: "Isolated internal publication" });
+    const draft = await jobs.create(manager, { code: "DRAFT-CATALOGUE", title: "Draft role", divisionIds: [labs], visibility: "PUBLIC" });
+    expect((await applications.opportunities(candidate)).records.map(row => row.id)).toEqual([versionId]);
+    expect((await applications.opportunities(candidate, { search: "Isolated", divisionId: labs })).records.map(row => row.id)).toEqual([versionId]);
+    expect((await applications.opportunities(candidate, { search: "missing" })).records).toEqual([]);
+    expect((await applications.opportunities(candidate, { divisionId: startup })).records).toEqual([]);
+    expect((await applications.opportunities(candidate, { versionId: internal.id })).records).toEqual([]);
+    expect((await applications.opportunities(candidate, { versionId: draft.id })).records).toEqual([]);
+    await expect(applications.opportunities(outsider)).rejects.toThrow();
+    await expect(applications.opportunities(candidate, { companyId: foreign })).rejects.toThrow();
+    const current = (await jobs.detail(manager, versionId)).version;
+    await jobs.changeJob(manager, { id: versionId, revision: current.template.revision, to: "PAUSED", reason: "Isolated pause" });
+    expect((await applications.opportunities(candidate)).records).toEqual([]);
+  });
   it("rejects draft, review, paused, archived, historical and internal job submissions", async () => {
     const draft = await jobs.create(manager, { code: "DRAFT-TEST", title: "Draft", divisionIds: [labs], visibility: "PUBLIC" });
     await expect(applications.create(candidate, { versionId: draft.id, divisionId: labs })).rejects.toThrow();

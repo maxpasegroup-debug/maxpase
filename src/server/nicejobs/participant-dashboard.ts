@@ -49,6 +49,13 @@ export function createParticipantDashboard(services = dependencies) {
     const stage = participantStage(work?.status === "AVAILABLE", learning.data?.records.length ?? 0, applications.data?.records.some(a => ["APPROVED", "OFFER", "OFFER_ACCEPTED"].includes(a.status)) ?? false);
     return { applications, learning, opportunities, work, stage };
   }
+  async function candidateHome(userId: string) {
+    const [applications, opportunities] = await Promise.all([
+      dashboardRead(() => services.applications.list(userId, true, { limit: 3 })),
+      dashboardRead(() => services.applications.opportunities(userId, { limit: 3 }))
+    ]);
+    return { applications, opportunities };
+  }
   async function search(userId: string, worker: boolean, query: string) {
     const search = query.trim();
     if (!search || search.length > 120) return null;
@@ -57,6 +64,6 @@ export function createParticipantDashboard(services = dependencies) {
     const resources = worker ? await dashboardRead(() => services.knowledge.list(userId, { kind: "RESOURCE", management: false, search, limit: 10 })) : null;
     return { jobs, learning, resources };
   }
-  return { context, home, search, notifications, notificationPage };
+  return { context, home, candidateHome, search, notifications, notificationPage };
 }
 export const participantDashboard = createParticipantDashboard();
