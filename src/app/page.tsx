@@ -14,7 +14,7 @@ export default function Home() {
       <div className="group-hero-content"><p className="group-kicker"><Sparkles size={14} /> EDUCATION. ENTERPRISE. INNOVATION.</p><h1 id="group-title">Innovate.<br />Transform.<br /><span>Thrive.</span></h1><p className="group-hero-description">Connecting talent, ideas and technology.<br />Building what comes next, together.</p><a className="group-cta hero-cta" href="#companies">Discover our group<ArrowRight size={19} /></a></div>
       <div className="group-hero-art">
         <div className="group-hero-office">
-          <Image src="/images/group-workspace.webp" alt="Modern office meeting room with a conference table" fill priority unoptimized sizes="(max-width: 600px) 88vw, (max-width: 1000px) 46vw, 690px" />
+          <Image src="/images/group-workspace.webp" alt="Modern office meeting room with a conference table" fill priority sizes="(max-width: 600px) 88vw, (max-width: 1000px) 46vw, 690px" />
         </div>
         <div className="hero-art-card"><span className="hero-art-dot" /><span>MAXPASE OS</span><strong>One group.<br />Many possibilities.</strong><small>EDUCATION / ENTERPRISE / INNOVATION</small></div>
       </div>
