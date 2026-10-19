@@ -9,7 +9,7 @@ export default function BossLogin() {
     <Link className="group-wordmark" href="/"><Grid2X2 size={26} /><span>MAXPASE<span className="wordmark-sub">GROUP</span></span></Link>
     <section className="group-login-panel" aria-labelledby="login-title">
       <ShieldCheck className="login-shield" size={30} />
-      <p className="group-kicker">MAXPASE OS</p><h1 id="login-title">Welcome back.</h1>
+      <p className="group-kicker">MAXPASE OS / SECURE ACCESS</p><h1 id="login-title">Welcome back.</h1>
       <p className="login-subtitle">Sign in to your command center.</p>
       <form action={action} className="form-stack" aria-busy={pending}>
         <label>Email<input name="email" type="email" autoComplete="username" placeholder="boss@maxpase.com" required maxLength={254} /></label>

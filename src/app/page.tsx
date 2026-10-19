@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowDown, ArrowUpRight, ArrowRight, Grid2X2, GraduationCap, Lightbulb, Cpu } from "lucide-react";
+import { ArrowDown, ArrowUpRight, ArrowRight, Grid2X2, GraduationCap, Lightbulb, Cpu, Sparkles } from "lucide-react";
 
 const companies = [
   { number: "01", name: "AIRA Skill City", legal: "AIRA SKILL CITY PRIVATE LIMITED", description: "Skills. Startups. Careers.", icon: GraduationCap, brands: [["Aira Skill City", "https://airaskillcity.com"], ["Startup School", "https://airastartupskool.com"], ["AIRA Labs", "https://airalabs.online"], ["Nice Jobs", "https://nicejobs.online"]] },
@@ -10,7 +10,14 @@ export default function Home() {
   return <main className="group-landing">
     <header className="group-header"><Link className="group-wordmark" href="/" aria-label="MAXPASE GROUP home"><Grid2X2 size={28} /><span>MAXPASE<span className="wordmark-sub">GROUP</span></span></Link><nav aria-label="Public navigation"><a className="group-about-link" href="#companies">Our companies</a><Link className="group-cta" href="/login">Login<ArrowUpRight size={17} /></Link></nav></header>
     <section className="group-hero" aria-labelledby="group-title">
-      <div className="group-hero-content"><p className="group-kicker">EDUCATION. ENTERPRISE. INNOVATION.</p><h1 id="group-title">MAXPASE<br />GROUP<span className="hero-period">.</span></h1><p className="group-hero-description">Connecting talent, ideas and technology.<br />Building what comes next, together.</p><a className="group-cta hero-cta" href="#companies">Discover our group<ArrowRight size={19} /></a></div>
+      <div className="group-hero-content"><p className="group-kicker"><Sparkles size={14} /> EDUCATION. ENTERPRISE. INNOVATION.</p><h1 id="group-title">Innovate.<br />Transform.<br /><span>Thrive.</span></h1><p className="group-hero-description">Connecting talent, ideas and technology.<br />Building what comes next, together.</p><a className="group-cta hero-cta" href="#companies">Discover our group<ArrowRight size={19} /></a></div>
+      <div className="group-hero-art" aria-hidden="true">
+        <div className="hero-art-orbit hero-art-orbit-one" /><div className="hero-art-orbit hero-art-orbit-two" />
+        <div className="hero-art-platform"><div className="hero-art-city">
+          <span className="hero-building building-one" /><span className="hero-building building-two" /><span className="hero-building building-three" /><span className="hero-building building-four" /><span className="hero-building building-five" /><span className="hero-building building-six" />
+        </div></div>
+        <div className="hero-art-card"><span className="hero-art-dot" /><span>MAXPASE OS</span><strong>One group.<br />Many possibilities.</strong><small>EDUCATION / ENTERPRISE / INNOVATION</small></div>
+      </div>
       <div className="group-hero-footer"><span>AIRA SKILL CITY / PEARN / TOP RANK AI</span><a href="#companies" aria-label="Explore our companies"><ArrowDown size={22} /></a></div>
     </section>
     <section className="group-companies" id="companies"><header><p className="group-kicker">OUR ECOSYSTEM</p><h2>Distinct ambitions.<br />One connected group.</h2><p>Education, entrepreneurship and technology brought together under MAXPASE GROUP.</p></header><div className="group-company-grid">{companies.map(c => <article className="group-public-company" key={c.number}><div className="company-topline"><span>{c.number}</span><c.icon size={26} /></div><h3>{c.name}</h3><p>{c.description}</p><ul>{c.brands.map(([label, url]) => <li key={label}><a href={url} target="_blank" rel="noopener noreferrer">{label}<ArrowUpRight size={16} /></a></li>)}</ul><small>{c.legal}</small></article>)}</div></section>
