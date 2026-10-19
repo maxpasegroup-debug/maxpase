@@ -1754,6 +1754,8 @@ progress { width: 120px; accent-color: var(--accent); }
 @media(max-width:760px) {
   .startup-header nav { gap: 12px; }
   .startup-header .portal-focus-link { display: none; }
+  .startup-header .portal-wordmark { max-width: none; flex-wrap: nowrap; gap: 8px; font-size: 14px; }
+  .startup-header .portal-wordmark > span { white-space: nowrap; }
   .startup-hero { grid-template-columns: 1fr; gap: 34px; min-height: 0; padding: 52px 7% 58px; }
   .startup-hero-copy h1 { max-width: 600px; font-size: clamp(45px,12vw,68px); }
   .startup-hero-art { min-height: 250px; aspect-ratio: 1.35; }
@@ -1768,3 +1770,137 @@ progress { width: 120px; accent-color: var(--accent); }
 @media(prefers-reduced-motion:reduce) {
   .startup-focus-grid article { transition: none; }
 }
+
+.al-public {
+  --labs-accent: #f05454;
+  color: #f4f0ef;
+  background:
+    radial-gradient(ellipse at 80% 4%, rgba(170, 37, 48, .16), transparent 35%),
+    #0c0d0f;
+}
+.al-public .al-header {
+  border-color: rgba(255,255,255,.09);
+  background: rgba(14,15,17,.94);
+}
+.al-public .al-brand { color: #f5f1f0; }
+.al-public .al-brand strong { color: #ff7777; }
+.al-public .al-header nav a:not(.al-button) { color: #d6cecd; }
+.al-public .al-header nav a:not(.al-button):hover,
+.al-public .al-footer a:hover { color: #ff9999; }
+.al-public .al-button {
+  border-color: #b92d37;
+  background: linear-gradient(135deg,#ef5555,#a91e28);
+  color: #fff;
+}
+.al-public .al-button:hover { filter: brightness(1.12); }
+.al-public :focus-visible { outline-color: #ff7777; }
+.al-public .al-hero {
+  isolation: isolate;
+  height: calc(100svh - 85px);
+  min-height: 0;
+  max-height: none;
+  background-position: center 44%;
+}
+.al-public .al-hero::before {
+  z-index: -1;
+  background: linear-gradient(90deg,rgba(8,8,10,.88),rgba(13,9,11,.68) 54%,rgba(10,10,12,.18));
+}
+.al-public .al-hero h1 { color: #fff; letter-spacing: -.045em; }
+.al-public .al-hero-description { color: #ff7777; }
+.al-public .al-hero p:not(.al-eyebrow) { color: #ded6d5; }
+.al-public .al-hero .al-button { border-color: #b92d37; }
+.al-public .al-image-caption { color: #c8bfbe; background: rgba(10,10,12,.72); }
+.al-public .al-band {
+  border-color: rgba(255,255,255,.09);
+  background: #101113;
+}
+.al-public .al-band:nth-of-type(odd) { background: #141416; }
+.al-public .al-band h2,
+.al-public .al-services h3,
+.al-public .al-process h3 { color: #f5f1f0; }
+.al-public .al-eyebrow { color: #f17676; letter-spacing: .12em; }
+.al-public .al-services { gap: 18px; }
+.al-public .al-services article {
+  min-height: 190px;
+  padding: 25px;
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: 14px;
+  background: linear-gradient(145deg,rgba(255,255,255,.065),rgba(255,255,255,.018));
+  box-shadow: 0 14px 38px rgba(0,0,0,.16);
+  backdrop-filter: blur(12px);
+}
+.al-public .al-services article svg,
+.al-public .al-services article:nth-child(n) svg { color: #ff7777; }
+.al-public .al-services p,
+.al-public .al-enquiry > div > p:not(.al-eyebrow) { color: #bdb5b4; line-height: 1.65; }
+.al-public .al-process { background: #101113; }
+.al-public .al-process ol { gap: 14px; }
+.al-public .al-process li {
+  padding: 22px;
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: 12px;
+  background: rgba(255,255,255,.035);
+}
+.al-public .al-process li > span { color: #f17676; }
+.al-public .al-enquiry { background: #141416; }
+.al-public .al-form {
+  padding: 26px;
+  border: 1px solid rgba(240,84,84,.28);
+  border-radius: 16px;
+  background: rgba(24,22,24,.84);
+  box-shadow: 0 24px 70px rgba(0,0,0,.28);
+  backdrop-filter: blur(14px);
+}
+.al-public .al-form label { color: #e8e0df; }
+.al-public .al-form input:not([type="checkbox"]),
+.al-public .al-form select,
+.al-public .al-form textarea {
+  border-color: #514244;
+  border-radius: 7px;
+  background: #0f1012;
+  color: #f6f2f1;
+}
+.al-public .al-form input:focus,
+.al-public .al-form textarea:focus { border-color: #ed6262; outline-color: rgba(237,98,98,.2); }
+.al-public .al-form .al-check { color: #c8bfbe; }
+.al-public .al-footer { border-top: 1px solid rgba(255,255,255,.09); color: #aaa3a2; }
+.al-public .al-footer strong { color: #f4efee; }
+.al-public .al-footer a { color: #ff8585; }
+
+@media(max-width:760px) {
+  .al-public .al-hero {
+    height: calc(100svh - 73px);
+    min-height: 0;
+  }
+}
+
+.portal-login.portal-labs {
+  background:
+    radial-gradient(ellipse at 82% 16%,rgba(205,51,56,.28),transparent 34%),
+    radial-gradient(ellipse at 8% 91%,rgba(118,25,34,.24),transparent 36%),
+    linear-gradient(135deg,#090a0c,#171012 58%,#210f12);
+}
+.portal-login.portal-labs::before {
+  background: repeating-linear-gradient(0deg,transparent 0 79px,rgba(255,204,204,.025) 80px),repeating-linear-gradient(90deg,transparent 0 79px,rgba(255,204,204,.025) 80px);
+}
+.portal-login.portal-labs > .portal-wordmark { color: #f5f2f1; }
+.portal-login.portal-labs > .portal-wordmark > span { color: #bbb4b3; }
+.portal-login.portal-labs .portal-login-panel {
+  border-color: rgba(230,75,75,.46);
+  background: rgba(21,20,22,.92);
+  box-shadow: 0 28px 90px rgba(0,0,0,.5),0 0 48px rgba(192,39,47,.11);
+  color: #f5f2f1;
+  backdrop-filter: blur(18px);
+}
+.portal-login.portal-labs .portal-login-panel h1 { color: #f6f2f1; }
+.portal-login.portal-labs .portal-login-panel .portal-kicker,
+.portal-login.portal-labs .portal-login-panel > svg { color: #f16a6a; }
+.portal-login.portal-labs .portal-login-panel > p.muted,
+.portal-login.portal-labs .portal-login-panel > p:last-child { color: #b9b0af; }
+.portal-login.portal-labs .portal-login-panel label { color: #e9e1e0; }
+.portal-login.portal-labs .portal-login-panel input { border-color: #514244; background: #0f1012; color: #f6f2f1; }
+.portal-login.portal-labs .portal-login-panel input:focus { border-color: #ed6262; outline-color: rgba(237,98,98,.2); }
+.portal-login.portal-labs .portal-login-panel .portal-button { background: linear-gradient(135deg,#ef4d4d,#a91e28); }
+.portal-login.portal-labs .portal-login-panel a { color: #ff8585; }
+.portal-login.portal-labs .portal-back { color: #d1c6c5; }
+.portal-login.portal-labs :is(a,button,input):focus-visible { outline: 3px solid #ff7474; outline-offset: 3px; }

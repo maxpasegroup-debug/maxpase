@@ -56,3 +56,48 @@
 @media (max-width: 760px) { .page { display: block; } .story { display: none; } .header { min-height: 70px; } .content { min-height: 100svh; } .formWrap { padding: 40px 22px 56px; } .footer { min-height: 62px; } }
 @media (max-width: 480px) { .header { gap: 12px; padding-inline: 18px; } .brand { gap: 7px; font-size: 16px; } .brandMark { width: 34px; height: 34px; } .header nav { gap: 10px; } .header nav a { font-size: 11px; } .formWrap { align-items: flex-start; padding: 38px 20px 45px; } .formContent h1 { font-size: 31px; } .footer { padding-inline: 20px; } .footer span { display: none; } }
 @media (prefers-reduced-motion: reduce) { .formContent { animation: none; } .button { transition: none; } .button:hover, .button:active { transform: none; } }
+
+.page {
+  color: #f4f0ef;
+  background:
+    radial-gradient(ellipse at 78% 14%,rgba(178,38,47,.2),transparent 38%),
+    #0c0d0f;
+}
+.story { background: #151012; }
+.story::after { background: linear-gradient(180deg,rgba(12,10,12,.1),rgba(8,8,10,.88)); }
+.storyContent p { color: #ff8585; }
+.content { background: rgba(14,15,17,.96); }
+.header, .footer { border-color: rgba(255,255,255,.09); }
+.brand { color: #f5f1f0; }
+.brandMark { background: linear-gradient(135deg,#ef5555,#a91e28); }
+.brand small { color: #aaa3a2; }
+.header nav a { color: #d1c9c8; }
+.header nav a[aria-current] { color: #ff8585; border-color: #ed4d4d; }
+.formContent {
+  padding: clamp(26px,4vw,42px);
+  border: 1px solid rgba(230,75,75,.34);
+  border-radius: 16px;
+  background: rgba(25,23,25,.78);
+  box-shadow: 0 28px 90px rgba(0,0,0,.36);
+  backdrop-filter: blur(18px);
+}
+.eyebrow { color: #f17676; }
+.formContent h1 { color: #f6f2f1; }
+.description, .hint, .notice { color: #b9b0af; }
+.field label, .acknowledge { color: #e9e1e0; }
+.field input { border-color: #514244; color: #f6f2f1; background: #0f1012; }
+.field input:hover, .field input:focus { border-color: #ed6262; }
+.passwordInput button { color: #d1c6c5; }
+.acknowledge input { accent-color: #ef5555; }
+.button { background: linear-gradient(135deg,#ef4d4d,#a91e28); }
+.button:hover { background: linear-gradient(135deg,#ff6262,#bd2632); }
+.supportLink, .switch { color: #c9c1c0; }
+.supportLink a, .switch a, .footer a { color: #ff8585; }
+.footer { color: #aaa3a2; }
+.page :where(a,button,input):focus-visible { outline-color: #ff7474; }
+
+@media (max-width: 760px) {
+  .story { display: flex; min-height: 210px; }
+  .storyContent { padding: 28px 24px; }
+  .storyContent h2 { font-size: 27px; }
+}
