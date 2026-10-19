@@ -2,12 +2,525 @@ generator client {
   provider = "prisma-client-js"
 }
 
+model NiceJobsIncentivePolicy {
+  id String @id @default(cuid())
+  companyId String
+  company Organization @relation("IncentiveCompany", fields: [companyId], references: [id], onDelete: Restrict)
+  divisionId String
+  division Organization @relation("IncentiveDivision", fields: [divisionId], references: [id], onDelete: Restrict)
+  jobVersionId String
+  jobVersion NiceJobsVersion @relation(fields: [jobVersionId], references: [id], onDelete: Restrict)
+  name String
+  versions NiceJobsIncentiveVersion[]
+  earnings NiceJobsIncentiveEarning[]
+  periods NiceJobsSettlementPeriod[]
+  createdAt DateTime @default(now())
+  @@index([companyId, divisionId, jobVersionId, id])
+}
+
+model NiceJobsIncentiveVersion {
+  id String @id @default(cuid())
+  policyId String
+  policy NiceJobsIncentivePolicy @relation(fields: [policyId], references: [id], onDelete: Restrict)
+  number Int
+  revision Int @default(0)
+  status String @default("DRAFT")
+  ownerUserId String
+  owner User @relation("IncentiveOwner", fields: [ownerUserId], references: [id], onDelete: Restrict)
+  reviewerUserId String?
+  reviewer User? @relation("IncentiveReviewer", fields: [reviewerUserId], references: [id], onDelete: Restrict)
+  reviewedAt DateTime?
+  currency String
+  effectiveAt DateTime
+  expiresAt DateTime?
+  definition String
+  publishedAt DateTime?
+  createdAt DateTime @default(now())
+  earnings NiceJobsIncentiveEarning[]
+  adjustments NiceJobsWalletAdjustment[]
+  periods NiceJobsSettlementPeriod[]
+  @@unique([policyId, number])
+  @@index([policyId, status, effectiveAt, id])
+}
+
+model NiceJobsIncentiveEarning {
+  id String @id @default(cuid())
+  assignmentId String
+  assignment NiceJobsAssignment @relation(fields: [assignmentId], references: [id], onDelete: Restrict)
+  policyId String
+  policy NiceJobsIncentivePolicy @relation(fields: [policyId], references: [id], onDelete: Restrict)
+  policyVersionId String
+  policyVersion NiceJobsIncentiveVersion @relation(fields: [policyVersionId], references: [id], onDelete: Restrict)
+  snapshotId String
+  snapshot NiceJobsPerformanceSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Restrict)
+  periodStart DateTime
+  periodEnd DateTime
+  currency String
+  amountMinor BigInt?
+  eligibility String
+  calculation String
+  status String @default("CALCULATED")
+  revision Int @default(0)
+  requestId String? @unique
+  request OperationalRequest? @relation(fields: [requestId], references: [id], onDelete: Restrict)
+  creatorUserId String
+  creator User @relation(fields: [creatorUserId], references: [id], onDelete: Restrict)
+  createdAt DateTime @default(now())
+  ledger NiceJobsWalletLedger?
+  @@unique([assignmentId, policyId, periodStart, periodEnd])
+  @@index([assignmentId, status, currency, id])
+  @@index([policyVersionId, status, id])
+}
+
+model NiceJobsWallet {
+  id String @id @default(cuid())
+  assignmentId String
+  assignment NiceJobsAssignment @relation(fields: [assignmentId], references: [id], onDelete: Restrict)
+  currency String
+  status String @default("OPEN")
+  revision Int @default(0)
+  creatorUserId String
+  creator User @relation(fields: [creatorUserId], references: [id], onDelete: Restrict)
+  createdAt DateTime @default(now())
+  ledger NiceJobsWalletLedger[]
+  adjustments NiceJobsWalletAdjustment[]
+  statements NiceJobsSettlementStatement[]
+  exceptions NiceJobsFinanceException[]
+  @@unique([assignmentId, currency])
+}
+
+model NiceJobsWalletAdjustment {
+  id String @id @default(cuid())
+  walletId String
+  wallet NiceJobsWallet @relation(fields: [walletId], references: [id], onDelete: Restrict)
+  policyVersionId String
+  policyVersion NiceJobsIncentiveVersion @relation(fields: [policyVersionId], references: [id], onDelete: Restrict)
+  direction String
+  amountMinor BigInt
+  reason String
+  description String
+  privateNote String?
+  reversalProposal NiceJobsWalletReversalProposal?
+  status String @default("DRAFT")
+  revision Int @default(0)
+  requestId String? @unique
+  request OperationalRequest? @relation(fields: [requestId], references: [id], onDelete: Restrict)
+  creatorUserId String
+  creator User @relation(fields: [creatorUserId], references: [id], onDelete: Restrict)
+  createdAt DateTime @default(now())
+  ledger NiceJobsWalletLedger?
+  @@index([walletId, status, id])
+}
+
+model NiceJobsWalletReversalProposal {
+  id String @id @default(cuid())
+  adjustmentId String @unique
+  adjustment NiceJobsWalletAdjustment @relation(fields: [adjustmentId], references: [id], onDelete: Restrict)
+  ledgerId String
+  ledger NiceJobsWalletLedger @relation(fields: [ledgerId], references: [id], onDelete: Restrict)
+  @@index([ledgerId])
+}
+
+model NiceJobsWalletLedger {
+  reversalProposals NiceJobsWalletReversalProposal[]
+  id String @id @default(cuid())
+  walletId String
+  wallet NiceJobsWallet @relation(fields: [walletId], references: [id], onDelete: Restrict)
+  type String
+  amountMinor BigInt
+  currency String
+  status String @default("POSTED")
+  earningId String? @unique
+  earning NiceJobsIncentiveEarning? @relation(fields: [earningId], references: [id], onDelete: Restrict)
+  adjustmentId String? @unique
+  adjustment NiceJobsWalletAdjustment? @relation(fields: [adjustmentId], references: [id], onDelete: Restrict)
+  statementId String? @unique
+  statement NiceJobsSettlementStatement? @relation("SettlementDebit", fields: [statementId], references: [id], onDelete: Restrict)
+  reversesId String? @unique
+  reverses NiceJobsWalletLedger? @relation("WalletReversal", fields: [reversesId], references: [id], onDelete: Restrict)
+  reversal NiceJobsWalletLedger? @relation("WalletReversal")
+  reference String @unique
+  description String
+  actorUserId String
+  actor User @relation(fields: [actorUserId], references: [id], onDelete: Restrict)
+  createdAt DateTime @default(now())
+  lines NiceJobsSettlementLine[]
+  @@index([walletId, type, createdAt, id])
+}
+
+model NiceJobsSettlementPeriod {
+  id String @id @default(cuid())
+  policyId String
+  policy NiceJobsIncentivePolicy @relation(fields: [policyId], references: [id], onDelete: Restrict)
+  policyVersionId String
+  policyVersion NiceJobsIncentiveVersion @relation(fields: [policyVersionId], references: [id], onDelete: Restrict)
+  from DateTime
+  until DateTime
+  currency String
+  status String @default("OPEN")
+  revision Int @default(0)
+  requestId String? @unique
+  request OperationalRequest? @relation(fields: [requestId], references: [id], onDelete: Restrict)
+  creatorUserId String
+  creator User @relation(fields: [creatorUserId], references: [id], onDelete: Restrict)
+  createdAt DateTime @default(now())
+  approvedAt DateTime?
+  closedAt DateTime?
+  statements NiceJobsSettlementStatement[]
+  @@unique([policyId, from, until])
+  @@index([policyVersionId, status, from, id])
+}
+
+model NiceJobsSettlementStatement {
+  id String @id @default(cuid())
+  periodId String
+  period NiceJobsSettlementPeriod @relation(fields: [periodId], references: [id], onDelete: Restrict)
+  walletId String
+  wallet NiceJobsWallet @relation(fields: [walletId], references: [id], onDelete: Restrict)
+  currency String
+  amountMinor BigInt
+  snapshot String
+  status String @default("REVIEW")
+  createdAt DateTime @default(now())
+  lines NiceJobsSettlementLine[]
+  debit NiceJobsWalletLedger? @relation("SettlementDebit")
+  payout NiceJobsPayoutIntent?
+  @@unique([periodId, walletId])
+  @@index([walletId, status, id])
+}
+
+model NiceJobsSettlementLine {
+  id String @id @default(cuid())
+  statementId String
+  statement NiceJobsSettlementStatement @relation(fields: [statementId], references: [id], onDelete: Restrict)
+  ledgerId String
+  ledger NiceJobsWalletLedger @relation(fields: [ledgerId], references: [id], onDelete: Restrict)
+  activeLedgerId String? @unique
+  amountMinor BigInt
+  @@unique([statementId, ledgerId])
+  @@index([ledgerId])
+}
+
+model NiceJobsPayoutIntent {
+  id String @id @default(cuid())
+  statementId String @unique
+  statement NiceJobsSettlementStatement @relation(fields: [statementId], references: [id], onDelete: Restrict)
+  amountMinor BigInt
+  currency String
+  status String @default("PROVIDER_NOT_CONFIGURED")
+  reference String @unique
+  providerReference String? @unique
+  creatorUserId String
+  creator User @relation(fields: [creatorUserId], references: [id], onDelete: Restrict)
+  createdAt DateTime @default(now())
+  @@index([status, createdAt, id])
+}
+
+model NiceJobsFinanceException {
+  id String @id @default(cuid())
+  companyId String
+  company Organization @relation("FinanceExceptionCompany", fields: [companyId], references: [id], onDelete: Restrict)
+  divisionId String
+  division Organization @relation("FinanceExceptionDivision", fields: [divisionId], references: [id], onDelete: Restrict)
+  walletId String?
+  wallet NiceJobsWallet? @relation(fields: [walletId], references: [id], onDelete: Restrict)
+  code String
+  summary String
+  reference String @unique
+  actorUserId String
+  actor User @relation(fields: [actorUserId], references: [id], onDelete: Restrict)
+  createdAt DateTime @default(now())
+  @@index([companyId, divisionId, createdAt, id])
+}
+
+model NiceJobsPerformanceFramework {
+  id String @id @default(cuid())
+  companyId String
+  company Organization @relation("PerformanceCompany", fields: [companyId], references: [id], onDelete: Restrict)
+  divisionId String
+  division Organization @relation("PerformanceDivision", fields: [divisionId], references: [id], onDelete: Restrict)
+  jobVersionId String
+  jobVersion NiceJobsVersion @relation(fields: [jobVersionId], references: [id], onDelete: Restrict)
+  name String
+  versions NiceJobsPerformanceVersion[]
+  createdAt DateTime @default(now())
+  @@index([companyId, divisionId, jobVersionId, id])
+}
+
+model NiceJobsPerformanceVersion {
+  id String @id @default(cuid())
+  frameworkId String
+  framework NiceJobsPerformanceFramework @relation(fields: [frameworkId], references: [id], onDelete: Restrict)
+  number Int
+  revision Int @default(0)
+  status String @default("DRAFT")
+  ownerUserId String
+  owner User @relation(fields: [ownerUserId], references: [id], onDelete: Restrict)
+  period String
+  timezone String
+  effectiveAt DateTime
+  definition String
+  publishedAt DateTime?
+  createdAt DateTime @default(now())
+  snapshots NiceJobsPerformanceSnapshot[]
+  @@unique([frameworkId, number])
+  @@index([frameworkId, status, effectiveAt, id])
+}
+
+model NiceJobsPerformanceSnapshot {
+  incentiveEarnings NiceJobsIncentiveEarning[]
+  id String @id @default(cuid())
+  assignmentId String
+  assignment NiceJobsAssignment @relation(fields: [assignmentId], references: [id], onDelete: Restrict)
+  frameworkVersionId String
+  frameworkVersion NiceJobsPerformanceVersion @relation(fields: [frameworkVersionId], references: [id], onDelete: Restrict)
+  periodStart DateTime
+  periodEnd DateTime
+  revision Int @default(0)
+  supersedesId String? @unique
+  supersedes NiceJobsPerformanceSnapshot? @relation("PerformanceCorrection", fields: [supersedesId], references: [id], onDelete: Restrict)
+  correction NiceJobsPerformanceSnapshot? @relation("PerformanceCorrection")
+  correctionReason String?
+  results String
+  status String
+  generatedByUserId String
+  generatedBy User @relation(fields: [generatedByUserId], references: [id], onDelete: Restrict)
+  generatedAt DateTime @default(now())
+  reviews NiceJobsPerformanceReview[]
+  attention NiceJobsPerformanceAttention[]
+  pips NiceJobsPip[]
+  @@unique([assignmentId, frameworkVersionId, periodStart, periodEnd, revision])
+  @@index([assignmentId, periodEnd, id])
+  @@index([frameworkVersionId, status, periodEnd, id])
+}
+
+model NiceJobsPerformanceReview {
+  id String @id @default(cuid())
+  snapshotId String
+  snapshot NiceJobsPerformanceSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Restrict)
+  reviewerUserId String
+  reviewer User @relation(fields: [reviewerUserId], references: [id], onDelete: Restrict)
+  feedback String
+  privateNote String?
+  released Boolean @default(false)
+  followup String?
+  supportTaskId String?
+  supportTask Task? @relation(fields: [supportTaskId], references: [id], onDelete: Restrict)
+  acknowledgedAt DateTime?
+  createdAt DateTime @default(now())
+  @@index([snapshotId, released, id])
+}
+
+model NiceJobsPerformanceAttention {
+  id String @id @default(cuid())
+  snapshotId String
+  snapshot NiceJobsPerformanceSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Restrict)
+  metricKey String
+  status String @default("OPEN")
+  revision Int @default(0)
+  reason String
+  resolution String?
+  createdAt DateTime @default(now())
+  resolvedAt DateTime?
+  @@unique([snapshotId, metricKey])
+  @@index([status, snapshotId, id])
+}
+
+model NiceJobsPip {
+  id String @id @default(cuid())
+  assignmentId String
+  assignment NiceJobsAssignment @relation(fields: [assignmentId], references: [id], onDelete: Restrict)
+  snapshotId String
+  snapshot NiceJobsPerformanceSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Restrict)
+  managerId String
+  manager Person @relation(fields: [managerId], references: [id], onDelete: Restrict)
+  title String
+  reason String
+  workerMessage String
+  privateNote String?
+  objectives String
+  supportActions String
+  startAt DateTime
+  reviewAt DateTime
+  status String @default("DRAFT")
+  revision Int @default(0)
+  released Boolean @default(false)
+  requiredAck Boolean @default(false)
+  acknowledgedAt DateTime?
+  outcome String?
+  createdAt DateTime @default(now())
+  reviews NiceJobsPipReview[]
+  @@index([assignmentId, released, status, id])
+  @@index([managerId, status, reviewAt, id])
+}
+
+model NiceJobsPipReview {
+  id String @id @default(cuid())
+  pipId String
+  pip NiceJobsPip @relation(fields: [pipId], references: [id], onDelete: Restrict)
+  actorUserId String
+  actor User @relation(fields: [actorUserId], references: [id], onDelete: Restrict)
+  kind String
+  progress String?
+  comment String
+  privateNote String?
+  evidence String
+  nextAction String?
+  released Boolean @default(false)
+  changeSnapshot String?
+  createdAt DateTime @default(now())
+  @@index([pipId, released, id])
+}
+
+model NiceJobsKnowledge {
+  id String @id @default(cuid())
+  companyId String
+  company Organization @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  kind String
+  createdByUserId String
+  creator User @relation(fields: [createdByUserId], references: [id], onDelete: Restrict)
+  createdAt DateTime @default(now())
+  versions NiceJobsKnowledgeVersion[]
+  @@index([companyId, kind])
+}
+
+model NiceJobsKnowledgeVersion {
+  id String @id @default(cuid())
+  contentId String
+  content NiceJobsKnowledge @relation(fields: [contentId], references: [id], onDelete: Restrict)
+  number Int
+  revision Int @default(0)
+  status String @default("DRAFT")
+  current Boolean @default(false)
+  organizationId String
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  audience String
+  visibility String @default("WORKER")
+  jobId String?
+  job NiceJobsTemplate? @relation(fields: [jobId], references: [id], onDelete: Restrict)
+  jobVersionId String?
+  jobVersion NiceJobsVersion? @relation(fields: [jobVersionId], references: [id], onDelete: Restrict)
+  assignmentId String?
+  assignment NiceJobsAssignment? @relation(fields: [assignmentId], references: [id], onDelete: Restrict)
+  managerId String?
+  manager Person? @relation(fields: [managerId], references: [id], onDelete: Restrict)
+  ownerUserId String
+  owner User @relation(fields: [ownerUserId], references: [id], onDelete: Restrict)
+  title String
+  summary String
+  captions String @default("")
+  transcript String @default("")
+  purpose String
+  body String?
+  resourceType String?
+  url String?
+  privateReference String?
+  communicationType String?
+  communicationTemplateId String? @unique
+  communicationTemplate CommunicationTemplate? @relation(fields: [communicationTemplateId], references: [id], onDelete: Restrict)
+  relatedVersionId String?
+  relatedVersion NiceJobsKnowledgeVersion? @relation("RelatedKnowledge", fields: [relatedVersionId], references: [id], onDelete: Restrict)
+  relatedCommunications NiceJobsKnowledgeVersion[] @relation("RelatedKnowledge")
+  requiredAck Boolean @default(false)
+  priority String @default("NORMAL")
+  effectiveAt DateTime?
+  reviewAt DateTime?
+  expiresAt DateTime?
+  scheduledAt DateTime?
+  reviewedByUserId String?
+  reviewedAt DateTime?
+  publishedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  steps NiceJobsSopStep[] @relation("SopSteps")
+  referencingSteps NiceJobsSopStep[] @relation("StepResource")
+  receipts NiceJobsKnowledgeReceipt[]
+  workLinks NiceJobsKnowledgeWorkLink[]
+  @@unique([contentId, number])
+  @@index([organizationId, visibility, status, current, id])
+  @@index([jobId, jobVersionId, status, current])
+  @@index([assignmentId, managerId, status, current])
+  @@index([resourceType, status, current, id])
+}
+
+model NiceJobsContentFile {
+  id String @id @default(uuid())
+  companyId String
+  company Organization @relation("NiceJobsFileCompany", fields: [companyId], references: [id], onDelete: Restrict)
+  organizationId String
+  organization Organization @relation("NiceJobsFileScope", fields: [organizationId], references: [id], onDelete: Restrict)
+  uploaderUserId String
+  uploader User @relation(fields: [uploaderUserId], references: [id], onDelete: Restrict)
+  idempotencyKey String
+  fingerprint String
+  filename String
+  mime String
+  mediaType String
+  bytes Int
+  digest String
+  createdAt DateTime @default(now())
+  @@unique([uploaderUserId, idempotencyKey])
+  @@index([companyId, organizationId, id])
+}
+
+model NiceJobsSopStep {
+  id String @id @default(cuid())
+  versionId String
+  version NiceJobsKnowledgeVersion @relation("SopSteps", fields: [versionId], references: [id], onDelete: Restrict)
+  order Int
+  title String
+  instruction String
+  checklist String?
+  warning String?
+  escalation String?
+  resourceVersionId String?
+  resourceVersion NiceJobsKnowledgeVersion? @relation("StepResource", fields: [resourceVersionId], references: [id], onDelete: Restrict)
+  taskId String?
+  task Task? @relation(fields: [taskId], references: [id], onDelete: Restrict)
+  @@unique([versionId, order])
+}
+
+model NiceJobsKnowledgeReceipt {
+  id String @id @default(cuid())
+  versionId String
+  version NiceJobsKnowledgeVersion @relation(fields: [versionId], references: [id], onDelete: Restrict)
+  assignmentId String
+  assignment NiceJobsAssignment @relation(fields: [assignmentId], references: [id], onDelete: Restrict)
+  actorUserId String
+  actor User @relation(fields: [actorUserId], references: [id], onDelete: Restrict)
+  readAt DateTime?
+  acknowledgedAt DateTime?
+  archivedAt DateTime?
+  evidenceReference String?
+  @@unique([versionId, assignmentId])
+  @@index([assignmentId, readAt, acknowledgedAt, archivedAt])
+}
+
+model NiceJobsKnowledgeWorkLink {
+  id String @id @default(cuid())
+  versionId String
+  version NiceJobsKnowledgeVersion @relation(fields: [versionId], references: [id], onDelete: Restrict)
+  taskId String?
+  task Task? @relation(fields: [taskId], references: [id], onDelete: Restrict)
+  leadId String?
+  lead NiceJobsLead? @relation(fields: [leadId], references: [id], onDelete: Restrict)
+  followupId String?
+  followup NiceJobsLeadFollowup? @relation(fields: [followupId], references: [id], onDelete: Restrict)
+  @@unique([versionId, taskId])
+  @@unique([versionId, leadId])
+  @@unique([versionId, followupId])
+  @@index([taskId])
+  @@index([leadId])
+  @@index([followupId])
+}
+
 datasource db {
   provider = "sqlite"
   url      = env("DATABASE_URL")
 }
 
 model NiceJobsTemplate {
+  knowledgeVersions NiceJobsKnowledgeVersion[]
   id                 String            @id @default(cuid())
   companyId          String
   company            Organization      @relation(fields: [companyId], references: [id], onDelete: Restrict)
@@ -28,6 +541,10 @@ model NiceJobsTemplate {
 }
 
 model NiceJobsVersion {
+  incentivePolicies NiceJobsIncentivePolicy[]
+  performanceFrameworks NiceJobsPerformanceFramework[]
+  knowledgeVersions NiceJobsKnowledgeVersion[]
+  leadEligibility NiceJobsLeadEligibility[]
   trainingPlan NiceJobsTrainingPlan?
   id            String                @id @default(cuid())
   templateId    String
@@ -76,6 +593,26 @@ model NiceJobsWorkerProfile {
 }
 
 model NiceJobsAssignment {
+  incentiveEarnings NiceJobsIncentiveEarning[]
+  wallets NiceJobsWallet[]
+  performanceSnapshots NiceJobsPerformanceSnapshot[]
+  pips NiceJobsPip[]
+  knowledgeVersions NiceJobsKnowledgeVersion[]
+  knowledgeReceipts NiceJobsKnowledgeReceipt[]
+  ownedLeads NiceJobsLead[]
+  leadAssignments NiceJobsLeadAssignment[]
+  leadActivities NiceJobsLeadActivity[]
+  leadFollowups NiceJobsLeadFollowup[]
+  onboardingId String? @unique
+  onboarding NiceJobsOnboarding? @relation(fields: [onboardingId], references: [id], onDelete: Restrict)
+  readinessReviewId String? @unique
+  readinessReview NiceJobsTrainingReview? @relation(fields: [readinessReviewId], references: [id], onDelete: Restrict)
+  activatedAt DateTime?
+  activatedByUserId String?
+  activatedBy User? @relation("WorkerActivationActor", fields: [activatedByUserId], references: [id], onDelete: Restrict)
+  tasks Task[]
+  blockers ExecutionBlocker[]
+  dailyReports NiceJobsDailyReport[]
   id         String                @id @default(cuid())
   profileId  String
   profile    NiceJobsWorkerProfile @relation(fields: [profileId], references: [id], onDelete: Restrict)
@@ -99,6 +636,166 @@ model NiceJobsAssignment {
   @@index([divisionId, lifecycle, id])
   @@index([profileId, status, id])
   @@index([versionId, id])
+  @@index([managerId, status, id])
+}
+
+model NiceJobsDailyReport {
+  id String @id @default(cuid())
+  assignmentId String
+  assignment NiceJobsAssignment @relation(fields: [assignmentId], references: [id], onDelete: Restrict)
+  reportDate String
+  timezone String
+  revision Int @default(0)
+  supersedesId String? @unique
+  supersedes NiceJobsDailyReport? @relation("ReportCorrection", fields: [supersedesId], references: [id], onDelete: Restrict)
+  correction NiceJobsDailyReport? @relation("ReportCorrection")
+  taskSnapshot String
+  operationalSnapshot String?
+  blockerSnapshot String
+  notes String?
+  correctionReason String?
+  submittedByUserId String
+  submittedBy User @relation(fields: [submittedByUserId], references: [id], onDelete: Restrict)
+  submittedByPersonId String
+  submittedAt DateTime @default(now())
+  @@unique([assignmentId, reportDate, revision])
+  @@index([assignmentId, reportDate, id])
+}
+
+model NiceJobsLeadPolicy {
+  id String @id @default(cuid())
+  companyId String
+  company Organization @relation("LeadPolicyCompany", fields: [companyId], references: [id], onDelete: Restrict)
+  divisionId String
+  division Organization @relation("LeadPolicyDivision", fields: [divisionId], references: [id], onDelete: Restrict)
+  name String
+  definitionId String
+  definition WorkflowDefinition @relation(fields: [definitionId], references: [id], onDelete: Restrict)
+  status String @default("ACTIVE")
+  allowedSources String
+  followupRequiredStates String
+  claimAllowed Boolean @default(false)
+  unassignAllowed Boolean @default(false)
+  createdByUserId String
+  createdBy User @relation(fields: [createdByUserId], references: [id], onDelete: Restrict)
+  createdAt DateTime @default(now())
+  eligibility NiceJobsLeadEligibility[]
+  leads NiceJobsLead[]
+  @@index([companyId, divisionId, status, id])
+}
+
+model NiceJobsLeadEligibility {
+  policyId String
+  policy NiceJobsLeadPolicy @relation(fields: [policyId], references: [id], onDelete: Restrict)
+  versionId String
+  version NiceJobsVersion @relation(fields: [versionId], references: [id], onDelete: Restrict)
+  @@id([policyId, versionId])
+  @@index([versionId, policyId])
+}
+
+model NiceJobsLead {
+  knowledgeReferences NiceJobsKnowledgeWorkLink[]
+  id String @id @default(cuid())
+  companyId String
+  company Organization @relation("LeadCompany", fields: [companyId], references: [id], onDelete: Restrict)
+  divisionId String
+  division Organization @relation("LeadDivision", fields: [divisionId], references: [id], onDelete: Restrict)
+  policyId String
+  policy NiceJobsLeadPolicy @relation(fields: [policyId], references: [id], onDelete: Restrict)
+  workflowInstanceId String? @unique
+  workflowInstance WorkflowInstance? @relation(fields: [workflowInstanceId], references: [id], onDelete: Restrict)
+  name String
+  phone String
+  email String?
+  location String?
+  metadata String?
+  source String
+  externalReference String?
+  priority String @default("NORMAL")
+  currentWorkerAssignmentId String?
+  currentWorkerAssignment NiceJobsAssignment? @relation(fields: [currentWorkerAssignmentId], references: [id], onDelete: Restrict)
+  revision Int @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  assignments NiceJobsLeadAssignment[]
+  activities NiceJobsLeadActivity[]
+  followups NiceJobsLeadFollowup[]
+  blockers ExecutionBlocker[]
+  @@unique([companyId, divisionId, source, externalReference])
+  @@index([companyId, divisionId, id])
+  @@index([companyId, divisionId, phone])
+  @@index([companyId, divisionId, email])
+  @@index([currentWorkerAssignmentId, priority, id])
+  @@index([policyId, id])
+  @@index([companyId, divisionId, source, createdAt, id])
+}
+
+model NiceJobsLeadAssignment {
+  id String @id @default(cuid())
+  leadId String
+  lead NiceJobsLead @relation(fields: [leadId], references: [id], onDelete: Restrict)
+  workerAssignmentId String
+  workerAssignment NiceJobsAssignment @relation(fields: [workerAssignmentId], references: [id], onDelete: Restrict)
+  assignedByUserId String
+  assignedBy User @relation(fields: [assignedByUserId], references: [id], onDelete: Restrict)
+  assignedAt DateTime @default(now())
+  unassignedAt DateTime?
+  reason String
+  status String @default("ACTIVE")
+  followups NiceJobsLeadFollowup[]
+  @@index([leadId, status, id])
+  @@index([workerAssignmentId, assignedAt, id])
+}
+
+model NiceJobsLeadActivity {
+  id String @id @default(cuid())
+  leadId String
+  lead NiceJobsLead @relation(fields: [leadId], references: [id], onDelete: Restrict)
+  eventId String @unique
+  event OperationalEvent @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  workerAssignmentId String?
+  workerAssignment NiceJobsAssignment? @relation(fields: [workerAssignmentId], references: [id], onDelete: Restrict)
+  kind String
+  visibility String @default("WORKER")
+  createdAt DateTime @default(now())
+  @@index([leadId, visibility, id])
+  @@index([workerAssignmentId, kind, createdAt, leadId])
+}
+
+model NiceJobsLeadFollowup {
+  knowledgeReferences NiceJobsKnowledgeWorkLink[]
+  id String @id @default(cuid())
+  leadId String
+  lead NiceJobsLead @relation(fields: [leadId], references: [id], onDelete: Restrict)
+  assignmentHistoryId String
+  assignmentHistory NiceJobsLeadAssignment @relation(fields: [assignmentHistoryId], references: [id], onDelete: Restrict)
+  workerAssignmentId String
+  workerAssignment NiceJobsAssignment @relation(fields: [workerAssignmentId], references: [id], onDelete: Restrict)
+  scheduledAt DateTime
+  type String
+  purpose String
+  notes String?
+  status String @default("SCHEDULED")
+  revision Int @default(0)
+  completedAt DateTime?
+  outcome String?
+  nextAction String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([workerAssignmentId, status, scheduledAt, id])
+  @@index([leadId, status, id])
+}
+
+model TaskEvidence {
+  id String @id @default(cuid())
+  taskId String
+  task Task @relation(fields: [taskId], references: [id], onDelete: Restrict)
+  actorUserId String
+  actor User @relation(fields: [actorUserId], references: [id], onDelete: Restrict)
+  actorPersonId String
+  data String
+  createdAt DateTime @default(now())
+  @@index([taskId, actorPersonId, createdAt])
 }
 
 model NiceJobsApplication {
@@ -245,6 +942,7 @@ model NiceJobsTrainingPlan {
 }
 
 model NiceJobsOnboarding {
+  assignment NiceJobsAssignment?
   id String @id @default(cuid())
   reference String @unique @default(uuid())
   applicationId String @unique
@@ -313,6 +1011,7 @@ model NiceJobsTrainingSubmission {
 }
 
 model NiceJobsTrainingReview {
+  activatedAssignment NiceJobsAssignment?
   id String @id @default(cuid())
   onboardingId String
   onboarding NiceJobsOnboarding @relation(fields: [onboardingId], references: [id], onDelete: Restrict)
@@ -406,6 +1105,7 @@ model CommunicationConsent {
 }
 
 model CommunicationTemplate {
+  workforcePublication NiceJobsKnowledgeVersion?
   id             String                 @id @default(cuid())
   organizationId String
   organization   Organization           @relation(fields: [organizationId], references: [id], onDelete: Restrict)
@@ -544,6 +1244,10 @@ model AutomationRule {
   action         String
   condition      String
   version        Int             @default(0)
+  lifecycle      String          @default("LEGACY")
+  description    String?
+  divisionId     String?
+  versions       NiceJobsAutomationVersion[]
   jobs           ScheduledJob[]
   runs           AutomationRun[]
   createdAt      DateTime        @default(now())
@@ -589,7 +1293,65 @@ model AutomationRun {
   status      String
   resultId    String?
   failureCode String?
+  workflowVersionId String?
+  workflowVersion NiceJobsAutomationVersion? @relation(fields: [workflowVersionId], references: [id], onDelete: Restrict)
+  sourceEventId String?
+  correlationId String?
+  actorUserId String?
+  attempts Int @default(0)
+  maxAttempts Int @default(3)
+  nextRetryAt DateTime?
+  failureClass String?
+  startedAt DateTime?
+  finishedAt DateTime?
+  evidence String?
   createdAt   DateTime       @default(now())
+
+  @@index([ruleId, status, nextRetryAt, id])
+  @@index([sourceEventId, ruleId])
+}
+
+model NiceJobsAutomationVersion {
+  id String @id @default(cuid())
+  ruleId String
+  rule AutomationRule @relation(fields: [ruleId], references: [id], onDelete: Restrict)
+  number Int
+  definition String
+  status String @default("DRAFT")
+  reviewedByUserId String?
+  reviewedByPersonId String?
+  reviewedAt DateTime?
+  publishedAt DateTime?
+  createdAt DateTime @default(now())
+  runs AutomationRun[]
+  @@unique([ruleId, number])
+  @@index([ruleId, status, number])
+}
+
+model NiceJobsOperationalException {
+  id String @id @default(cuid())
+  companyId String
+  divisionId String
+  kind String
+  severity String
+  sourceType String
+  sourceId String
+  sourceKey String
+  sourceEventId String?
+  ownerUserId String?
+  status String @default("OPEN")
+  nextAction String
+  resolutionEvidence String?
+  acknowledgedByUserId String?
+  acknowledgedAt DateTime?
+  resolvedByUserId String?
+  resolvedAt DateTime?
+  revision Int @default(0)
+  detectedAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@unique([companyId, sourceKey])
+  @@index([companyId, divisionId, status, detectedAt, id])
+  @@index([ownerUserId, status, id])
 }
 
 model CommunicationRateBucket {
@@ -675,6 +1437,33 @@ enum GoalStatus {
 }
 
 model User {
+  bossNexaDirectives NexaDirective[] @relation("NexaBoss")
+  assignedNexaDirectives NexaDirective[] @relation("NexaDirector")
+  labsCustomerGrants LabsCustomerGrant[] @relation("LabsCustomer")
+  labsCustomerGrantsIssued LabsCustomerGrant[] @relation("LabsGrantIssuer")
+  niceJobsContentUploads NiceJobsContentFile[]
+  incentiveVersions NiceJobsIncentiveVersion[] @relation("IncentiveOwner")
+  reviewedIncentiveVersions NiceJobsIncentiveVersion[] @relation("IncentiveReviewer")
+  incentiveEarnings NiceJobsIncentiveEarning[]
+  wallets NiceJobsWallet[]
+  walletAdjustments NiceJobsWalletAdjustment[]
+  walletLedger NiceJobsWalletLedger[]
+  settlementPeriods NiceJobsSettlementPeriod[]
+  payoutIntents NiceJobsPayoutIntent[]
+  financeExceptions NiceJobsFinanceException[]
+  performanceVersions NiceJobsPerformanceVersion[]
+  performanceSnapshots NiceJobsPerformanceSnapshot[]
+  performanceReviews NiceJobsPerformanceReview[]
+  pipReviews NiceJobsPipReview[]
+  knowledgeCollections NiceJobsKnowledge[]
+  knowledgeVersions NiceJobsKnowledgeVersion[]
+  knowledgeReceipts NiceJobsKnowledgeReceipt[]
+  leadPolicies NiceJobsLeadPolicy[]
+  leadAssignments NiceJobsLeadAssignment[]
+  activatedWorkers NiceJobsAssignment[] @relation("WorkerActivationActor")
+  dailyReports NiceJobsDailyReport[]
+  taskEvidence TaskEvidence[]
+  reportedBlockers ExecutionBlocker[] @relation("WorkerBlockerReporter")
   ojtEnrollments NiceJobsOnboarding[] @relation("OjtReviewer")
   readinessEnrollments NiceJobsOnboarding[] @relation("ReadinessReviewer")
   trainingSubmissions NiceJobsTrainingSubmission[]
@@ -692,6 +1481,8 @@ model User {
   id                      String                   @id @default(cuid())
   email                   String                   @unique
   passwordHash            String?
+  emailVerifiedAt         DateTime?
+  emailAuthChallenges     EmailAuthChallenge[]
   timezone                String?
   status                  LifecycleStatus          @default(ACTIVE)
   personId                String?
@@ -715,6 +1506,25 @@ model User {
   updatedAt               DateTime                 @updatedAt
 }
 
+model EmailAuthChallenge {
+  id             String   @id @default(uuid())
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  email          String
+  purpose        String
+  otpHash        String
+  credentialHash String
+  status         String   @default("PENDING")
+  attempts       Int      @default(0)
+  expiresAt      DateTime
+  consumedAt     DateTime?
+  providerRef    String?
+  createdAt      DateTime @default(now())
+
+  @@index([userId, purpose, status])
+  @@index([expiresAt])
+}
+
 model Session {
   id        String   @id @default(cuid())
   userId    String
@@ -727,6 +1537,8 @@ model Session {
 }
 
 model Person {
+  managedPips NiceJobsPip[]
+  knowledgeManagerGroups NiceJobsKnowledgeVersion[]
   niceJobsApplications NiceJobsApplication[]
   niceJobsProfiles       NiceJobsWorkerProfile[]
   managedJobAssignments  NiceJobsAssignment[]    @relation("NiceJobsManager")
@@ -768,6 +1580,22 @@ model Person {
 }
 
 model Organization {
+  nexaDirectives NexaDirective[]
+  labsCustomerGrants LabsCustomerGrant[]
+  niceJobsContentFiles NiceJobsContentFile[] @relation("NiceJobsFileCompany")
+  niceJobsScopedFiles NiceJobsContentFile[] @relation("NiceJobsFileScope")
+  incentivePolicies NiceJobsIncentivePolicy[] @relation("IncentiveCompany")
+  divisionIncentivePolicies NiceJobsIncentivePolicy[] @relation("IncentiveDivision")
+  financeExceptions NiceJobsFinanceException[] @relation("FinanceExceptionCompany")
+  divisionFinanceExceptions NiceJobsFinanceException[] @relation("FinanceExceptionDivision")
+  performanceFrameworks NiceJobsPerformanceFramework[] @relation("PerformanceCompany")
+  divisionPerformanceFrameworks NiceJobsPerformanceFramework[] @relation("PerformanceDivision")
+  knowledgeCollections NiceJobsKnowledge[]
+  knowledgeScopes NiceJobsKnowledgeVersion[]
+  leadPoliciesCompany NiceJobsLeadPolicy[] @relation("LeadPolicyCompany")
+  leadPoliciesDivision NiceJobsLeadPolicy[] @relation("LeadPolicyDivision")
+  leadsCompany NiceJobsLead[] @relation("LeadCompany")
+  leadsDivision NiceJobsLead[] @relation("LeadDivision")
   niceJobsApplications NiceJobsApplication[]
   niceJobsTemplates        NiceJobsTemplate[]
   niceJobsAreas            NiceJobsVersionArea[]
@@ -1018,6 +1846,7 @@ model Project {
 
 // Discriminated executive records. Payload contracts are validated server-side.
 model ExecutiveRecord {
+  customerGrants LabsCustomerGrant[]
   id             String             @id @default(cuid())
   kind           String
   organizationId String
@@ -1039,6 +1868,25 @@ model ExecutiveRecord {
   @@index([organizationId, kind, status])
   @@index([projectId, kind, status])
   @@index([dueAt])
+}
+
+model LabsCustomerGrant {
+  id String @id @default(cuid())
+  organizationId String
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  leadId String
+  lead ExecutiveRecord @relation(fields: [leadId], references: [id], onDelete: Restrict)
+  customerUserId String
+  customer User @relation("LabsCustomer", fields: [customerUserId], references: [id], onDelete: Restrict)
+  issuedByUserId String
+  issuedBy User @relation("LabsGrantIssuer", fields: [issuedByUserId], references: [id], onDelete: Restrict)
+  verificationEvidence String
+  status String @default("ACTIVE")
+  createdAt DateTime @default(now())
+  revokedAt DateTime?
+
+  @@unique([leadId, customerUserId])
+  @@index([customerUserId, organizationId, status])
 }
 
 model ExecutiveHistory {
@@ -1092,6 +1940,14 @@ model Goal {
 }
 
 model Task {
+  performanceSupportReviews NiceJobsPerformanceReview[]
+  sopSteps NiceJobsSopStep[]
+  knowledgeReferences NiceJobsKnowledgeWorkLink[]
+  niceJobsAssignmentId String?
+  niceJobsAssignment NiceJobsAssignment? @relation(fields: [niceJobsAssignmentId], references: [id], onDelete: Restrict)
+  evidenceRequired Boolean @default(false)
+  revision Int @default(0)
+  evidence TaskEvidence[]
   id               String             @id @default(cuid())
   organizationId   String
   projectId        String?
@@ -1127,6 +1983,7 @@ model Task {
   @@index([organizationId, projectId])
   @@index([assigneePersonId, dueDate])
   @@index([organizationId, status, dueDate])
+  @@index([niceJobsAssignmentId, assigneePersonId, status, id])
 }
 
 model Milestone {
@@ -1177,6 +2034,14 @@ model ProgressUpdate {
 }
 
 model ExecutionBlocker {
+  niceJobsLeadId String?
+  niceJobsLead NiceJobsLead? @relation(fields: [niceJobsLeadId], references: [id], onDelete: Restrict)
+  niceJobsAssignmentId String?
+  niceJobsAssignment NiceJobsAssignment? @relation(fields: [niceJobsAssignmentId], references: [id], onDelete: Restrict)
+  reporterUserId String?
+  reporter User? @relation("WorkerBlockerReporter", fields: [reporterUserId], references: [id], onDelete: Restrict)
+  reason String?
+  revision Int @default(0)
   id                 String       @id @default(cuid())
   organizationId     String
   organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
@@ -1198,6 +2063,7 @@ model ExecutionBlocker {
   updatedAt          DateTime     @updatedAt
 
   @@index([organizationId, status])
+  @@index([niceJobsAssignmentId, status, id])
 }
 
 model Membership {
@@ -1314,6 +2180,7 @@ model SystemConfiguration {
 }
 
 model SiaIdentity {
+  preparedNexaDirectives NexaDirective[]
   communicationMessages CommunicationMessage[]
   id                    String                 @id @default(cuid())
   name                  String                 @default("SIA")
@@ -1332,6 +2199,48 @@ model SiaIdentity {
   roleAssignments       SiaRoleAssignment[]
   createdAt             DateTime               @default(now())
   updatedAt             DateTime               @updatedAt
+}
+
+model NexaIdentity {
+  id String @id
+  name String
+  status LifecycleStatus @default(ACTIVE)
+  createdAt DateTime @default(now())
+  directives NexaDirective[]
+}
+
+model NexaDirective {
+  id String @id @default(cuid())
+  nexaId String
+  nexa NexaIdentity @relation(fields: [nexaId], references: [id], onDelete: Restrict)
+  bossUserId String
+  boss User @relation("NexaBoss", fields: [bossUserId], references: [id], onDelete: Restrict)
+  directorUserId String
+  director User @relation("NexaDirector", fields: [directorUserId], references: [id], onDelete: Restrict)
+  organizationId String
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  siaId String?
+  sia SiaIdentity? @relation(fields: [siaId], references: [id], onDelete: Restrict)
+  actionId String? @unique
+  action SiaAction? @relation(fields: [actionId], references: [id], onDelete: Restrict)
+  bossInstruction String
+  groupPlan String
+  directorBrief String
+  siaPreparation String?
+  decisionReason String?
+  outcome String @default("AWAITING_DIRECTOR")
+  status String @default("DIRECTOR_REVIEW")
+  version Int @default(0)
+  idempotencyKey String
+  fingerprint String
+  decidedAt DateTime?
+  preparedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([bossUserId, idempotencyKey])
+  @@index([directorUserId, organizationId, status])
+  @@index([organizationId, status, createdAt])
 }
 
 model ReportingRelationship {
@@ -1550,6 +2459,7 @@ model SiaRun {
 }
 
 model SiaAction {
+  nexaDirective NexaDirective?
   id                 String              @id @default(cuid())
   siaId              String
   sia                SiaIdentity         @relation(fields: [siaId], references: [id], onDelete: Restrict)
@@ -1640,6 +2550,7 @@ model SiaApproval {
 }
 
 model OperationalEvent {
+  leadActivity NiceJobsLeadActivity?
   trainingReviews NiceJobsTrainingReview[]
   integrationEvents IntegrationEvent[]
   id                String             @id @default(cuid())
@@ -1664,6 +2575,7 @@ model OperationalEvent {
 }
 
 model WorkflowDefinition {
+  leadPolicies NiceJobsLeadPolicy[]
   id             String               @id @default(cuid())
   organizationId String
   organization   Organization         @relation(fields: [organizationId], references: [id], onDelete: Restrict)
@@ -1718,6 +2630,7 @@ model WorkflowTransition {
 }
 
 model WorkflowInstance {
+  lead NiceJobsLead?
   id             String               @id @default(cuid())
   definitionId   String
   definition     WorkflowDefinition   @relation(fields: [definitionId], references: [id], onDelete: Restrict)
@@ -1796,6 +2709,9 @@ model ApprovalRule {
 }
 
 model OperationalRequest {
+  incentiveEarning NiceJobsIncentiveEarning?
+  walletAdjustment NiceJobsWalletAdjustment?
+  settlementPeriod NiceJobsSettlementPeriod?
   niceJobsApplication NiceJobsApplication?
   communicationMessage CommunicationMessage?
   siaAction            SiaAction?

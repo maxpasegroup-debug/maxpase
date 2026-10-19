@@ -1,0 +1,26 @@
+{
+  "status": "PASS",
+  "recordedAt": "2026-10-08T16:44:51.959Z",
+  "browser": "154.0.8037.98",
+  "isolated": true,
+  "workflows": [
+    "canonical readiness activation",
+    "resource create/edit/review/publish and version history",
+    "structured SOP create/review/publish",
+    "internal communication publication with SOP reference",
+    "worker resource/SOP navigation",
+    "explicit worker read and acknowledgement",
+    "grounded read-only SIA",
+    "corporate/jobs session isolation"
+  ],
+  "screenshots": 44,
+  "widths": [
+    320,
+    390,
+    768,
+    1440
+  ],
+  "noPageOverflow": true,
+  "pageErrors": 0,
+  "limitations": "Local Chrome and simulated viewports only. Physical devices, screen readers, complete keyboard/usability and production NOT RUN."
+}

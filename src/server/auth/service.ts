@@ -9,6 +9,8 @@ import { BOSS_EMAIL, validateBossConfiguration } from "@/server/group/identity";
 import { requirePortalAccess } from "@/server/portals/policy";
 import { siteById, type PortalId } from "@/server/portals/sites";
 import { AccessError } from "@/server/authorization/engine";
+import { accountPortalRealm } from "./account-realm";
+import { claimJobsOtp, type JobsOtpProof } from "./jobs-otp-proof";
 
 const loginSchema = z.object({ email: z.string().trim().email().max(254).transform(v => v.toLowerCase()), password: z.string().min(8).max(72) });
 const issuer = "maxpase-os", audience = "maxpase-os-web";
@@ -16,19 +18,31 @@ const dummyHash = hashPassword("non-account-timing-comparison-only");
 
 export function createAuthenticationService(client: PrismaClient = prisma, now = () => new Date()) {
   const consume = createSecurityLimiter(client, now);
-  async function issue(userId: string, secret: string, passwordHash?: string | null, lifetimeMs = 7 * 86400000, portal?: PortalId) {
+  async function issue(userId: string, secret: string, passwordHash?: string | null, lifetimeMs = 7 * 86400000, portal?: PortalId, proof?: JobsOtpProof) {
+    if (portal === "jobs") {
+      if (!proof) throw new AccessError("Email verification required");
+      const attempt = await client.emailAuthChallenge.updateMany({ where: { id: proof.challengeId, userId, purpose: "LOGIN", status: "SENT", expiresAt: { gt: now() }, attempts: { lt: 5 } }, data: { attempts: { increment: 1 } } });
+      if (attempt.count !== 1) throw new AccessError("Invalid or expired code");
+    }
     return client.$transaction(async db => {
-      const user = await db.user.findUnique({ where: { id: userId }, include: { person: { select: { status: true } } } });
+      const user = await db.user.findUnique({ where: { id: userId }, include: { person: { select: { status: true, metadata: true } } } });
       if (!user || user.status !== "ACTIVE" || user.person && user.person.status !== "ACTIVE" || passwordHash !== undefined && user.passwordHash !== passwordHash) throw new Error("Inactive account");
-      const portalScope = portal ? await requirePortalAccess(db, userId, portal) : null;
+      const accountRealm = accountPortalRealm(user.person?.metadata);
+      if (accountRealm && portal !== accountRealm) throw new AccessError("Account realm unavailable");
+      const portalScope = portal ? await requirePortalAccess(db, userId, portal, portal === "labs") : null;
+      if (portal === "jobs") {
+        await claimJobsOtp(db, proof, user, "LOGIN", now());
+        await db.user.update({ where: { id: user.id }, data: { emailVerifiedAt: now() } });
+        await db.auditEvent.create({ data: buildAuditEventData({ actorUserId: user.id, actorPersonId: user.personId, organizationId: portalScope?.divisionId, action: "auth.email_verified", entityType: "EmailAuthChallenge", entityId: proof!.challengeId, result: "SUCCESS", metadata: { portal: "jobs", purpose: "LOGIN" } }) });
+      }
       const expiresAt = new Date(now().getTime() + lifetimeMs);
       const session = await db.session.create({ data: { userId, expiresAt } });
-      const token = await new SignJWT({ sessionId: session.id }).setProtectedHeader({ alg: "HS256" }).setSubject(userId).setIssuer(issuer).setAudience(portal ? `${audience}:portal:${portal}` : audience).setIssuedAt(Math.floor(now().getTime() / 1000)).setExpirationTime(Math.floor(expiresAt.getTime() / 1000)).sign(new TextEncoder().encode(secret));
+      const token = await new SignJWT({ sessionId: session.id, ...(portal === "jobs" ? { verifiedEmail: user.email } : {}) }).setProtectedHeader({ alg: "HS256" }).setSubject(userId).setIssuer(issuer).setAudience(portal ? `${audience}:portal:${portal}` : audience).setIssuedAt(Math.floor(now().getTime() / 1000)).setExpirationTime(Math.floor(expiresAt.getTime() / 1000)).sign(new TextEncoder().encode(secret));
       await db.auditEvent.create({ data: buildAuditEventData({ actorUserId: user.id, actorPersonId: user.personId, organizationId: portalScope?.divisionId, action: passwordHash === undefined ? "auth.session_created" : "auth.login", entityType: "Session", entityId: session.id, result: "SUCCESS", ...(portal ? { metadata: { portal } } : {}) }) });
       return { session, token };
     });
   }
-  async function authenticate(raw: unknown, secret: string, boss = false, portal?: PortalId) {
+  async function credentials(raw: unknown, boss = false, portal?: PortalId) {
     validateBossConfiguration();
     await consume("auth:global", 120, 60);
     const parsed = (boss ? loginSchema.extend({ password: z.string().regex(/^[0-9]{6}$/) }) : loginSchema).safeParse(raw);
@@ -48,16 +62,22 @@ export function createAuthenticationService(client: PrismaClient = prisma, now =
     }
     const candidate = await client.user.findUnique({ where: { email: parsed.data.email }, include: { person: { select: { status: true, metadata: true } } } });
     const valid = await verifyPassword(parsed.data.password, candidate?.passwordHash ?? await dummyHash);
-    if (!candidate?.passwordHash || !valid || candidate.status !== "ACTIVE" || candidate.person && candidate.person.status !== "ACTIVE" || boss && JSON.parse(candidate.person?.metadata ?? "{}").credentialKind !== "BOSS_PIN") {
+    if (!candidate?.passwordHash || !valid || candidate.status !== "ACTIVE" || candidate.person && candidate.person.status !== "ACTIVE" || accountPortalRealm(candidate.person?.metadata) && portal !== accountPortalRealm(candidate.person?.metadata) || boss && JSON.parse(candidate.person?.metadata ?? "{}").credentialKind !== "BOSS_PIN") {
       await client.auditEvent.create({ data: buildAuditEventData({ action: "auth.login", entityType: "User", result: "DENIED", metadata: { accountReference: securityKey("account", parsed.data.email) } }) });
       return null;
     }
-    try { return await issue(candidate.id, secret, candidate.passwordHash, boss || portal ? 8 * 3600000 : 7 * 86400000, portal); }
+    try { if (portal) await requirePortalAccess(client, candidate.id, portal); return candidate; }
     catch (e) {
       if (!portal || !(e instanceof AccessError)) throw e;
       await client.auditEvent.create({ data: buildAuditEventData({ actorUserId: candidate.id, actorPersonId: candidate.personId, action: "auth.login", entityType: "User", result: "DENIED", metadata: { portal } }) });
       return null;
     }
+  }
+  async function authenticate(raw: unknown, secret: string, boss = false, portal?: PortalId) {
+    const candidate = await credentials(raw, boss, portal);
+    if (!candidate || portal === "jobs") return null;
+    try { return await issue(candidate.id, secret, candidate.passwordHash, boss || portal ? 8 * 3600000 : 7 * 86400000, portal); }
+    catch (error) { if (portal && error instanceof AccessError) return null; throw error; }
   }
   async function payloadFor(token: string, secret: string, portal?: PortalId) {
     try { return (await jwtVerify(token, new TextEncoder().encode(secret), { issuer, audience: portal ? `${audience}:portal:${portal}` : audience, algorithms: ["HS256"], currentDate: now() })).payload; } catch { return null; }
@@ -65,8 +85,11 @@ export function createAuthenticationService(client: PrismaClient = prisma, now =
   async function validate(token: string, secret: string, portal?: PortalId) {
     const payload = await payloadFor(token, secret, portal);
     if (!payload?.sub || typeof payload.sessionId !== "string") return null;
-    const session = await client.session.findFirst({ where: { id: payload.sessionId, userId: payload.sub, expiresAt: { gt: now() }, user: { status: "ACTIVE", OR: [{ personId: null }, { person: { status: "ACTIVE" } }] } }, include: { user: { select: { email: true, personId: true } } } });
-    return session ? { userId: session.userId, sessionId: session.id, email: session.user.email, personId: session.user.personId } : null;
+    const session = await client.session.findFirst({ where: { id: payload.sessionId, userId: payload.sub, expiresAt: { gt: now() }, user: { status: "ACTIVE", OR: [{ personId: null }, { person: { status: "ACTIVE" } }] } }, include: { user: { select: { email: true, emailVerifiedAt: true, personId: true, person: { select: { metadata: true } } } } } });
+    if (portal === "jobs" && (!session?.user.emailVerifiedAt || payload.verifiedEmail !== session.user.email)) return null;
+    const accountRealm = accountPortalRealm(session?.user.person?.metadata);
+    if (accountRealm && portal !== accountRealm) return null;
+    return session ? { userId: session.userId, sessionId: session.id, email: session.user.email, personId: session.user.personId, needsPinChange: portal === "labs" && JSON.parse(session.user.person?.metadata ?? "{}").labsPinChangeRequired === true } : null;
   }
   async function revoke(token: string, secret: string, portal?: PortalId) {
     const payload = await payloadFor(token, secret, portal);
@@ -79,6 +102,6 @@ export function createAuthenticationService(client: PrismaClient = prisma, now =
       await db.auditEvent.create({ data: buildAuditEventData({ actorUserId: session.userId, actorPersonId: session.user.personId, action: "auth.logout", entityType: "Session", entityId: session.id, result: "SUCCESS" }) });
     });
   }
-  return { create: issue, login: (raw: unknown, secret: string) => authenticate(raw, secret), loginBoss: (raw: unknown, secret: string) => authenticate(raw, secret, true), loginPortal: (raw: unknown, secret: string, portal: PortalId) => { if (!siteById(portal)) throw new Error("Gateway unavailable"); return authenticate(raw, secret, false, portal); }, validate, revoke };
+  return { create: issue, checkJobsPassword: (raw: unknown) => credentials(raw, false, "jobs"), login: (raw: unknown, secret: string) => authenticate(raw, secret), loginBoss: (raw: unknown, secret: string) => authenticate(raw, secret, true), loginPortal: (raw: unknown, secret: string, portal: PortalId) => { if (!siteById(portal)) throw new Error("Gateway unavailable"); return authenticate(raw, secret, false, portal); }, validate, revoke };
 }
 export const authenticationService = createAuthenticationService();

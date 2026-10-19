@@ -5,13 +5,32 @@ import { createAccessContext, AccessError } from "@/server/authorization/engine"
 import { operationalEvent, notify } from "@/server/domain/operational-events";
 import { applicationStates, formConfiguration, validateAnswers, evaluate } from "./application-configuration";
 import { NiceJobsError, NiceJobsUnavailable, configuration } from "./input";
+import { opportunityProfile, publicationIssues } from "./opportunity-configuration";
+import { programmeChecklist } from "./programme-checklist";
 
-const include = { candidate: { select: { displayName: true } }, company: { select: { name: true } }, area: { include: { division: { select: { name: true, parentId: true, status: true } }, version: { include: { template: true } } } } } satisfies Prisma.NiceJobsApplicationInclude;
+const include = { candidate: { select: { displayName: true } }, company: { select: { name: true } }, area: { include: { division: { select: { name: true, parentId: true, status: true } }, version: { include: { template: true, areas: { take: 13, select: { divisionId: true } } } } } } } satisfies Prisma.NiceJobsApplicationInclude;
 const pageInput = z.object({ companyId: z.string().max(200).optional(), divisionId: z.string().max(200).optional(), versionId: z.string().max(200).optional(), status: z.enum(applicationStates).optional(), interviewFrom: z.string().date().optional(), interviewTo: z.string().date().optional(), search: z.string().trim().max(120).default(""), after: z.string().max(200).optional(), limit: z.number().int().min(1).max(100).default(25) }).strict();
 const createInput = z.object({ versionId: z.string().min(1).max(200), divisionId: z.string().min(1).max(200), answers: z.unknown().default({}) }).strict();
 const mutationInput = z.object({ reference: z.string().uuid(), revision: z.number().int().min(0), action: z.enum(["SAVE", "SUBMIT", "WITHDRAW", "ELIGIBILITY", "SCREENING", "ELIGIBILITY_REVIEW", "SCREENING_REVIEW", "SHORTLIST", "REJECT", "CLOSE"]), answers: z.unknown().optional(), reason: z.string().trim().max(1000).optional(), candidateMessage: z.string().trim().max(1000).optional(), category: z.string().trim().max(120).optional(), reviewResult: z.enum(["ELIGIBLE", "INELIGIBLE", "PASSED", "FAILED"]).optional() }).strict();
 const parseConfig = (raw: string | null) => raw ? configuration.parse(JSON.parse(raw)) : null;
 export function createApplicationService(client: PrismaClient = prisma) {
+  async function publicOpportunities(raw: unknown = {}) {
+    const q = z.object({ kind: z.enum(["jobs", "internships"]), after: z.string().max(200).optional(), limit: z.number().int().min(1).max(50).default(12) }).strict().parse(raw);
+    const company = await client.organization.findUnique({ where: { slug: "aira-skill-city" }, select: { id: true, status: true, type: true, company: { select: { status: true } } } });
+    if (!company || company.status !== "ACTIVE" || company.type !== "COMPANY" || company.company?.status !== "ACTIVE") throw new NiceJobsUnavailable("Opportunities are unavailable");
+    const product = await client.product.findUnique({ where: { organizationId_slug: { organizationId: company.id, slug: "nice-jobs" } }, select: { id: true, status: true, division: { select: { parentId: true, status: true, slug: true } } } });
+    if (!product || product.status !== "ACTIVE" || product.division?.parentId !== company.id || product.division.status !== "ACTIVE" || product.division.slug !== "aira-career-hub") throw new NiceJobsUnavailable("Opportunities are unavailable");
+    const rows = await client.niceJobsVersion.findMany({ where: {
+      status: "PUBLISHED", publishedAt: { not: null },
+      engagement: q.kind === "internships" ? "INTERNSHIP" : { not: "INTERNSHIP" },
+      publishedFor: { is: { companyId: company.id, productId: product.id, status: "PUBLISHED", visibility: "PUBLIC" } },
+      areas: { some: { division: { parentId: company.id, type: "DIVISION", status: "ACTIVE" } }, every: { division: { parentId: company.id, type: "DIVISION", status: "ACTIVE" } } },
+      ...(q.after ? { id: { gt: q.after } } : {})
+    }, select: { id: true, templateId: true, title: true, description: true, engagement: true, configuration: true, template: { select: { code: true, company: { select: { name: true } } } }, areas: { select: { divisionId: true, division: { select: { name: true } } }, take: 12 } }, orderBy: { id: "asc" }, take: q.limit + 1 });
+    const ready = [];
+    for (const row of rows.slice(0, q.limit)) if (!publicationIssues(opportunityProfile(row.configuration), row.description, row.engagement).length && (await programmeChecklist(client, company.id, row)).ready) ready.push(row);
+    return { records: ready.map(row => ({ id: row.id, title: row.title, description: row.description, engagement: row.engagement, code: row.template.code, company: row.template.company.name, areas: row.areas, disclosure: candidateDisclosure(row.configuration) })), nextCursor: rows.length > q.limit ? rows[q.limit - 1].id : null };
+  }
   async function boundary(db: Prisma.TransactionClient, userId: string, own: boolean) {
     const company = await db.organization.findUniqueOrThrow({ where: { slug: "aira-skill-city" }, select: { id: true, name: true, type: true, status: true, company: { select: { status: true } } } });
     const product = await db.product.findUniqueOrThrow({ where: { organizationId_slug: { organizationId: company.id, slug: "nice-jobs" } }, include: { division: true } });
@@ -27,7 +46,7 @@ export function createApplicationService(client: PrismaClient = prisma) {
   type Boundary = Awaited<ReturnType<typeof boundary>>;
   type Row = Prisma.NiceJobsApplicationGetPayload<{ include: typeof include }>;
   function publicRecord(row: Row) {
-    return { reference: row.reference, applicationId: row.applicationId, revision: row.revision, status: row.status, eligibilityStatus: row.eligibilityStatus, screeningStatus: row.screeningStatus, submittedAt: row.submittedAt, updatedAt: row.updatedAt, candidateMessage: row.candidateMessage, title: row.area.version.title, company: row.company.name, division: row.area.division.name, nextStep: row.status === "DRAFT" ? "Complete and submit your application" : row.status === "SHORTLISTED" ? "Await interview preparation" : row.status === "INTERVIEW" ? "Check your interview schedule" : row.status === "MANAGEMENT_REVIEW" ? "Await management decision" : row.status === "APPROVED" ? "Await offer preparation" : row.status === "OFFER" ? "Review your offer" : row.status === "OFFER_ACCEPTED" ? "Enroll in orientation from your accepted offer" : row.status === "OFFER_DECLINED" ? "No further action" : ["REJECTED", "WITHDRAWN", "CLOSED"].includes(row.status) ? "No further action" : row.eligibilityStatus === "NOT_CONFIGURED" || row.screeningStatus === "NOT_CONFIGURED" ? "Await configured review criteria" : "Application under review" };
+    return { reference: row.reference, applicationId: row.applicationId, revision: row.revision, status: row.status, eligibilityStatus: row.eligibilityStatus, screeningStatus: row.screeningStatus, submittedAt: row.submittedAt, updatedAt: row.updatedAt, candidateMessage: row.candidateMessage, title: row.area.version.title, company: row.company.name, division: row.area.division.name, disclosure: candidateDisclosure(row.area.version.configuration), nextStep: row.status === "DRAFT" ? "Complete and submit your application" : row.status === "SHORTLISTED" ? "Await interview preparation" : row.status === "INTERVIEW" ? "Check your interview schedule" : row.status === "MANAGEMENT_REVIEW" ? "Await management decision" : row.status === "APPROVED" ? "Await offer preparation" : row.status === "OFFER" ? "Review your offer" : row.status === "OFFER_ACCEPTED" ? "Enroll in orientation from your accepted offer" : row.status === "OFFER_DECLINED" ? "No further action" : ["REJECTED", "WITHDRAWN", "CLOSED"].includes(row.status) ? "No further action" : row.eligibilityStatus === "NOT_CONFIGURED" || row.screeningStatus === "NOT_CONFIGURED" ? "Await configured review criteria" : "Application under review" };
   }
   async function load(db: Prisma.TransactionClient, b: Boundary, reference: string, own: boolean) {
     const row = await db.niceJobsApplication.findFirst({ where: { reference, companyId: b.company.id, ...(own ? { candidateId: b.personId } : { divisionId: { in: b.ctx.organizationIds("nicejobs.application.read") } }), area: { version: { template: { companyId: b.company.id, productId: b.product.id } }, division: { parentId: b.company.id, status: "ACTIVE" } } }, include });
@@ -50,16 +69,20 @@ export function createApplicationService(client: PrismaClient = prisma) {
     return client.$transaction(async db => {
       const b = await boundary(db, userId, true);
       if (q.companyId && q.companyId !== b.company.id) throw new AccessError("Access denied");
-      const records = await db.niceJobsVersion.findMany({ where: { status: "PUBLISHED", publishedAt: { not: null }, publishedFor: { is: { companyId: b.company.id, productId: b.product.id, status: "PUBLISHED", visibility: "PUBLIC" } }, ...(q.versionId ? { id: q.versionId } : q.after ? { id: { gt: q.after } } : {}), title: { contains: q.search }, areas: { some: { ...(q.divisionId ? { divisionId: q.divisionId } : {}), division: { parentId: b.company.id, type: "DIVISION", status: "ACTIVE" } }, every: { division: { parentId: b.company.id, type: "DIVISION", status: "ACTIVE" } } } }, select: { id: true, title: true, description: true, engagement: true, configuration: true, template: { select: { code: true, company: { select: { name: true } } } }, areas: { take: 12, select: { divisionId: true, division: { select: { name: true } } } } }, orderBy: { id: "asc" }, take: q.limit + 1 });
-      return { records: records.slice(0, q.limit).map(v => ({ id: v.id, title: v.title, description: v.description, engagement: v.engagement, code: v.template.code, company: v.template.company.name, areas: v.areas, form: formConfiguration(parseConfig(v.configuration)) })), nextCursor: records.length > q.limit ? records[q.limit - 1].id : null };
+      const records = await db.niceJobsVersion.findMany({ where: { status: "PUBLISHED", publishedAt: { not: null }, engagement: { not: "INTERNSHIP" }, publishedFor: { is: { companyId: b.company.id, productId: b.product.id, status: "PUBLISHED", visibility: "PUBLIC" } }, ...(q.versionId ? { id: q.versionId } : q.after ? { id: { gt: q.after } } : {}), title: { contains: q.search }, areas: { some: { ...(q.divisionId ? { divisionId: q.divisionId } : {}), division: { parentId: b.company.id, type: "DIVISION", status: "ACTIVE" } }, every: { division: { parentId: b.company.id, type: "DIVISION", status: "ACTIVE" } } } }, select: { id: true, templateId: true, title: true, description: true, engagement: true, configuration: true, template: { select: { code: true, company: { select: { name: true } } } }, areas: { take: 12, select: { divisionId: true, division: { select: { name: true } } } } }, orderBy: { id: "asc" }, take: q.limit + 1 });
+      const ready = [];
+      for (const v of records.slice(0, q.limit)) if (!publicationIssues(opportunityProfile(v.configuration), v.description, v.engagement).length && (await programmeChecklist(db, b.company.id, v)).ready) ready.push(v);
+      return { records: ready.map(v => ({ id: v.id, title: v.title, description: v.description, engagement: v.engagement, code: v.template.code, company: v.template.company.name, areas: v.areas, disclosure: candidateDisclosure(v.configuration), form: formConfiguration(parseConfig(v.configuration)) })), nextCursor: records.length > q.limit ? records[q.limit - 1].id : null };
     });
   }
   async function create(userId: string, raw: unknown) {
     const data = createInput.parse(raw);
     try { return await client.$transaction(async db => {
       const b = await boundary(db, userId, true);
-      const area = await db.niceJobsVersionArea.findFirst({ where: { versionId: data.versionId, divisionId: data.divisionId, division: { parentId: b.company.id, type: "DIVISION", status: "ACTIVE" }, version: { status: "PUBLISHED", publishedAt: { not: null }, publishedFor: { is: { companyId: b.company.id, productId: b.product.id, status: "PUBLISHED", visibility: "PUBLIC" } } } }, include: { version: true } });
+      const area = await db.niceJobsVersionArea.findFirst({ where: { versionId: data.versionId, divisionId: data.divisionId, division: { parentId: b.company.id, type: "DIVISION", status: "ACTIVE" }, version: { status: "PUBLISHED", publishedAt: { not: null }, publishedFor: { is: { companyId: b.company.id, productId: b.product.id, status: "PUBLISHED", visibility: "PUBLIC" } } } }, include: { version: { include: { template: true, areas: { take: 13, select: { divisionId: true } } } } } });
       if (!area) throw new NiceJobsError("This job is not receiving applications");
+      if (publicationIssues(opportunityProfile(area.version.configuration), area.version.description, area.version.engagement).length) throw new NiceJobsError("This job's publication details are incomplete. Applications are unavailable.");
+      if (!(await programmeChecklist(db, b.company.id, area.version)).ready) throw new NiceJobsError("This job's programme setup is incomplete. Applications are unavailable.");
       const config = formConfiguration(parseConfig(area.version.configuration));
       const answers = checkedAnswers(config, data.answers, false);
       const row = await db.niceJobsApplication.create({ data: { candidateId: b.personId, creatorUserId: userId, companyId: b.company.id, versionId: data.versionId, divisionId: data.divisionId, answers: JSON.stringify(answers), activeKey: b.personId + ":" + data.versionId }, include });
@@ -85,6 +108,8 @@ export function createApplicationService(client: PrismaClient = prisma) {
       if (own && (data.reason || data.category || data.candidateMessage)) throw new NiceJobsError("Unexpected candidate decision fields");
       if (["SAVE", "SUBMIT"].includes(data.action)) {
         if (row.status !== "DRAFT" || row.area.version.status !== "PUBLISHED" || row.area.version.template.status !== "PUBLISHED" || row.area.version.template.publishedVersionId !== row.versionId || row.area.version.template.visibility !== "PUBLIC") throw new NiceJobsError("This draft cannot be submitted or edited");
+        if (publicationIssues(opportunityProfile(row.area.version.configuration), row.area.version.description, row.area.version.engagement).length) throw new NiceJobsError("This job's publication details are incomplete. Applications are unavailable.");
+        if (!(await programmeChecklist(db, b.company.id, row.area.version)).ready) throw new NiceJobsError("This job's programme setup is incomplete. Applications are unavailable.");
         patch.answers = JSON.stringify(checkedAnswers(form, data.answers ?? answers, data.action === "SUBMIT"));
         if (data.action === "SUBMIT") {
           const year = new Date().getUTCFullYear();
@@ -178,7 +203,7 @@ export function createApplicationService(client: PrismaClient = prisma) {
       const b = await boundary(db, userId, own), row = await load(db, b, reference, own);
       const form = formConfiguration(parseConfig(row.area.version.configuration));
       const decisionAvailable = row.area.version.template.status === "PUBLISHED" && row.area.version.status === "PUBLISHED" && !!row.area.version.publishedAt;
-      const common = { ...publicRecord(row), candidateName: row.candidate.displayName, answers: JSON.parse(row.answers), form: own ? { ...form, rejectionCategories: [] } : form, canEdit: row.status === "DRAFT" && decisionAvailable && row.area.version.template.publishedVersionId === row.versionId && row.area.version.template.visibility === "PUBLIC", canWithdraw: form.withdrawalStates.includes(row.status as typeof form.withdrawalStates[number]) };
+const common = { ...publicRecord(row), candidateName: row.candidate.displayName, answers: JSON.parse(row.answers), form: own ? { ...form, rejectionCategories: [] } : form, canEdit: row.status === "DRAFT" && (await programmeChecklist(db, b.company.id, row.area.version)).ready && decisionAvailable && row.area.version.template.publishedVersionId === row.versionId && row.area.version.template.visibility === "PUBLIC" && !publicationIssues(opportunityProfile(row.area.version.configuration), row.area.version.description, row.area.version.engagement).length, canWithdraw: form.withdrawalStates.includes(row.status as typeof form.withdrawalStates[number]) };
       if (own) return { ...common, management: null };
       const history = await db.niceJobsApplicationHistory.findMany({ where: { applicationId: row.id, ...(afterRevision !== undefined ? { revision: { lt: afterRevision } } : {}) }, orderBy: { revision: "desc" }, take: 26 });
       const events = await db.operationalEvent.findMany({ where: { id: { in: history.map(h => h.eventId) }, entityType: "NiceJobsApplication", entityId: row.id, organizationId: row.divisionId }, select: { id: true, actor: { select: { person: { select: { displayName: true } } } } }, take: 26 });
@@ -187,7 +212,11 @@ export function createApplicationService(client: PrismaClient = prisma) {
       return { ...common, management: { candidate: row.candidate.displayName, version: row.area.version.number, history: history.slice(0, 25).map(h => ({ ...h, actor: actors.get(h.eventId) ?? "Audit evidence unavailable" })), nextRevision: history.length > 25 ? history[24].revision : null, permissions: Object.fromEntries(permissions) as Record<string, boolean> } };
     });
   }
-  return { create, mutate, list, detail, opportunities, options, navigation, internal: { boundary, load, record, notification } };
+  return { create, mutate, list, detail, opportunities, publicOpportunities, options, navigation, internal: { boundary, load, record, notification } };
+}
+export function candidateDisclosure(configuration: string | null) {
+  const profile = opportunityProfile(configuration);
+  return profile ? { legalEmployer: profile.legalEmployer.status === "CONFIRMED" ? profile.legalEmployer.legalName : null, employerLabel: profile.legalEmployer.label, brand: profile.brandLabel, division: profile.divisionLabel, employmentType: profile.employmentType, eligibility: profile.eligibility, compensation: profile.compensation.status === "CONFIRMED" ? profile.compensation.text : "Pending confirmation", incentives: profile.incentives.status === "NOT_APPLICABLE" ? "Not applicable" : profile.incentives.status === "CONFIRMED" ? profile.incentives.text : "Pending confirmation", location: profile.location.status === "CONFIRMED" ? profile.location.text : "Pending confirmation", workArrangement: profile.workArrangement, reportingManager: profile.reportingManager.roleLabel } : null;
 }
 function isUnique(e: unknown) { return !!e && typeof e === "object" && "code" in e && e.code === "P2002"; }
 export const applicationService = createApplicationService();

@@ -3,17 +3,20 @@ import { DatabaseSync } from "node:sqlite";
 import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { randomBytes } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { PrismaClient } from "@prisma/client";
 import { NextRequest } from "next/server";
 import { middleware } from "../src/middleware";
 import { initializeGroupStructure } from "@/server/group/structure";
 import { hashPassword } from "@/server/auth/password";
 import { createAuthenticationService } from "@/server/auth/service";
+import { createJobsEmailAuth } from "@/server/auth/jobs-email-auth";
 import { createPortalService } from "@/server/portals/service";
 import { requirePortalAccess } from "@/server/portals/policy";
 import { portalSites, siteByHost, portalHostAllowed, validatePortalOrigin } from "@/server/portals/sites";
 import { signPortalContext, verifyPortalContext } from "@/server/portals/context-proof";
+import { createSkillCityEmployeeDashboard } from "@/server/skillcity/employee-dashboard";
+import { createLabsService } from "@/server/labs/service";
 
 const directory = mkdtempSync(join(tmpdir(), "maxpase-portals-")), file = join(directory, "test.db");
 const db = new PrismaClient({ datasourceUrl: "file:" + file.replaceAll("\\", "/") });
@@ -41,6 +44,55 @@ beforeEach(async () => { await db.securityRateBucket.deleteMany(); });
 afterAll(async () => { if (priorSecret === undefined) delete process.env.AUTH_SECRET; else process.env.AUTH_SECRET = priorSecret; await db.$disconnect(); rmSync(directory, { recursive: true, force: true }); });
 
 describe("Separate brand domains and authenticated gateways", () => {
+  it("gates employee views by active role and permission, and isolates advisor and developer work", async () => {
+    const company = await db.organization.findUniqueOrThrow({ where: { slug: "aira-skill-city" } });
+    const foreign = await db.organization.findUniqueOrThrow({ where: { slug: "pearn" } });
+    const personId = (await db.user.findUniqueOrThrow({ where: { id: userId } })).personId!;
+    const dashboard = createSkillCityEmployeeDashboard(db);
+    await expect(dashboard.dashboard(userId, "director")).rejects.toThrow();
+    const keys = ["organization.read", "organization.manage", "executive.read", "decision.decide", "labs.sales.self", "labs.sales.perform", "labs.delivery.assignee", "project.read", "task.read", "task.manage"];
+    for (const key of keys) await db.permission.upsert({ where: { key }, create: { key, name: key, scope: "GROUP" }, update: {} });
+    const companyRole = await db.role.create({ data: { organizationId: company.id, key: "staff-phase3-director", name: "Director", permissions: { create: ["organization.read", "organization.manage", "executive.read", "decision.decide"].map(key => ({ permission: { connect: { key } } })) } } });
+    const companyMember = await db.membership.create({ data: { personId, organizationId: company.id, scope: "DESCENDANTS", roles: { create: { roleId: companyRole.id } } } });
+    const advisorRole = await db.role.create({ data: { organizationId: labsId, key: "staff-phase3-advisor", name: "Senior Academic Advisor", permissions: { create: ["organization.read", "labs.sales.self", "labs.sales.perform"].map(key => ({ permission: { connect: { key } } })) } } });
+    const developerRole = await db.role.create({ data: { organizationId: labsId, key: "staff-phase3-developer", name: "Software Developer", permissions: { create: ["organization.read", "labs.delivery.assignee", "project.read", "task.read", "task.manage"].map(key => ({ permission: { connect: { key } } })) } } });
+    const advisorGrant = await db.membershipRole.create({ data: { membershipId: labsMembershipId, roleId: advisorRole.id } });
+    const developerGrant = await db.membershipRole.create({ data: { membershipId: labsMembershipId, roleId: developerRole.id } });
+    const payload = { company: "Fixture", name: "Contact", email: "contact@fixture.invalid", phone: "", need: "A verified workflow need", source: "MANUAL", consent: true, ownerUserId: userId, nextFollowUp: null, lastContact: null, outcome: "Call pending", qualification: "", quoteId: null, acceptance: "", projectId: null };
+    const lead = await db.executiveRecord.create({ data: { kind: "LABS_LEAD", organizationId: labsId, ownerPersonId: personId, title: "Labs assigned lead", status: "NEW", sourceKey: "phase3:labs-lead", payload: JSON.stringify(payload) } });
+    const foreignLead = await db.executiveRecord.create({ data: { kind: "LABS_LEAD", organizationId: foreign.id, ownerPersonId: personId, title: "Foreign lead", status: "NEW", sourceKey: "phase3:foreign-lead", payload: JSON.stringify(payload) } });
+    const project = await db.project.create({ data: { organizationId: labsId, name: "Assigned Labs project", slug: "phase3-labs-project", ownerPersonId: personId, metadata: JSON.stringify({ kind: "AIRALABS_PROJECT" }) } });
+    const foreignProject = await db.project.create({ data: { organizationId: foreign.id, name: "Foreign project", slug: "phase3-foreign-project", ownerPersonId: personId, metadata: JSON.stringify({ kind: "AIRALABS_PROJECT" }) } });
+    try {
+      const skillLabs = createLabsService(db, () => new Date(), "skillcity");
+      const advisor = await dashboard.dashboard(userId, "advisor");
+      expect(advisor.view).toBe("advisor");
+      expect(advisor.data && "leads" in advisor.data).toBe(true);
+      if (advisor.data && "leads" in advisor.data && Array.isArray(advisor.data.leads)) expect(advisor.data.leads.map(row => row.id)).toEqual([lead.id]);
+      const developer = await dashboard.dashboard(userId, "developer");
+      expect(developer.view).toBe("developer");
+      expect(developer.data && "projects" in developer.data).toBe(true);
+      if (developer.data && "projects" in developer.data && Array.isArray(developer.data.projects)) expect(developer.data.projects.map(row => row.id)).toEqual([project.id]);
+      const director = await dashboard.dashboard(userId, "director");
+      expect(director.view).toBe("director");
+      expect(director.available).toEqual(["advisor", "director", "developer"]);
+      await skillLabs.updateLead(userId, { id: lead.id, version: 0, reference: randomUUID(), status: "CONTACTED", outcome: "Reached the prospect", qualification: "", nextFollowUp: null });
+      expect((await db.executiveRecord.findUniqueOrThrow({ where: { id: lead.id } })).status).toBe("CONTACTED");
+      await expect(skillLabs.updateLead(userId, { id: foreignLead.id, version: 0, reference: randomUUID(), status: "CONTACTED", outcome: "Invalid scope", qualification: "", nextFollowUp: null })).rejects.toThrow();
+      await skillLabs.saveTask(userId, { projectId: project.id, title: "Review implementation", description: "Synthetic project notes", dueDate: new Date(Date.now() + 86400000).toISOString(), status: "TODO", reference: randomUUID() });
+      expect(await db.task.count({ where: { projectId: project.id, assigneePersonId: personId } })).toBe(1);
+      await expect(skillLabs.saveTask(userId, { projectId: foreignProject.id, title: "Forbidden task", description: "", dueDate: new Date(Date.now() + 86400000).toISOString(), status: "TODO", reference: randomUUID() })).rejects.toThrow();
+    } finally {
+      await db.task.deleteMany({ where: { projectId: project.id } });
+      await db.operationalEvent.deleteMany({ where: { entityId: { in: [lead.id, project.id] } } });
+      await db.executiveHistory.deleteMany({ where: { recordId: lead.id } });
+      await db.project.deleteMany({ where: { id: { in: [project.id, foreignProject.id] } } });
+      await db.executiveRecord.deleteMany({ where: { id: { in: [lead.id, foreignLead.id] } } });
+      await db.membershipRole.deleteMany({ where: { id: { in: [advisorGrant.id, developerGrant.id] } } });
+      await db.membership.delete({ where: { id: companyMember.id } });
+      await db.role.deleteMany({ where: { id: { in: [companyRole.id, advisorRole.id, developerRole.id] } } });
+    }
+  });
   it("rejects every cross-realm session pair across corporate and all four portal audiences", async () => {
     const person = await db.user.findUniqueOrThrow({ where: { id: userId }, select: { personId: true } });
     const permission = await db.permission.findUniqueOrThrow({ where: { key: "organization.read" } });
@@ -50,12 +102,19 @@ describe("Separate brand domains and authenticated gateways", () => {
     try {
       for (const slug of ["aira-skill-city", "aira-career-hub"]) {
         const org = await db.organization.findUniqueOrThrow({ where: { slug } });
-        const role = await db.role.create({ data: { organizationId: org.id, key: "launch-realm-fixture", name: "Isolated realm fixture", permissions: { create: { permissionId: permission.id } } } });
+        const role = await db.role.create({ data: { organizationId: org.id, key: "launch-realm-fixture", name: slug === "aira-skill-city" ? "Director" : "Isolated realm fixture", permissions: { create: { permissionId: permission.id } } } });
         roles.push(role.id);
         const member = await db.membership.create({ data: { personId: person.personId!, organizationId: org.id, roles: { create: { roleId: role.id } } } });
         members.push(member.id);
       }
-      for (const realm of realms) tokens.push((await auth.create(userId, secret, undefined, 300000, realm)).token);
+      for (const realm of realms) {
+        if (realm === "jobs") {
+          let code = "";
+          const emailAuth = createJobsEmailAuth(db, { env: { NICEJOBS_EMAIL_AUTH_ENABLED: "true", RESEND_API_KEY: "isolated-test-key", NICEJOBS_AUTH_FROM: "auth@test.invalid", NICEJOBS_OTP_SECRET: secret }, send: async message => { code = message.code; return "isolated-receipt"; } });
+          const proof = await emailAuth.beginLogin(credentials());
+          tokens.push((await emailAuth.completeLogin({ ...proof, code }, secret)).token);
+        } else tokens.push((await auth.create(userId, secret, undefined, 300000, realm)).token);
+      }
       for (const [i, source] of realms.entries()) {
         for (const [j, target] of realms.entries()) {
           if (i === j) expect(await auth.validate(tokens[i], secret, target)).toMatchObject({ userId });
@@ -81,7 +140,7 @@ describe("Separate brand domains and authenticated gateways", () => {
     const company = await db.organization.findUniqueOrThrow({ where: { slug: "aira-skill-city" } });
     const permission = await db.permission.findUniqueOrThrow({ where: { key: "organization.read" } });
     const person = await db.user.findUniqueOrThrow({ where: { id: userId } });
-    const role = await db.role.create({ data: { organizationId: company.id, key: "skillcity-test", name: "Company portal fixture", permissions: { create: { permissionId: permission.id } } } });
+    const role = await db.role.create({ data: { organizationId: company.id, key: "skillcity-test", name: "Director", permissions: { create: { permissionId: permission.id } } } });
     const member = await db.membership.create({ data: { personId: person.personId!, organizationId: company.id, roles: { create: { roleId: role.id } } } });
     try {
       const session = await auth.loginPortal(credentials(), secret, "skillcity"); expect(session).not.toBeNull();
@@ -118,6 +177,12 @@ describe("Separate brand domains and authenticated gateways", () => {
       expect((await middleware(new NextRequest("https://" + site.domain + "/app/boss", { headers: { host: site.domain } }))).status).toBe(404);
       expect((await middleware(new NextRequest("https://" + site.domain + "/sites/labs", { headers: { host: site.domain } }))).status).toBe(404);
       expect((await middleware(new NextRequest("https://" + site.domain + "/gateway", { headers: { host: site.domain } }))).headers.get("location")).toBe("https://" + site.domain + "/login");
+      const opportunities = await middleware(new NextRequest("https://" + site.domain + "/opportunities", { headers: { host: site.domain } }));
+      expect(site.id === "jobs" ? opportunities.headers.get("x-middleware-rewrite") : opportunities.status).toBe(site.id === "jobs" ? "https://nicejobs.online/sites/jobs/opportunities" : 404);
+      const reset = await middleware(new NextRequest("https://" + site.domain + "/reset-password", { headers: { host: site.domain } }));
+      expect(site.id === "jobs" ? reset.headers.get("x-middleware-rewrite") : reset.status).toBe(site.id === "jobs" ? "https://nicejobs.online/sites/jobs/reset-password" : 404);
+      const offer = await middleware(new NextRequest("https://" + site.domain + "/offers/12345678-1234-1234-1234-123456789012", { headers: { host: site.domain } }));
+      expect(site.id === "jobs" ? offer.headers.get("x-middleware-rewrite") : offer.status).toBe(site.id === "jobs" ? "https://nicejobs.online/sites/jobs/offers/12345678-1234-1234-1234-123456789012" : 404);
     }
   });
   it("preserves authenticated internal forwarding context but rejects forged, tampered and expired envelopes", async () => {

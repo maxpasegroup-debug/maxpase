@@ -12,6 +12,13 @@ import { createRecruitmentService } from "@/server/nicejobs/recruitment";
 import { createOperationsService } from "@/server/domain/operations-service";
 import { configuration } from "@/server/nicejobs/input";
 import { interviewConfiguration, recruitmentInput } from "@/server/nicejobs/recruitment-input";
+import { fixtureOpportunity } from "./fixtures/nicejobs-opportunity";
+import { createPreOfferService } from "@/server/nicejobs/pre-offer";
+import { createOfferDocumentService } from "@/server/nicejobs/offer-document";
+import { fixtureProgramme } from "./fixtures/nicejobs-programme";
+import { createOnboardingService } from "@/server/nicejobs/onboarding";
+import { programmeOfferSummary } from "@/server/nicejobs/training-programme";
+import { createApplicantAccess } from "@/server/nicejobs/applicant-access";
 
 const directory = mkdtempSync(join(tmpdir(), "nicejobs-phase03-")), file = join(directory, "test.db");
 const db = new PrismaClient({ datasourceUrl: "file:" + file.replaceAll("\\", "/") });
@@ -23,6 +30,7 @@ type Application = Awaited<ReturnType<typeof applications.create>>;
 const formConfig = { schemaVersion: 1, application: { fields: [{ key: "experience", label: "Experience", type: "NUMBER", required: true }] }, eligibility: { rules: [{ field: "experience", operator: "GTE", value: 1 }] }, screening: { questions: [{ field: "experience", operator: "GTE", value: 1, weight: 1 }], passMark: 80 } };
 const interviewConfig = { enabled: true, type: "VIDEO", duration: 30, minInterviewers: 1, maxInterviewers: 2, evaluationRequired: true, questions: [{ key: "evidence", question: "Isolated test evidence", type: "TEXT", required: true, order: 1, weight: 2, active: true }] };
 const offerConfig = { title: "Isolated test offer", content: { terms: "Isolated fixture terms; not a real employment offer" }, validityDays: 2, declineReasonRequired: true };
+const preOfferFixture = { videoTitle: "Synthetic role orientation", videoUrl: "https://media.test.invalid/role.mp4", videoVersion: "test-v1", comprehension: { maxAttempts: 3, form: { fields: [{ key: "understood", label: "Synthetic comprehension question", type: "BOOLEAN", required: true }] }, assessment: { passMark: 100, questions: [{ field: "understood", operator: "EQ", value: true, weight: 1, required: true }] } }, policies: [{ key: "terms", title: "Synthetic terms", version: "test-v1", text: "Isolated test policy text, not actual legal terms. <script>not executable</script>" }] };
 async function human(name: string, org: string, keys: string[], descendants = false) {
   const person = await db.person.create({ data: { displayName: name } });
   const user = await db.user.create({ data: { email: name + "@phase03.invalid", personId: person.id, timezone: "Asia/Kolkata" } });
@@ -31,7 +39,7 @@ async function human(name: string, org: string, keys: string[], descendants = fa
   return user.id;
 }
 async function publish(extra = {}, code = "TEST-03") {
-  const v = await jobs.create(manager, { code, title: "Recruitment test job", visibility: "PUBLIC", divisionIds: [labs], configuration: { ...formConfig, interview: interviewConfig, management: { policies: [{ divisionId: labs, controlPointId: controlId }] }, offer: offerConfig, ...extra } });
+  const v = await jobs.create(manager, { code, title: "Recruitment test job", description: "Synthetic recruitment opportunity", visibility: "PUBLIC", divisionIds: [labs], configuration: { ...formConfig, opportunity: await fixtureOpportunity(db, manager), interview: interviewConfig, management: { policies: [{ divisionId: labs, controlPointId: controlId }] }, offer: offerConfig, ...extra } });
   await jobs.changeJob(manager, { id: v.id, revision: 0, to: "PUBLISHED", reason: "Isolated test publication" }); return v.id;
 }
 async function shortlisted(userId = candidate) {
@@ -84,6 +92,7 @@ beforeAll(async () => {
   const control = await operations.saveControl(manager, { organizationId: labs, name: "Independent test hiring approval", kind: "HUMAN_DECISION", requiredPermission: "nicejobs.management.approve", stages: [[{ approverUserId: approver, requiredPermission: "nicejobs.management.approve" }]] }); controlId = control.id;
 }, 30000);
 beforeEach(async () => {
+  await db.niceJobsTrainingReview.deleteMany();await db.niceJobsTrainingSubmission.deleteMany();await db.niceJobsTrainingProgress.deleteMany();await db.niceJobsOnboarding.deleteMany();await db.niceJobsTrainingPlan.deleteMany();
   await db.niceJobsInterviewEvaluation.deleteMany(); await db.niceJobsInterviewer.deleteMany(); await db.niceJobsInterview.deleteMany(); await db.niceJobsOffer.deleteMany(); await db.niceJobsApplicationHistory.deleteMany(); await db.niceJobsApplication.deleteMany();
   await db.siaApproval.deleteMany(); await db.operationalRequest.deleteMany(); await db.notification.deleteMany();
   await db.niceJobsTemplate.updateMany({ data: { publishedVersionId: null } }); await db.niceJobsVersionArea.deleteMany(); await db.niceJobsVersion.deleteMany(); await db.niceJobsTemplate.deleteMany();
@@ -92,6 +101,109 @@ beforeEach(async () => {
 afterAll(async () => { await db.$disconnect(); rmSync(directory, { recursive: true, force: true }); });
 
 describe("Nice Jobs interview, approval and offer controls", () => {
+  it("completes one approved 100-day candidate journey with no skipped decision, policy or enrollment",async()=>{
+    await db.permission.upsert({where:{key:"sia.access.read"},update:{},create:{key:"sia.access.read",name:"Read SIA availability",scope:"GROUP"}});
+    const previousCandidate=candidate;
+    candidate=(await createApplicantAccess(db).register({displayName:"Isolated public journey candidate",email:"journey-candidate@test.invalid",password:"isolated-journey-password-123",confirmPassword:"isolated-journey-password-123",acknowledge:true})).userId;
+    try{
+    const configured=fixtureProgramme(manager);
+    const v=await jobs.create(manager,{code:"JOURNEY-04",title:"Synthetic full journey",description:"Isolated candidate journey",visibility:"PUBLIC",divisionIds:[labs],configuration:{...formConfig,opportunity:await fixtureOpportunity(db,manager),...configured,interview:interviewConfig,management:{policies:[{divisionId:labs,controlPointId:controlId}]},offer:offerConfig}});
+    await jobs.changeJob(manager,{id:v.id,revision:0,to:"PENDING_VERIFICATION",reason:"Synthetic complete programme review"});
+    await jobs.changeJob(manager,{id:v.id,revision:1,to:"APPROVED",reason:"Synthetic programme approval"});
+    await jobs.changeJob(manager,{id:v.id,revision:2,to:"PUBLISHED",reason:"Isolated publication"});versionId=v.id;
+    expect((await applications.opportunities(candidate)).records.some(r=>r.id===v.id)).toBe(true);
+    const draft=await applications.create(candidate,{versionId,divisionId:labs});expect(draft.disclosure?.legalEmployer).toBeTruthy();
+    await expect(applications.create(candidate,{versionId,divisionId:labs})).rejects.toThrow("already exists");
+    let submitted=await applications.mutate(candidate,{reference:draft.reference,revision:0,action:"SUBMIT",answers:{experience:2}});
+    await expect(act(submitted,"PREPARE_OFFER")).rejects.toThrow();
+    await expect(applications.mutate(candidate,{reference:submitted.reference,revision:submitted.revision,action:"SCREENING",reason:"Forged candidate authority"})).rejects.toThrow();
+    for(const action of ["ELIGIBILITY","SCREENING","SHORTLIST"])submitted=await applications.mutate(manager,{reference:submitted.reference,revision:submitted.revision,action,reason:"Explicit human screening decision"});
+    await expect(act(submitted,"START_REVIEW")).rejects.toThrow("Completed interview");
+    await review(submitted);await expect(act(submitted,"PREPARE_OFFER")).rejects.toThrow("Approved application");
+    const pendingRequest=await row(submitted),pendingApproval=await db.siaApproval.findFirstOrThrow({where:{requestId:pendingRequest.reviewRequestId,status:"PENDING"}});
+    await expect(act(submitted,"DECIDE",{approvalId:pendingApproval.id,decision:"APPROVED"},candidate)).rejects.toThrow();await decide(submitted);
+    await act(submitted,"PREPARE_OFFER");let o=await offer(submitted);await act(submitted,"READY_OFFER",{offerReference:o.reference,recordRevision:o.revision});o=await offer(submitted);
+    await expect(act(submitted,"ISSUE_OFFER",{offerReference:o.reference,recordRevision:o.revision})).rejects.toThrow("Complete orientation");
+    const pre=createPreOfferService(db);let checkpoint=(await pre.detail(candidate,submitted.reference))!;
+    await expect(pre.mutate(candidate,{reference:submitted.reference,revision:checkpoint.revision,fingerprint:checkpoint.fingerprint,action:"ACCEPT_POLICIES",acknowledged:true,idempotencyKey:crypto.randomUUID()})).rejects.toThrow("Pass comprehension");
+    await pre.mutate(candidate,{reference:submitted.reference,revision:checkpoint.revision,fingerprint:checkpoint.fingerprint,action:"COMPLETE_ORIENTATION",acknowledged:true,answers:{understood:false},idempotencyKey:crypto.randomUUID()});
+    expect((await pre.detail(candidate,submitted.reference))!.passed).toBe(false);checkpoint=(await pre.detail(candidate,submitted.reference))!;
+    await pre.mutate(candidate,{reference:submitted.reference,revision:checkpoint.revision,fingerprint:checkpoint.fingerprint,action:"COMPLETE_ORIENTATION",acknowledged:true,answers:{understood:true},idempotencyKey:crypto.randomUUID()});checkpoint=(await pre.detail(candidate,submitted.reference))!;
+    await pre.mutate(candidate,{reference:submitted.reference,revision:checkpoint.revision,fingerprint:checkpoint.fingerprint,action:"ACCEPT_POLICIES",acknowledged:true,idempotencyKey:crypto.randomUUID()});
+    await act(submitted,"ISSUE_OFFER",{offerReference:o.reference,recordRevision:o.revision});o=await offer(submitted);
+    const snapshot=JSON.parse(o.snapshot),actualVersion=await db.niceJobsVersion.findUniqueOrThrow({where:{id:v.id}});
+    expect(snapshot.programme).toEqual(programmeOfferSummary(actualVersion.configuration,v.id));expect(snapshot.preOffer.policies[0].version).toBe("test-v1");
+    await db.niceJobsOffer.update({where:{id:o.id},data:{snapshot:JSON.stringify({...snapshot,programme:{...snapshot.programme,fingerprint:"f".repeat(64)}})}});
+    await expect(act(submitted,"ACCEPT_OFFER",{offerReference:o.reference,recordRevision:o.revision},candidate)).rejects.toThrow("training version mismatch");
+    expect((await offer(submitted)).acceptedAt).toBeNull();expect((await row(submitted)).status).toBe("OFFER");
+    await db.niceJobsOffer.update({where:{id:o.id},data:{snapshot:JSON.stringify(snapshot)}});
+    const before=await row(submitted),accept={reference:before.reference,revision:before.revision,operation:"ACCEPT_OFFER",offerReference:o.reference,recordRevision:o.revision};
+    await recruitment.mutate(candidate,accept);await recruitment.mutate(candidate,accept);expect(await db.niceJobsApplicationHistory.count({where:{applicationId:before.id,action:"ACCEPT_OFFER"}})).toBe(1);
+    const doc=await createOfferDocumentService(db).download(candidate,o.reference);expect(doc.html).toContain("Training days");expect(doc.html).toContain("100");expect(doc.html).toContain("Synthetic terms");
+    await expect(createOfferDocumentService(db).download(other,o.reference)).rejects.toThrow();
+    const onboard=createOnboardingService(db,()=>clock),accepted=await row(submitted),enroll={applicationReference:submitted.reference,revision:accepted.revision,operation:"ENROLL",idempotencyKey:crypto.randomUUID()};
+    await db.niceJobsOffer.update({where:{id:o.id},data:{snapshot:JSON.stringify({...snapshot,programme:{...snapshot.programme,versionId:"forged-plan"}})}});
+    await expect(onboard.mutate(candidate,enroll,true)).rejects.toThrow("training version mismatch");expect(await db.niceJobsOnboarding.count()).toBe(0);
+    await db.niceJobsOffer.update({where:{id:o.id},data:{snapshot:JSON.stringify(snapshot)}});
+    await Promise.all([onboard.mutate(candidate,enroll,true),onboard.mutate(candidate,{...enroll,idempotencyKey:crypto.randomUUID()},true)]);
+    const enrollment=await db.niceJobsOnboarding.findUniqueOrThrow({where:{applicationId:before.id},include:{plan:true}});
+    expect(enrollment.plan.versionId).toBe(v.id);expect(enrollment.plan.fingerprint).toBe(snapshot.programme.fingerprint);expect(enrollment.status).toBe("NOT_STARTED");
+    expect(await db.niceJobsOnboarding.count({where:{applicationId:before.id}})).toBe(1);expect(await db.operationalEvent.count({where:{entityId:enrollment.id,eventType:"nicejobs.onboarding.enroll"}})).toBe(1);
+    expect((await onboard.enrollment(candidate,submitted.reference))?.status).toBe("NOT_STARTED");await expect(onboard.enrollment(other,submitted.reference)).rejects.toThrow();
+    const active=await recruitment.detail(candidate,submitted.reference,true,{offersAfter:o.id});expect(active.offers).toHaveLength(0);expect(active.currentOffer?.acceptedAt).toBeTruthy();expect(active.completedInterview).toBe(true);
+    expect(await db.niceJobsAssignment.count()).toBe(0);
+    }finally{candidate=previousCandidate;}
+  });
+  it("gates management-reviewed issuance on orientation and versioned policies, then audits owned downloads", async () => {
+    versionId = await publish({ preOfferRequired: true, preOffer: preOfferFixture }, "PRE-OFFER-FLOW");
+    const a = await shortlisted(), service = createPreOfferService(db);
+    await review(a); await decide(a); await act(a, "PREPARE_OFFER"); let o = await offer(a);
+    await act(a, "READY_OFFER", { offerReference: o.reference, recordRevision: o.revision }); o = await offer(a);
+    await expect(act(a, "ISSUE_OFFER", { offerReference: o.reference, recordRevision: o.revision })).rejects.toThrow("Complete orientation");
+    let d = (await service.detail(candidate, a.reference))!;
+    const command = { reference: a.reference, revision: d.revision, fingerprint: d.fingerprint, idempotencyKey: crypto.randomUUID(), action: "COMPLETE_ORIENTATION", acknowledged: true, answers: { understood: false } };
+    expect(await service.mutate(candidate, command)).toEqual({ result: "FAIL" });
+    expect(await service.mutate(candidate, command)).toEqual({ result: "FAIL" });
+    await expect(service.mutate(candidate, { ...command, answers: { understood: true } })).rejects.toThrow("replay");
+    d = (await service.detail(candidate, a.reference))!;
+    await expect(service.mutate(candidate, { ...command, revision: d.revision, action: "ACCEPT_POLICIES", answers: undefined, idempotencyKey: crypto.randomUUID() })).rejects.toThrow();
+    await service.mutate(candidate, { ...command, revision: d.revision, answers: { understood: true }, idempotencyKey: crypto.randomUUID() });
+    d = (await service.detail(candidate, a.reference))!;
+    await service.mutate(candidate, { reference: a.reference, revision: d.revision, fingerprint: d.fingerprint, idempotencyKey: crypto.randomUUID(), action: "ACCEPT_POLICIES", acknowledged: true });
+    await act(a, "ISSUE_OFFER", { offerReference: o.reference, recordRevision: o.revision }); o = await offer(a);
+    expect(JSON.parse(o.snapshot).preOffer.policies).toEqual(preOfferFixture.policies);
+    await act(a, "ACCEPT_OFFER", { offerReference: o.reference, recordRevision: o.revision }, candidate); o = await offer(a);
+    expect(o.acceptedAt).not.toBeNull();
+    const downloads = createOfferDocumentService(db);
+    const document = await downloads.download(candidate, o.reference);
+    expect(document.html).toContain("test-v1"); expect(document.html).toContain("&lt;script&gt;"); expect(document.html).not.toContain("<script>");
+    await expect(downloads.download(other, o.reference)).rejects.toThrow();
+    await expect(downloads.download(outsider, o.reference)).rejects.toThrow();
+    expect(await db.operationalEvent.count({ where: { eventType: "nicejobs.offer.downloaded", entityId: o.id } })).toBe(1);
+    const draft = await downloads.download(candidate, o.reference, "eml");
+    expect(draft.content).toContain("X-Unsent: 1"); expect(draft.content).toContain("Content-Disposition: attachment;"); expect(draft.filename).toMatch(/\.eml$/);
+    await expect(downloads.download(other, o.reference, "eml")).rejects.toThrow();
+  });
+  it("rejects forged orientation identity, configuration, stale revisions and unaudited completion", async () => {
+    versionId = await publish({ preOfferRequired: true, preOffer: preOfferFixture }, "PRE-OFFER-SECURITY");
+    const a = await shortlisted(), service = createPreOfferService(db), detail = (await service.detail(candidate, a.reference))!;
+    const command = { reference: a.reference, revision: detail.revision, fingerprint: detail.fingerprint, idempotencyKey: crypto.randomUUID(), action: "COMPLETE_ORIENTATION", acknowledged: true, answers: { understood: true } };
+    await expect(service.mutate(other, command)).rejects.toThrow();
+    await expect(service.mutate(candidate, { ...command, actorUserId: manager })).rejects.toThrow();
+    await expect(service.mutate(candidate, { ...command, fingerprint: "0".repeat(64) })).rejects.toThrow();
+    await expect(service.mutate(candidate, { ...command, revision: 0 })).rejects.toThrow();
+    const sql = new DatabaseSync(file); sql.exec("CREATE TRIGGER fail_preoffer_audit BEFORE INSERT ON AuditEvent WHEN NEW.action = 'nicejobs.application.pre_offer_orientation' BEGIN SELECT RAISE(ABORT, 'Isolated audit failure'); END;"); sql.close();
+    try { await expect(service.mutate(candidate, command)).rejects.toThrow(); expect((await service.detail(candidate, a.reference))?.attempts).toBe(0); expect((await row(a)).revision).toBe(detail.revision); }
+    finally { const cleanup = new DatabaseSync(file); cleanup.exec("DROP TRIGGER fail_preoffer_audit"); cleanup.close(); }
+  });
+  it("blocks publication without required pre-offer content and keeps completion separate from hiring decisions", async () => {
+    const draft = await jobs.create(manager, { code: "REQUIRED-PRE-OFFER", title: "Synthetic draft", description: "Synthetic publication fixture", visibility: "PUBLIC", divisionIds: [labs], configuration: { schemaVersion: 1, opportunity: await fixtureOpportunity(db, manager), preOfferRequired: true } });
+    await expect(jobs.changeJob(manager, { id: draft.id, revision: 0, to: "PUBLISHED", reason: "Missing content" })).rejects.toThrow("Configure role video");
+    versionId = await publish({ preOfferRequired: true, preOffer: preOfferFixture }, "PRE-OFFER-NO-HIRING");
+    const a = await shortlisted(), service = createPreOfferService(db), d = (await service.detail(candidate, a.reference))!;
+    await service.mutate(candidate, { reference: a.reference, revision: d.revision, fingerprint: d.fingerprint, idempotencyKey: crypto.randomUUID(), action: "COMPLETE_ORIENTATION", acknowledged: true, answers: { understood: true } });
+    expect((await row(a)).status).toBe("SHORTLISTED"); expect(await db.niceJobsOffer.count({ where: { applicationId: (await row(a)).id } })).toBe(0);
+  });
   it("validates configurable question types, counts, weights and forged identity fields", () => {
     expect(interviewConfiguration.safeParse({ ...interviewConfig, questions: [] }).success).toBe(false);
     expect(interviewConfiguration.safeParse({ ...interviewConfig, minInterviewers: 3 }).success).toBe(false);
@@ -199,7 +311,7 @@ describe("Nice Jobs interview, approval and offer controls", () => {
     expect((await recruitment.detail(candidate, a.reference, true)).offers).toEqual([]);
   });
   it("versions revised offers without overwriting previously issued terms or accepting withdrawn versions", async () => {
-    const a = await shortlisted(), old = await issued(a); await act(a, "REVISE_OFFER", { offerReference: old.reference, recordRevision: old.revision, content: { terms: "New isolated fixture terms" } });
+    const a = await shortlisted(), old = await issued(a); await act(a, "REVISE_OFFER", { offerReference: old.reference, recordRevision: old.revision, content: { terms: "New isolated fixture terms", compensation: "Revised synthetic compensation disclosed for isolated tests" } });
     const next = await offer(a); expect(next.number).toBe(2); expect((await db.niceJobsOffer.findUniqueOrThrow({ where: { id: old.id } })).snapshot).toBe(old.snapshot);
     await expect(act(a, "ACCEPT_OFFER", { offerReference: old.reference, recordRevision: old.revision }, candidate)).rejects.toThrow();
     await act(a, "READY_OFFER", { offerReference: next.reference, recordRevision: next.revision }); const ready = await offer(a); await act(a, "ISSUE_OFFER", { offerReference: ready.reference, recordRevision: ready.revision }); expect((await recruitment.detail(candidate, a.reference, true)).offers).toHaveLength(2);
@@ -209,6 +321,14 @@ describe("Nice Jobs interview, approval and offer controls", () => {
     await recruitment.mutate(candidate, command); await recruitment.mutate(candidate, command); expect((await row(a)).status).toBe("OFFER_ACCEPTED"); expect((await offer(a)).snapshot).toBe(o.snapshot);
     expect(await db.niceJobsApplicationHistory.count({ where: { applicationId: r.id, action: "ACCEPT_OFFER" } })).toBe(1); expect(await db.niceJobsAssignment.count()).toBe(0); expect(await db.niceJobsWorkerProfile.count()).toBe(0);
     for (const operation of ["REVISE_OFFER", "WITHDRAW_OFFER", "EXPIRE_OFFER"]) await expect(act(a, operation, { offerReference: o.reference, recordRevision: (await offer(a)).revision })).rejects.toThrow();
+  });
+  it("blocks ready and acceptance when the offer omits compensation disclosure", async () => {
+    const a = await shortlisted(), old = await issued(a);
+    await act(a, "REVISE_OFFER", { offerReference: old.reference, recordRevision: old.revision, content: { terms: "Incomplete synthetic revised offer" } });
+    const next = await offer(a);
+    await expect(act(a, "READY_OFFER", { offerReference: next.reference, recordRevision: next.revision })).rejects.toThrow("disclosed compensation");
+    expect((await offer(a)).status).toBe("DRAFT");
+    await expect(act(a, "ACCEPT_OFFER", { offerReference: next.reference, recordRevision: next.revision }, candidate)).rejects.toThrow();
   });
   it("candidate cannot read another offer, forge offer content or bypass exact version ownership", async () => {
     const a = await shortlisted(), o = await issued(a); await expect(recruitment.detail(other, a.reference, true)).rejects.toThrow();

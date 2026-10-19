@@ -1,0 +1,5 @@
+import {randomUUID} from "node:crypto";
+import {labsService} from "@/server/labs/service";
+import {AccessError} from "@/server/authorization/engine";
+import {LabsForm} from "./form";
+export async function LabsReminders({userId}:{userId:string}){let data;try{data=await labsService.reminders(userId);}catch(error){if(error instanceof AccessError)return <p>Reminder access is not authorized.</p>;throw error;}return <section className="al-section"><h2>Internal follow-up reminders</h2>{data.canProcess&&<LabsForm actionName="PROCESS_DUE" label="Process due internal reminders" reference={randomUUID()} confirm="Process due Labs follow-ups into internal notifications only?"><p>External email and WhatsApp delivery are not enabled.</p></LabsForm>}{!data.records.length&&<p>No internal follow-up reminders in your authorized scope.</p>}<ul>{data.records.map(r=><li key={r.id}><time>{r.remindAt.toISOString().slice(0,16).replace("T"," ")} UTC</time> / {r.status.toLowerCase()} {r.status==="SUCCEEDED"&&"(internal processing only)"}</li>)}</ul></section>;}

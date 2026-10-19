@@ -10,6 +10,10 @@ import { createExecutionService } from "./execution-service";
 import { boundResource, validRecipient, type DB, type Context, type Resource } from "./operations-scope";
 import { operationalEvent, notify } from "./operational-events";
 import * as input from "./operations-input";
+import { financialRequestGuard, financialDecision } from "@/server/nicejobs/finance-access";
+import { goalApprovalGuard } from "@/server/nicejobs/goal-approval";
+import { trainingReminderGuard } from "@/server/nicejobs/training-reminder";
+import { labsReminderGuard } from "@/server/labs/reminder";
 
 const hash = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
 const humanApproval = (kind: string) => ["APPROVAL", "HUMAN_DECISION"].includes(kind);
@@ -123,8 +127,9 @@ export function createOperationsService(client: PrismaClient = prisma, createAcc
       await event(db, ctx, row, "workflow.published", "WorkflowDefinition", id);
     });
   }
-  async function startInTransaction(db: DB, ctx: Context, raw: unknown) {
+  async function startInTransaction(db: DB, ctx: Context, raw: unknown, leadBoundary = false) {
     const parsed = input.instanceInput.parse(raw);
+    if (parsed.resourceType === "NICE_JOBS_LEAD" && !leadBoundary) throw new AccessError("Use the lead operation boundary");
     const scope = await boundResource(db, ctx, parsed, "workflow.transition");
     const definition = await db.workflowDefinition.findUniqueOrThrow({ where: { id: parsed.definitionId }, include: { states: true } });
     await ctx.requireAccess("workflow.read", definition);
@@ -136,12 +141,13 @@ export function createOperationsService(client: PrismaClient = prisma, createAcc
     await event(db, ctx, row, "workflow.started", "WorkflowInstance", row.id);
     return row;
   }
-  async function startWorkflow(userId: string, raw: unknown) { return client.$transaction(async db => startInTransaction(db, await context(db, userId), raw)); }
-  async function transition(userId: string, raw: unknown) {
+  async function startWorkflow(userId: string, raw: unknown, transaction?: DB) { const run = async (db: DB) => startInTransaction(db, await context(db, userId), raw, !!transaction); return transaction ? run(transaction) : client.$transaction(run); }
+  async function transition(userId: string, raw: unknown, transaction?: DB) {
     const data = input.transitionInput.parse(raw);
-    return client.$transaction(async db => {
+    const run = async (db: DB) => {
       const ctx = await context(db, userId);
       const instance = await db.workflowInstance.findUniqueOrThrow({ where: { id: data.instanceId }, include: { currentState: true, definition: true } });
+      if (instance.resourceType === "NICE_JOBS_LEAD" && !transaction) throw new AccessError("Use the lead operation boundary");
       await boundResource(db, ctx, instance, "workflow.transition");
       const t = await db.workflowTransition.findUniqueOrThrow({ where: { id: data.transitionId }, include: { toState: true, controlPoint: true } });
       if (t.definitionId !== instance.definitionId) throw new AccessError("Transition belongs to another definition");
@@ -159,7 +165,9 @@ export function createOperationsService(client: PrismaClient = prisma, createAcc
         } else {
           const checked = await db.controlCheck.findFirst({ where: { instanceId: instance.id, instanceVersion: instance.version, controlPointId: t.controlPoint.id, status: "PASSED" } });
           if (!checked) throw new AccessError("Control verification is required");
-          const verifier = await context(db, checked.actorUserId);
+          // Revalidate the human verifier's real authority, not an executor's resource-specific delegation.
+          const verifier = await defaultAccessContext(checked.actorUserId, db);
+          if (!verifier.active || !verifier.user?.personId) throw new AccessError("Active human verifier required");
           await boundResource(db, verifier, instance, "control.evaluate");
           await verifier.requireAccess(t.controlPoint.requiredPermission, instance);
         }
@@ -169,7 +177,8 @@ export function createOperationsService(client: PrismaClient = prisma, createAcc
       const row = await db.workflowHistory.create({ data: { instanceId: instance.id, transitionId: t.id, actorUserId: userId, fromState: instance.currentState.key, toState: t.toState.key, instanceVersion: instance.version, reason: data.reason, idempotencyKey: data.idempotencyKey, fingerprint } });
       await event(db, ctx, instance, "workflow.transitioned", "WorkflowInstance", instance.id, { from: row.fromState, to: row.toState, version: instance.version });
       return row;
-    });
+    };
+    return transaction ? run(transaction) : client.$transaction(run);
   }
   async function checkControl(userId: string, instanceId: string, controlPointId: string, passed: boolean, reason: string) {
     if (!reason.trim() || reason.length > 4000) throw new AccessError("A verification reason is required");
@@ -229,6 +238,8 @@ export function createOperationsService(client: PrismaClient = prisma, createAcc
       const ctx = await context(db, userId); const r = await db.operationalRequest.findUniqueOrThrow({ where: { id } });
       await boundResource(db, ctx, r, "request.manage");
       if (r.status !== "DRAFT" || r.requesterUserId !== userId) throw new AccessError("Only the requester can edit an unsubmitted draft");
+      if (r.type === "NICE_JOBS_GOAL") throw new AccessError("Goal proposals are immutable; prepare a new proposal");
+      if (r.type === "AIRALABS_QUOTE") throw new AccessError("Quotation review snapshots are immutable; prepare a new draft");
       if (await db.siaAction.findUnique({ where: { requestId: id }, select: { id: true } })) throw new AccessError("SIA action proposals are immutable; prepare a new proposal");
       if (await db.communicationMessage.findUnique({ where: { requestId: id }, select: { id: true } })) throw new AccessError("Communication proposals are immutable; prepare a new preview");
       const row = await db.operationalRequest.update({ where: { id }, data: { title, description, fingerprint: hash({ edited: true, id, title, description }) } });
@@ -238,6 +249,11 @@ export function createOperationsService(client: PrismaClient = prisma, createAcc
   }
   async function requestRecipient(db: DB, r: Resource & { id: string; type: string; requesterUserId: string }, userId: string, requiredPermission: string, allowSelf: boolean) {
     const approver = await validRecipient(db, userId, r, "approval.decide");
+    if (r.type === "NICE_JOBS_GOAL") await goalApprovalGuard(db, await db.operationalRequest.findUniqueOrThrow({ where: { id: r.id } }), approver.user!.personId);
+    if (["NICE_JOBS_EARNING", "NICE_JOBS_ADJUSTMENT", "NICE_JOBS_SETTLEMENT"].includes(r.resourceType)) {
+      const financialRequest = await db.operationalRequest.findUniqueOrThrow({ where: { id: r.id }, select: { id: true, resourceType: true, resourceId: true, controlPointId: true } });
+      await financialRequestGuard(db, financialRequest, approver.user!.personId);
+    }
     if (!allowSelf || r.type === "SIA_PROPOSAL") {
       const requester = await db.user.findUniqueOrThrow({ where: { id: r.requesterUserId }, select: { personId: true } });
       const created = await db.auditEvent.findFirst({ where: { entityId: r.id, entityType: "OperationalRequest", actorUserId: r.requesterUserId, action: { in: ["request.created", "sia.action_proposed"] } }, select: { actorPersonId: true }, orderBy: { createdAt: "asc" } });
@@ -324,6 +340,8 @@ export function createOperationsService(client: PrismaClient = prisma, createAcc
       const pending = await boundedRead(take => db.siaApproval.findMany({ take, where: { requestId: r.id, status: "PENDING" }, orderBy: { stageIndex: "asc" } }));
       if (data.decision === "REJECTED" || !pending.length) {
         await db.operationalRequest.update({ where: { id: r.id }, data: { status: data.decision, decidedAt: new Date() } });
+        const financial = await financialDecision(db, r, data.decision);
+        if (financial) await event(db, ctx, r, "nicejobs.finance.approval_decision", "NiceJobsFinance", financial.id, { previous: financial.previous, next: financial.next, requestId: r.id });
         if (data.decision === "REJECTED") await db.siaApproval.updateMany({ where: { requestId: r.id, status: "PENDING" }, data: { status: "CANCELLED", decidedAt: new Date() } });
         await expireApprovalAlerts(db, ctx, r);
         await notify(db, userId, r.requesterUserId, r, "APPROVAL_COMPLETED", "Approval " + data.decision.toLowerCase(), r.title, "request-decision:" + r.id, "NORMAL", r.expiresAt);
@@ -338,6 +356,7 @@ export function createOperationsService(client: PrismaClient = prisma, createAcc
       await boundResource(db, ctx, r, "request.manage");
       if (!["DRAFT", "SUBMITTED"].includes(r.status)) throw new AccessError("Request is already decided");
       await db.operationalRequest.update({ where: { id }, data: { status: "CANCELLED", decidedAt: new Date() } });
+      await financialDecision(db, r, "CANCELLED");
       await db.siaApproval.updateMany({ where: { requestId: id, status: "PENDING" }, data: { status: "CANCELLED", decidedAt: new Date() } });
       await expireApprovalAlerts(db, ctx, r);
       await event(db, ctx, r, "request.cancelled", "OperationalRequest", id);
@@ -403,6 +422,8 @@ export function createOperationsService(client: PrismaClient = prisma, createAcc
     const parsed = input.reminderInput.parse(raw);
     const run = async (db: DB) => {
       const ctx = await context(db, userId); const scope = await boundResource(db, ctx, parsed, "reminder.manage");
+      await trainingReminderGuard(db,ctx,parsed);
+      await labsReminderGuard(db,ctx,parsed);
       await validRecipient(db, parsed.recipientUserId, scope);
       const existing = await db.reminder.findUnique({ where: { organizationId_reference: { organizationId: scope.organizationId, reference: parsed.reference } } });
       if (existing) {
@@ -469,6 +490,8 @@ export function createOperationsService(client: PrismaClient = prisma, createAcc
       const row = kind === "reminder" ? await db.reminder.findUniqueOrThrow({ where: { id } }) : kind === "recurrence" ? await db.recurringWork.findUniqueOrThrow({ where: { id } }) : kind === "escalation" ? await db.escalation.findUniqueOrThrow({ where: { id } }) : kind === "control" ? await db.controlPoint.findUniqueOrThrow({ where: { id } }) : await db.workflowDefinition.findUniqueOrThrow({ where: { id } });
       await ctx.requireAccess(kind + ".manage", row);
       if ("resourceType" in row) await boundResource(db, ctx, row, kind + ".manage");
+      if(kind==="reminder" && "recipientUserId" in row && "reference" in row)await trainingReminderGuard(db,ctx,row,"CANCEL");
+      if(kind==="reminder" && "recipientUserId" in row && "reference" in row && "remindAt" in row)await labsReminderGuard(db,ctx,row,true);
       const allowed: Record<string, string[]> = { reminder: ["CANCELLED"], recurrence: ["PAUSED", "ACTIVE", "CANCELLED"], escalation: ["RESOLVED"], control: ["ARCHIVED"], workflow: ["ARCHIVED"] };
       if (!allowed[kind].includes(status) || ["CANCELLED", "COMPLETED", "RESOLVED", "ARCHIVED"].includes(row.status)) throw new AccessError("Invalid state transition");
       if (kind === "reminder") await db.reminder.update({ where: { id }, data: { status } });
@@ -479,14 +502,15 @@ export function createOperationsService(client: PrismaClient = prisma, createAcc
       await event(db, ctx, row, kind + "." + status.toLowerCase(), kind, id);
     });
   }
-  async function processDue(userId: string, limit = 25) {
+  async function processDue(userId: string, limit = 25, mode: "ALL" | "LABS_FOLLOWUP" = "ALL") {
+    z.enum(["ALL","LABS_FOLLOWUP"]).parse(mode);
     if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new AccessError("Processing batch must be between 1 and 100");
     const ctx = await context(client, userId); const now = new Date();
     if (!ctx.organizationIds("operations.process").length && !ctx.grants.some(g => g.key === "operations.process" && g.projectId)) throw new AccessError("Access denied");
     const scopes = { OR: [{ organizationId: { in: ctx.organizationIds("operations.process") } }, { projectId: { in: ctx.grants.filter(g => g.key === "operations.process" && g.projectId).map(g => g.projectId!) } }] };
-    const reminders = await client.reminder.findMany({ where: { ...scopes, status: "PENDING", remindAt: { lte: now } }, take: limit, orderBy: { remindAt: "asc" } });
-    const recurrences = await client.recurringWork.findMany({ where: { ...scopes, status: "ACTIVE", nextRunAt: { lte: now } }, take: Math.max(0, limit - reminders.length), orderBy: { nextRunAt: "asc" } });
-    const requests = await client.operationalRequest.findMany({ where: { ...scopes, status: { in: ["DRAFT", "SUBMITTED"] }, expiresAt: { lte: now } }, take: Math.max(0, limit - reminders.length - recurrences.length) });
+    const reminders = await client.reminder.findMany({ where: { ...scopes, status: "PENDING", remindAt: { lte: now }, ...(mode==="LABS_FOLLOWUP"?{reference:{startsWith:"labs-followup:"}}:{}) }, take: limit, orderBy: { remindAt: "asc" } });
+    const recurrences = mode==="ALL"?await client.recurringWork.findMany({ where: { ...scopes, status: "ACTIVE", nextRunAt: { lte: now } }, take: Math.max(0, limit - reminders.length), orderBy: { nextRunAt: "asc" } }):[];
+    const requests = mode==="ALL"?await client.operationalRequest.findMany({ where: { ...scopes, status: { in: ["DRAFT", "SUBMITTED"] }, expiresAt: { lte: now } }, take: Math.max(0, limit - reminders.length - recurrences.length) }):[];
     let succeeded = 0; const failures: { id: string; code: string }[] = [];
     for (const candidate of [...reminders.map(r => ({ id: r.id, kind: "reminder" as const })), ...recurrences.map(r => ({ id: r.id, kind: "recurrence" as const, scheduledAt: r.nextRunAt, occurrences: r.occurrences })), ...requests.map(r => ({ id: r.id, kind: "request" as const }))]) {
       try {
@@ -495,6 +519,8 @@ export function createOperationsService(client: PrismaClient = prisma, createAcc
           if (candidate.kind === "reminder") {
             const r = await db.reminder.findUniqueOrThrow({ where: { id: candidate.id } });
             await boundResource(db, actor, r, "operations.process");
+            await trainingReminderGuard(db,actor,r,"PROCESS");
+            await labsReminderGuard(db,actor,r);
             if (r.status !== "PENDING" || r.remindAt > now) return false;
             const claim = await db.reminder.updateMany({ where: { id: r.id, status: "PENDING" }, data: { status: "PROCESSING" } });
             if (!claim.count) return false;
@@ -524,6 +550,7 @@ export function createOperationsService(client: PrismaClient = prisma, createAcc
             await boundResource(db, actor, r, "operations.process");
             if (!["DRAFT", "SUBMITTED"].includes(r.status) || !r.expiresAt || r.expiresAt > now) return false;
             await db.operationalRequest.update({ where: { id: r.id }, data: { status: "EXPIRED", decidedAt: now } });
+            await financialDecision(db, r, "EXPIRED");
             await db.siaApproval.updateMany({ where: { requestId: r.id, status: "PENDING" }, data: { status: "EXPIRED", decidedAt: now } });
             await expireApprovalAlerts(db, actor, r);
             await event(db, actor, r, "request.expired", "OperationalRequest", r.id);

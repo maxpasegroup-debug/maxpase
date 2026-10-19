@@ -1,16 +1,27 @@
 import type { Prisma } from "@prisma/client";
 import { AccessError, createAccessContext } from "@/server/authorization/engine";
 import { siteById, type PortalId } from "./sites";
+import { accountPortalRealm } from "@/server/auth/account-realm";
 
-export async function requirePortalAccess(db: Prisma.TransactionClient, userId: string, id: PortalId) {
+const skillCityStaffRoles = new Set(["Director", "Division Director", "Senior Academic Advisor", "Junior Academic Advisor", "Software Developer", "Full Stack Developer", "Junior Developer"]);
+
+export async function requirePortalAccess(db: Prisma.TransactionClient, userId: string, id: PortalId, credentialSetup = false) {
   const site = siteById(id);
   if (!site) throw new AccessError("Gateway unavailable");
   if (id === "skillcity") {
     const company = await db.organization.findUnique({ where: { slug: "aira-skill-city" }, select: { id: true, type: true, status: true, company: { select: { status: true } } } });
     if (!company || company.type !== "COMPANY" || company.status !== "ACTIVE" || company.company?.status !== "ACTIVE") throw new AccessError("Gateway unavailable");
-    const scope = { organizationId: company.id };
-    const ctx = await createAccessContext(userId, db, undefined, scope);
-    await ctx.requireAccess("organization.read", scope);
+    const user = await db.user.findUnique({ where: { id: userId }, select: { person: { select: { metadata: true } } } });
+    const realm = accountPortalRealm(user?.person?.metadata);
+    if (realm && realm !== "skillcity") throw new AccessError("Gateway unavailable");
+    const ctx = await createAccessContext(userId, db, undefined, { organizationId: company.id });
+    const divisions = await db.organization.findMany({ where: { parentId: company.id, type: "DIVISION", status: "ACTIVE", slug: { in: ["aira-labs", "aira-startup-school", "aira-skill-studio", "aira-career-hub"] } }, select: { id: true } });
+    const staffScopes = [company.id, ...divisions.map(division => division.id)];
+    let authorized = false;
+    for (const scopeId of staffScopes) {
+      if (ctx.grants.some(grant => grant.key === "organization.read" && skillCityStaffRoles.has(grant.roleName ?? "") && (grant.organizationId === scopeId || grant.includeDescendants && grant.organizationId === company.id)) && (await ctx.decide("organization.read", { organizationId: scopeId })).allowed) { authorized = true; break; }
+    }
+    if (!authorized) throw new AccessError("Gateway unavailable");
     return { site, divisionId: company.id, companyId: company.id, ctx };
   }
   const division = await db.organization.findUnique({ where: { slug: site.divisionSlug }, select: { id: true, type: true, status: true, parent: { select: { id: true, slug: true, type: true, status: true, company: { select: { status: true } } } } } });
@@ -22,5 +33,9 @@ export async function requirePortalAccess(db: Prisma.TransactionClient, userId: 
   const scope = { organizationId: division.id };
   const ctx = await createAccessContext(userId, db, undefined, scope);
   await ctx.requireAccess("organization.read", scope);
+  if (id === "labs" && !credentialSetup) {
+    const user = await db.user.findUnique({ where: { id: userId }, select: { person: { select: { metadata: true } } } });
+    if (JSON.parse(user?.person?.metadata ?? "{}").labsPinChangeRequired === true) throw new AccessError("Change the initial PIN before entering the workspace");
+  }
   return { site, divisionId: division.id, companyId: division.parent.id, ctx };
 }

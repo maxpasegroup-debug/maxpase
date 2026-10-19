@@ -1,0 +1,28 @@
+{
+  "status": "PASS",
+  "recordedAt": "2026-10-08T18:28:22.421Z",
+  "browser": "154.0.8037.98",
+  "isolated": true,
+  "workflows": [
+    "canonical readiness activation",
+    "framework create and publish",
+    "custom-period snapshot generation",
+    "manager review and private notes",
+    "explicit attention",
+    "human PIP create/activate/release/review/complete",
+    "worker report and exact evidence",
+    "released worker plan acknowledgement and evidence",
+    "grounded read-only SIA",
+    "corporate/jobs session isolation", "scoped filters and context-preserving drilldown", "explicit-period executive aggregation", "PIP status and worker-framework search"
+  ],
+  "screenshots": 44,
+  "widths": [
+    320,
+    390,
+    768,
+    1440
+  ],
+  "noPageOverflow": true,
+  "pageErrors": 0,
+  "limitations": "Local Chrome and simulated viewports only. Physical devices, screen readers, complete keyboard/usability and production NOT RUN."
+}

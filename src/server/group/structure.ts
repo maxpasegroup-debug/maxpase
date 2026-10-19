@@ -1,10 +1,11 @@
 import type { Prisma } from "@prisma/client";
 import { seedAiraStructure } from "@/server/domain/aira-seed";
 import { groupIdentity } from "./identity";
+import { registerAiraProductDrafts } from "./product-drafts";
 
 export const groupCompanies = [
   { slug: "aira-skill-city", name: "AIRA SKILL CITY PRIVATE LIMITED", shortName: "AIRA Skill City" },
-  { slug: "pearn", name: "PEARN PRIVATE LIMITED", shortName: "PEARN" },
+  { slug: "pearn", name: "TEARN PRIVATE LIMITED", shortName: "TEARN" },
   { slug: "top-rank-ai", name: "TOP RANK AI PRIVATE LIMITED", shortName: "Top Rank AI" }
 ] as const;
 const brands = [
@@ -24,10 +25,14 @@ export async function initializeGroupStructure(db: Prisma.TransactionClient) {
   await db.groupProfile.update({ where: { id: group.group.id }, data: { name: groupIdentity.name } });
   const companies = [];
   for (const definition of groupCompanies) {
+    const legacyName = definition.slug === "pearn" ? "PEARN PRIVATE LIMITED" : null;
+    const previous = await db.organization.findUnique({ where: { slug: definition.slug }, include: { company: true } });
+    if (previous && ![definition.name, legacyName].includes(previous.name)) throw new Error("Existing company identity conflicts with initialization");
+    if (previous?.company?.legalName && ![definition.name, legacyName].includes(previous.company.legalName)) throw new Error("Existing company identity conflicts with initialization");
     const company = await db.organization.upsert({ where: { slug: definition.slug }, update: { name: definition.name }, create: { slug: definition.slug, name: definition.name, type: "COMPANY", parentId: group.id, company: { create: { groupId: group.group.id, legalName: definition.name, displayName: definition.shortName, metadata: JSON.stringify({ structureSource: "USER_CONFIRMED", legalInformationVerified: false }) } } }, include: { company: true } });
     if (company.type !== "COMPANY" || company.parentId !== group.id || !company.company || company.company.groupId !== group.group.id) throw new Error("Existing company structure conflicts with initialization");
-    if (company.company.legalName && company.company.legalName !== definition.name) throw new Error("Existing company identity conflicts with initialization");
-    await db.companyProfile.update({ where: { id: company.company.id }, data: { legalName: definition.name } });
+    await db.companyProfile.update({ where: { id: company.company.id }, data: { legalName: definition.name, ...(legacyName && previous?.company?.displayName === "PEARN" ? { displayName: definition.shortName } : {}) } });
+    if (legacyName && (previous?.name === legacyName || previous?.company?.legalName === legacyName)) await db.auditEvent.create({ data: { organizationId: company.id, action: "group.company_name_corrected", entityType: "CompanyProfile", entityId: company.company.id, result: "SUCCESS", metadata: JSON.stringify({ previousName: legacyName, nextName: definition.name, source: "OWNER_CONFIRMED", stableSlug: definition.slug }) } });
     companies.push(company);
   }
   const aira = companies.find(c => c.slug === "aira-skill-city")!;
@@ -44,6 +49,7 @@ export async function initializeGroupStructure(db: Prisma.TransactionClient) {
       if (product.name !== definition.name || product.brandId !== brand.id) throw new Error("Existing product identity conflicts with initialization");
     }
   }
+  await registerAiraProductDrafts(db, aira.id);
   await db.auditEvent.create({ data: { organizationId: group.id, action: "group.structure_initialized", entityType: "Organization", entityId: group.id, result: "SUCCESS", metadata: JSON.stringify({ origin: "EXPLICIT_OPERATOR_INITIALIZATION", ownershipCreated: false }) } });
   await db.siaIdentity.updateMany({ where: { id: "sia-default" }, data: { title: `${groupIdentity.name} Virtual CEO` } });
   return { groupId: group.id, companies: companies.map(c => ({ id: c.id, name: c.name })) };

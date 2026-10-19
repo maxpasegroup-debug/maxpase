@@ -1,7 +1,7 @@
 import { validateActionOrigin } from "../security/origin";
 export const portalSites = [
   { id: "startup", name: "AIRA Startup School", domain: "airastartupskool.com", divisionSlug: "aira-startup-school", brandSlug: "startup-school", cookie: "aira_startup_session", theme: "startup", image: "/images/startup-school.jpg", eyebrow: "IDEAS INTO ENTERPRISE", description: "A place for curious minds and ambitious founders. Learn, experiment and take your next step.", focus: ["Entrepreneurship", "Practical learning", "Founder projects"] },
-  { id: "labs", name: "AIRA Labs", domain: "airalabs.online", divisionSlug: "aira-labs", brandSlug: "aira-labs", cookie: "aira_labs_session", theme: "labs", image: "/images/aira-labs.jpg", eyebrow: "CURIOSITY MEETS CREATION", description: "Explore ideas through technology, experimentation and collaborative projects.", focus: ["Applied technology", "Experimentation", "Collaborative projects"] },
+  { id: "labs", name: "AIRA Labs", domain: "airalabs.online", divisionSlug: "aira-labs", brandSlug: "aira-labs", cookie: "aira_labs_session", theme: "labs", image: "/images/aira-labs.jpg", eyebrow: "AI & BUSINESS AUTOMATION", description: "Practical AI transformation, workflow integration and business automation by AIRA Skill City Private Limited.", focus: ["AI automation", "Workflow integration", "Business systems"] },
   { id: "jobs", name: "Nice Jobs", domain: "nicejobs.online", divisionSlug: "aira-career-hub", brandSlug: "nice-jobs", cookie: "nice_jobs_session", theme: "jobs", image: "/images/nice-jobs.jpg", eyebrow: "AIRA CAREER HUB", description: "AIRA's distributed workforce platform for part-time work and professional development.", focus: ["Part-time workforce", "Skills in practice", "Professional development"] }
   ,{ id: "skillcity", name: "AIRA Skill City", domain: "airaskillcity.com", divisionSlug: "aira-skill-city", brandSlug: "aira-skill-city", cookie: "aira_skillcity_session", theme: "skillcity", image: "/images/group-workspace.jpg", eyebrow: "LEARN. CREATE. GROW.", description: "Discover an ecosystem of practical learning, entrepreneurship, technology and career development.", focus: ["Skills and learning", "Enterprise and innovation", "Careers and opportunity"] }
 ] as const;
@@ -14,7 +14,7 @@ export function hostName(raw: string | null): string | null {
 }
 export function siteByHost(host: string | null) { const name = hostName(host); return portalSites.find(s => name === s.domain || name === "www." + s.domain); }
 export function localHost(host: string | null) { return ["localhost", "127.0.0.1", "[::1]"].includes(hostName(host) ?? ""); }
-export function portalPaths(site: PortalSite, local = false) { const base = local ? `/sites/${site.id}` : ""; return { home: base || "/", login: base + "/login", gateway: base + "/gateway" }; }
+export function portalPaths(site: PortalSite, local = false) { const base = local ? `/sites/${site.id}` : ""; return { home: base || "/", login: base + "/login", gateway: base + "/gateway", opportunities: base + "/opportunities", signup: base + "/signup" }; }
 export function portalHostAllowed(site: PortalSite, host: string | null, development: boolean) { return siteByHost(host)?.id === site.id || development && localHost(host); }
 export function validatePortalOrigin(site: PortalSite, host: string | null, origin: string | null, development: boolean) {
   if (!portalHostAllowed(site, host, development)) throw new Error("Invalid gateway host");

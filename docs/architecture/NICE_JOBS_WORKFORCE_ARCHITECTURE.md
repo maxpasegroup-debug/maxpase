@@ -1,5 +1,7 @@
 # Nice Jobs Workforce Architecture
 
+Career Hub experience phase 4 adds participant outcomes and skill-backed responsibilities through canonical goals, approvals and tasks, while preserving independent earned-money access. See [Goals and Earnings](NICE_JOBS_GOALS_EARNINGS_PHASE_4.md).
+
 ## Purpose And Product Boundary
 
 Nice Jobs is a workforce operating product, not a conventional public job board. The existing `maxpase-group` root (current group-facing name MAXSPACE GROUP) -> AIRA SKILL CITY PRIVATE LIMITED -> AIRA Career Hub -> Nice Jobs Product/Brand remains authoritative. No new company, division, login database, role engine, workflow engine or SIA is introduced.
@@ -69,3 +71,23 @@ Future SIA workforce tools must call these bounded source-authorized services th
 Fresh/repeat deploy, Prisma drift, integrity/FKs and isolated restore use `npm run validate:migrations`. Focused tests additionally migrate a populated pre-Phase01 fixture, preserve its Person ID, restore a pre-phase snapshot and reapply the additive migration. Older artifacts ignore these tables; do not drop tables or downgrade a live database containing new assignments. Full application rollback and production load/TLS/device usability remain operator/manual gates. The prior Nice Jobs TLS hostname finding remains unresolved by this implementation.
 
 See `docs/audit/NICE_JOBS_PHASE_01_VALIDATION.md` for exact validation results and limitations. Phase 02 and every downstream engine remain untouched.
+
+## Nice Jobs Phase 05
+
+See [Nice Jobs Employee Workspace & SIA Architecture](NICE_JOBS_EMPLOYEE_WORKSPACE_SIA_ARCHITECTURE.md) for explicit readiness-backed human activation on the existing Assignment, canonical task/evidence and blocker integration, immutable daily report corrections, bounded employee/management views and registered read-only worker SIA context. Existing identities, source authorization, human/agent intersection, transactional audit and notification controls are preserved. Legacy attestations do not unlock this workspace; no automatic grants, employment-status executor or Phase 06+ features are enabled.
+
+## Nice Jobs Phase 09 Financial Boundary
+
+See [Nice Jobs Incentive, Wallet and Settlement Architecture](NICE_JOBS_INCENTIVE_WALLET_SETTLEMENT_ARCHITECTURE.md). Versioned explicit policies and evidence-backed calculations use canonical independent human approvals. Exact minor-unit, append-only wallets separate pending/available/review-reserved/payout-reserved funds from unconfirmed external payment. Immutable statements, approved compensating reversals, scoped reconciliation and audit-backed commands preserve company isolation. No real rates are seeded, no financial SIA write tool is registered, and no payout provider or Phase 10 automation is enabled.
+
+## Nice Jobs Phase 10 Operational Control
+
+See [Nice Jobs Automation and Workforce Command Architecture](NICE_JOBS_AUTOMATION_WORKFORCE_COMMAND_CENTER_ARCHITECTURE.md). The new scoped command view and bounded internal automation are additive to the accepted workforce and financial boundaries. No production scheduler, payout provider or autonomous decision authority is configured.
+
+## Career Hub Experience: Orientation And Offers
+
+See [Pre-offer Phase 2](NICE_JOBS_PRE_OFFER_PHASE_2.md) for the separate applicant checkpoint, versioned policy acknowledgement, management-governed issuance, owned offer downloads and unsent email drafts. Existing post-offer OJT/readiness and workforce activation are unchanged. New owner-supplied drafts require role media and reviewed policy content before publication; legacy published versions retain their recorded workflow until explicitly revised.
+
+## Career Hub Experience: One Workspace
+
+See [One Workspace Phase 3](NICE_JOBS_ONE_WORKSPACE_PHASE_3.md) for the shared seven-section participant experience, activation-aware entry, optional short-practice timing, recorded stage milestones, owned evidence visibility and independently reviewed customer-material sharing.

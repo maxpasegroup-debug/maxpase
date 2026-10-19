@@ -14,6 +14,9 @@ import { createAccessContext } from "@/server/authorization/engine";
 import { canonicalAiraRoles } from "@/server/domain/aira-roles";
 import { bossHref, parseBossFilters } from "@/server/group/boss-reliability";
 import { createExecutionService } from "@/server/domain/execution-service";
+import { projectBossStructure } from "@/server/group/boss-structure";
+import { airaProductDrafts, assertControlledProductDraft, seniorAcademicAdvisorDraft } from "@/server/group/product-drafts";
+import { createBusinessService } from "@/server/domain/business-service";
 
 const directory = mkdtempSync(join(tmpdir(), "maxspace-boss-")), file = join(directory, "test.db");
 const db = new PrismaClient({ datasourceUrl: "file:" + file.replaceAll("\\", "/") });
@@ -109,6 +112,63 @@ describe("MAXPASE group and Boss controls", () => {
     const nice = await db.product.findUniqueOrThrow({ where: { organizationId_slug: { organizationId: airaId, slug: "nice-jobs" } }, include: { division: true } });
     expect(nice.division?.slug).toBe("aira-career-hub");
     expect(nice.brandId).toBe(brands.find(b => b.slug === "nice-jobs")?.id);
+    for (const definition of airaProductDrafts) {
+      const draft = await db.product.findUniqueOrThrow({ where: { organizationId_slug: { organizationId: airaId, slug: definition.slug } }, include: { division: true, brand: true } });
+      expect(draft).toMatchObject({ name: definition.name, status: "INACTIVE", lifecycle: "CONCEPT" });
+      expect(draft.division?.slug).toBe(definition.divisionSlug);
+      expect(draft.brand?.slug ?? null).toBe(definition.brandSlug);
+      expect(JSON.parse(draft.metadata!)).toMatchObject({ setupStatus: "REVIEWED_DRAFT", commercialTerms: null, productOwnerPersonId: null, approvalAuthorityPersonId: null, publicationApproved: false });
+      expect(await db.auditEvent.count({ where: { entityId: draft.id, action: "product.reviewed_draft_registered" } })).toBe(1);
+    }
+    expect(seniorAcademicAdvisorDraft).toMatchObject({ engagement: "IN_HOUSE_EMPLOYEE", monthlySalaryMinor: 1800000, status: "DRAFT", managerPersonId: null, payrollConfiguration: null });
+    const prior = await db.organization.findUniqueOrThrow({ where: { id: pearnId }, include: { company: true } });
+    expect(prior.company?.legalName).toBe("TEARN PRIVATE LIMITED");
+    await db.organization.update({ where: { id: pearnId }, data: { name: "PEARN PRIVATE LIMITED" } });
+    await db.companyProfile.update({ where: { organizationId: pearnId }, data: { legalName: "PEARN PRIVATE LIMITED", displayName: "PEARN" } });
+    await db.$transaction(initializeGroupStructure);
+    expect((await db.organization.findUniqueOrThrow({ where: { id: pearnId } })).name).toBe("TEARN PRIVATE LIMITED");
+    expect(await db.companyProfile.findUniqueOrThrow({ where: { organizationId: pearnId } })).toMatchObject({ legalName: "TEARN PRIVATE LIMITED", displayName: "TEARN" });
+    expect(await db.auditEvent.count({ where: { organizationId: pearnId, action: "group.company_name_corrected" } })).toBe(1);
+    await db.$transaction(initializeGroupStructure);
+    expect(await db.auditEvent.count({ where: { organizationId: pearnId, action: "group.company_name_corrected" } })).toBe(1);
+    for (const definition of airaProductDrafts) {
+      const draft = await db.product.findUniqueOrThrow({ where: { organizationId_slug: { organizationId: airaId, slug: definition.slug } } });
+      expect(await db.auditEvent.count({ where: { entityId: draft.id, action: "product.reviewed_draft_registered" } })).toBe(1);
+    }
+  });
+  it("projects only authorized recorded companies, exact divisions and honest unavailable NEXA state", async () => {
+    const data = await boss.dashboard(userId);
+    const mapped = projectBossStructure(data);
+    expect(mapped.map(company => company.legalName)).toEqual(["AIRA SKILL CITY PRIVATE LIMITED", "TEARN PRIVATE LIMITED", "TOP RANK AI PRIVATE LIMITED"]);
+    const aira = mapped[0];
+    expect(aira.divisions.map(item => [item.label, item.product])).toEqual([["Startup Skool", "PBA"], ["AIRA Labs", "BGOS"], ["AIRA Skill Studio", "GenZ Builder"], ["AIRA Career Hub", "Nice Jobs"]]);
+    expect(aira.divisions.map(item => !!item.row)).toEqual([true, true, true, true]);
+    expect(aira.divisions.map(item => !!item.productRow)).toEqual([true, true, true, true]);
+    expect(aira.divisions.slice(0, 3).every(item => item.productRow?.status === "INACTIVE" && item.productRow.lifecycle === "CONCEPT")).toBe(true);
+    expect(aira.divisions[3].productRow?.lifecycle).toBe("CONCEPT");
+    expect(aira.brands.map(item => item.name)).toEqual(["OnSpeak Mentor Hub", "HappiNotes", "Lifeskool", "The Skool Of Joy", "Pocket Doctor", "Queen's Club"]);
+    expect(aira.brands.every(item => !item.row)).toBe(true);
+    expect(mapped[1].products.map(item => item.row?.name)).toEqual(["TeachX Guru", "LearnX Guru"]);
+    const bgos = await db.product.findUniqueOrThrow({ where: { organizationId_slug: { organizationId: airaId, slug: "bgos" } } });
+    await db.product.update({ where: { id: bgos.id }, data: { divisionId: aira.divisions[0].row!.id } });
+    try {
+      expect(projectBossStructure(await boss.dashboard(userId))[0].divisions[1].productRow).toBeUndefined();
+      await expect(db.$transaction(initializeGroupStructure)).rejects.toThrow("Product draft conflicts");
+    } finally { await db.product.update({ where: { id: bgos.id }, data: { divisionId: bgos.divisionId } }); }
+  });
+  it("blocks controlled draft promotion until a dedicated approval-backed path exists", () => {
+    expect(() => assertControlledProductDraft("aira-skill-city", "bgos", "ACTIVE", "CONCEPT")).toThrow();
+    expect(() => assertControlledProductDraft("aira-skill-city", "pba", "INACTIVE", "LIVE")).toThrow();
+    expect(() => assertControlledProductDraft("aira-skill-city", "genz-builder", "INACTIVE", "CONCEPT")).not.toThrow();
+    expect(() => assertControlledProductDraft("pearn", "bgos", "ACTIVE", "LIVE")).not.toThrow();
+  });
+  it("rejects publication through the authorized generic product editor without mutating the draft", async () => {
+    const draft = await db.product.findUniqueOrThrow({ where: { organizationId_slug: { organizationId: airaId, slug: "bgos" } } });
+    const input = { organizationId: airaId, name: draft.name, slug: draft.slug, divisionId: draft.divisionId, brandId: draft.brandId, type: "PRODUCT", lifecycle: "LIVE", status: "ACTIVE" };
+    await expect(createBusinessService(db).save(userId, "products", input, draft.id)).rejects.toThrow("Product requires reviewed terms and independent publication approval");
+    const wrongDivision = await db.organization.findUniqueOrThrow({ where: { slug: "aira-startup-school" } });
+    await expect(createBusinessService(db).save(userId, "products", { ...input, lifecycle: "CONCEPT", status: "INACTIVE", divisionId: wrongDivision.id }, draft.id)).rejects.toThrow("Controlled product identity and ownership require a reviewed setup change");
+    expect(await db.product.findUniqueOrThrow({ where: { id: draft.id } })).toMatchObject({ status: "INACTIVE", lifecycle: "CONCEPT" });
   });
   it("rejects invalid private configuration before any credential or structure mutation", async () => {
     for (const value of ["", "invalid", "x".repeat(11), "0".repeat(11)]) {

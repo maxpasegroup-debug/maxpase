@@ -2,6 +2,16 @@ Phase 03 recruitment extension: [Nice Jobs interview, human approval and offer a
 
 # Authorization Model
 
+## AIRA Labs Business Operations
+
+Registered `labs.*` capabilities grant nobody access by themselves. Every command resolves active Labs membership, actual resource scope and current owner; issue/approve requires independent canonical review and current permission. A Labs PIN session cannot bypass project/task authorization or first-use rotation. See [AIRA Labs Business Operations](AIRA_LABS_BUSINESS_OPERATIONS.md).
+
+Nice Jobs email OTP establishes authentication/email control only. Signup retains its existing restricted applicant role; login/reset do not expand membership, role, company/division scope, worker readiness or approval authority. Session issuance rechecks current portal access, and self-service reset is limited to Jobs-realm accounts. No Boss, real pilot participant or independent approver is provisioned by this authentication change. See [Email Authentication](NICE_JOBS_EMAIL_AUTHENTICATION.md).
+
+## Nice Jobs Phase 10
+
+Phase 10 registers explicit Nice Jobs command, automation and exception capabilities without auto-granting them. Publishing requires an independent active human reviewer; processing rechecks owner, processor, resource, action and recipient. See [Nice Jobs Automation and Command Architecture](NICE_JOBS_AUTOMATION_WORKFORCE_COMMAND_CENTER_ARCHITECTURE.md).
+
 Nice Jobs Phase 02 registers explicit `nicejobs.application.self/read/evaluate/shortlist/reject/close` capabilities without automatic grants. Own access requires reviewed Career Hub access and Person ownership; management requires the appropriate capability at the application's actual division. Private application notifications resolve ownership and Career Hub distribution scope through the existing canonical resource adapter. See [Phase 02](NICE_JOBS_APPLICATION_SCREENING_ARCHITECTURE.md).
 
 ## Nice Jobs Phase 01
@@ -69,3 +79,29 @@ The centralized createAccessContext engine resolves decisions through active hum
 Delegation checks enforce named capabilities, matching GLOBAL authority and sufficient descendant coverage. Role assignment, capability assignment, role reactivation, membership reactivation and shared-account changes cannot create access broader than the actor can delegate. Group, company, department and project boundaries are rechecked at the domain operation.
 
 The Phase 02 PROJECT deferral is superseded by the explicit Membership.projectId/scopeKey anchor. Existing singular-domain permission keys and role-assignment permission remain valid. New capabilities are registered globally and assigned explicitly. Organization switching is authorized per request; diagnostic explanations require access.explain and remove unreadable provenance. See PEOPLE_ACCESS.md.
+
+## Nice Jobs Phase 04
+
+See [Nice Jobs Orientation & OJT Architecture](NICE_JOBS_ORIENTATION_OJT_ARCHITECTURE.md) for the accepted-offer gate, immutable shared JobVersion training plans, worker-specific progress, private evidence, assigned human reviews and readiness. READY is activation-ready only; this extension creates no active workforce assignment, production tasks, compensation or autonomous SIA execution. Existing Phase 01-03 boundaries remain in force.
+
+## Nice Jobs Phase 05
+
+See [Nice Jobs Employee Workspace & SIA Architecture](NICE_JOBS_EMPLOYEE_WORKSPACE_SIA_ARCHITECTURE.md) for explicit readiness-backed human activation on the existing Assignment, canonical task/evidence and blocker integration, immutable daily report corrections, bounded employee/management views and registered read-only worker SIA context. Existing identities, source authorization, human/agent intersection, transactional audit and notification controls are preserved. Legacy attestations do not unlock this workspace; no automatic grants, employment-status executor or Phase 06+ features are enabled.
+
+## Nice Jobs Phase 06
+
+Daily lead work and follow-ups extend the canonical workforce, workflow, audit, notification and read-only SIA boundaries. See [Phase 06 architecture](NICE_JOBS_DAILY_WORK_LEADS_FOLLOWUPS_ARCHITECTURE.md) for scoped policies, ownership history, controlled transitions, reports, indexed queues and deferred provider execution. No Phase 07 or autonomous SIA authority is introduced.
+
+Nice Jobs Phase 07 extends the canonical model with scoped immutable SOP/resource versions and internal workforce publications backed by existing communication templates, notifications and audit. See [SOP, Resources And Internal Communication](NICE_JOBS_SOP_RESOURCES_COMMUNICATION_ARCHITECTURE.md) for audience, acknowledgement, storage and human/agent source boundaries. No provider or autonomous authority is added.
+
+## Nice Jobs Phase 08
+
+See [Performance, Reports And PIP](NICE_JOBS_PERFORMANCE_REPORTS_PIP_ARCHITECTURE.md) for version-bound configurable expectations, canonical source evidence, immutable snapshots/corrections, scoped reporting, private/released reviews and human-governed improvement plans. Existing identity, source authorization, transactional audit/notification and human/agent intersection remain authoritative. Seven additive models; no invented real targets, automatic discipline, compensation system or autonomous SIA PIP authority.
+
+## Nice Jobs Phase 09 Financial Boundary
+
+See [Nice Jobs Incentive, Wallet and Settlement Architecture](NICE_JOBS_INCENTIVE_WALLET_SETTLEMENT_ARCHITECTURE.md). Versioned explicit policies and evidence-backed calculations use canonical independent human approvals. Exact minor-unit, append-only wallets separate pending/available/review-reserved/payout-reserved funds from unconfirmed external payment. Immutable statements, approved compensating reversals, scoped reconciliation and audit-backed commands preserve company isolation. No real rates are seeded, no financial SIA write tool is registered, and no payout provider or Phase 10 automation is enabled.
+
+## Training Intervention Authority
+
+Training proposals require current scoped human onboarding management. Decisions require an independent user/person with both onboarding management and readiness review, with requester authority revalidated. Candidate reminders additionally require Career Hub scheduling permission and enrollment-source checks; reviewer reminders stay division-scoped. SIA summaries use the human/agent read intersection only. See [training policy](NICE_JOBS_TRAINING_MANAGEMENT_PHASE_6.md).

@@ -41,6 +41,7 @@ export async function niceJobsAction(_state: JobActionState, form: FormData): Pr
       case "job-state": await service.changeJob(userId, { id, revision, to: form.get("to"), reason: form.get("reason") }); break;
       case "job-visibility": await service.visibility(userId, { id, revision, to: form.get("to"), reason: form.get("reason") }); break;
       case "seed": await service.seedKnown(userId); break;
+      case "seed-opportunities": await service.seedInitialOpportunities(userId); break;
       case "assign": await service.assign(userId, { personId: form.get("personId"), versionId: form.get("versionId"), divisionId: form.get("divisionId"), managerId: String(form.get("managerId") ?? "") || null }); break;
       case "lifecycle": await service.transition(userId, { id, revision, to: form.get("to"), reason: form.get("reason") }); break;
       default: throw new NiceJobsError("Unknown operation");

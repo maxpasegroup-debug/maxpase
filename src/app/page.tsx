@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import { ArrowDown, ArrowUpRight, ArrowRight, Grid2X2, GraduationCap, Lightbulb, Cpu, Sparkles } from "lucide-react";
 
 const companies = [
@@ -11,11 +12,10 @@ export default function Home() {
     <header className="group-header"><Link className="group-wordmark" href="/" aria-label="MAXPASE GROUP home"><Grid2X2 size={28} /><span>MAXPASE<span className="wordmark-sub">GROUP</span></span></Link><nav aria-label="Public navigation"><a className="group-about-link" href="#companies">Our companies</a><Link className="group-cta" href="/login">Login<ArrowUpRight size={17} /></Link></nav></header>
     <section className="group-hero" aria-labelledby="group-title">
       <div className="group-hero-content"><p className="group-kicker"><Sparkles size={14} /> EDUCATION. ENTERPRISE. INNOVATION.</p><h1 id="group-title">Innovate.<br />Transform.<br /><span>Thrive.</span></h1><p className="group-hero-description">Connecting talent, ideas and technology.<br />Building what comes next, together.</p><a className="group-cta hero-cta" href="#companies">Discover our group<ArrowRight size={19} /></a></div>
-      <div className="group-hero-art" aria-hidden="true">
-        <div className="hero-art-orbit hero-art-orbit-one" /><div className="hero-art-orbit hero-art-orbit-two" />
-        <div className="hero-art-platform"><div className="hero-art-city">
-          <span className="hero-building building-one" /><span className="hero-building building-two" /><span className="hero-building building-three" /><span className="hero-building building-four" /><span className="hero-building building-five" /><span className="hero-building building-six" />
-        </div></div>
+      <div className="group-hero-art">
+        <div className="group-hero-office">
+          <Image src="/images/group-workspace.webp" alt="Modern office meeting room with a conference table" fill priority unoptimized sizes="(max-width: 600px) 88vw, (max-width: 1000px) 46vw, 690px" />
+        </div>
         <div className="hero-art-card"><span className="hero-art-dot" /><span>MAXPASE OS</span><strong>One group.<br />Many possibilities.</strong><small>EDUCATION / ENTERPRISE / INNOVATION</small></div>
       </div>
       <div className="group-hero-footer"><span>AIRA SKILL CITY / PEARN / TOP RANK AI</span><a href="#companies" aria-label="Explore our companies"><ArrowDown size={22} /></a></div>

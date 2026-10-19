@@ -1,5 +1,7 @@
 # MAXSPACE GROUP Architecture
 
+Current name and Boss navigation update: [Boss Group Structure Phase 1](BOSS_GROUP_STRUCTURE_PHASE_1.md). TEARN PRIVATE LIMITED is the owner-confirmed registered name; `pearn` remains the stable database identifier. Earlier PEARN references below describe historical source state. No production correction was executed by the phase.
+
 ## Boss Validation And Launch Phase 5
 
 The owner accepted initial 30-second next-action usability, context-preserving workflows, keyboard/accessibility, staging p95 <= 2s/p99 <= 5s and zero authorization/isolation/replay/audit-rollback failures. Automated populated Chrome/Edge workflows, security regressions, strict public-domain probes, local service/production-build HTTP benchmarks and private recovery of the existing production snapshot are recorded in `docs/audit/BOSS_DASHBOARD_LAUNCH_VALIDATION.md` and its linked JSON reports.
