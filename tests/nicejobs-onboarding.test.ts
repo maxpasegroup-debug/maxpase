@@ -358,8 +358,8 @@ describe("Nice Jobs orientation, OJT and human readiness", () => {
   });
   it("opens owned training for a public applicant only after audited offer acceptance, without worker grants", async () => {
     for (const key of ["notification.read", "sia.access.read"]) await db.permission.upsert({ where: { key }, update: {}, create: { key, name: key, scope: "GROUP" } });
-    const password = "isolated-participant-password-123";
-    const user = await createApplicantAccess(db).register({ displayName: "Public trainee", email: "trainee@phase03.invalid", password, confirmPassword: password, acknowledge: true });
+    process.env.NICEJOBS_PIN_PEPPER = "isolated-test-pepper-at-least-thirty-two-characters";
+    const user = await createApplicantAccess(db).register({ displayName: "Public trainee", email: "trainee@phase03.invalid", country: "IN", nationalNumber: "9876543213", pin: "123456", confirmPin: "123456", acknowledge: true });
     expect((await onboarding.navigation(user.userId)).own).toBe(false);
     const ref = await accepted(user.userId);
     expect((await onboarding.navigation(user.userId)).own).toBe(true);
@@ -378,8 +378,8 @@ describe("Nice Jobs orientation, OJT and human readiness", () => {
   });
   it("rolls back accepted offer and training role assignment if the training access audit fails", async () => {
     for (const key of ["notification.read", "sia.access.read"]) await db.permission.upsert({ where: { key }, update: {}, create: { key, name: key, scope: "GROUP" } });
-    const password = "isolated-rollback-password-123";
-    const user = await createApplicantAccess(db).register({ displayName: "Rollback trainee", email: "rollback-trainee@phase03.invalid", password, confirmPassword: password, acknowledge: true });
+    process.env.NICEJOBS_PIN_PEPPER = "isolated-test-pepper-at-least-thirty-two-characters";
+    const user = await createApplicantAccess(db).register({ displayName: "Rollback trainee", email: "rollback-trainee@phase03.invalid", country: "IN", nationalNumber: "9876543214", pin: "123456", confirmPin: "123456", acknowledge: true });
     try {
       await expect(accepted(user.userId, versionId, async () => {
         await db.$executeRawUnsafe("CREATE TRIGGER fail_training_access BEFORE INSERT ON OperationalEvent WHEN NEW.eventType = 'nicejobs.participant.training_access' BEGIN SELECT RAISE(ABORT, 'training audit unavailable'); END");

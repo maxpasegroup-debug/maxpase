@@ -15,6 +15,7 @@ import { hashPassword, verifyPassword } from "@/server/auth/password";
 const directory = mkdtempSync(join(tmpdir(), "nicejobs-email-auth-")), file = join(directory, "test.db");
 const db = new PrismaClient({ datasourceUrl: "file:" + file.replaceAll("\\", "/") });
 const secret = randomBytes(32).toString("hex"), password = randomBytes(24).toString("hex");
+process.env.NICEJOBS_PIN_PEPPER = secret;
 const env = { NICEJOBS_EMAIL_AUTH_ENABLED: "true", RESEND_API_KEY: "isolated-key-not-live", NICEJOBS_AUTH_FROM: "auth@test.invalid", NICEJOBS_OTP_SECRET: secret };
 let clock: Date, userId: string, personId: string, membershipId: string, messages: OtpDelivery[];
 const send = async (message: OtpDelivery) => { messages.push(message); return "isolated-provider-receipt"; };
@@ -26,7 +27,7 @@ beforeAll(async () => {
   for (const folder of readdirSync("prisma/migrations").filter(f => /^\d/.test(f)).sort()) sql.exec(readFileSync(join("prisma/migrations", folder, "migration.sql"), "utf8"));
   sql.close(); await db.$transaction(initializeGroupStructure);
   for (const key of applicantPermissionKeys) await db.permission.upsert({ where: { key }, update: {}, create: { key, name: key, scope: "GROUP" } });
-  userId = (await createApplicantAccess(db).register({ displayName: "Isolated applicant", ...credentials, confirmPassword: password, acknowledge: true })).userId;
+  userId = (await createApplicantAccess(db).register({ displayName: "Isolated applicant", email: credentials.email, country: "IN", nationalNumber: "9876543210", pin: "123456", confirmPin: "123456", acknowledge: true })).userId;
   personId = (await db.user.findUniqueOrThrow({ where: { id: userId } })).personId!;
   membershipId = (await db.membership.findFirstOrThrow({ where: { personId } })).id;
 }, 30000);

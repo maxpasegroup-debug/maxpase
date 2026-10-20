@@ -7,8 +7,11 @@ import { createSecurityLimiter, securityKey, RateLimitError } from "@/server/sec
 import { accountPortalRealm } from "./account-realm";
 import { createAuthenticationService } from "./service";
 import { hashPassword } from "./password";
+import { hashJobsPin } from "./jobs-pin";
+import { verifyJobsPin } from "./jobs-pin";
+import { jobsPhoneInput, jobsPinInput } from "./jobs-phone";
 import { claimJobsOtp, jobsOtpHash } from "./jobs-otp-proof";
-import { createResendOtpSender, emailAuthSettings, EmailAuthUnavailable, type OtpDelivery } from "./resend-otp";
+import { createResendOtpSender, createResendPinNoticeSender, emailAuthSettings, EmailAuthUnavailable, type OtpDelivery } from "./resend-otp";
 import { requirePortalAccess } from "@/server/portals/policy";
 import { AccessError } from "@/server/authorization/engine";
 
@@ -17,9 +20,9 @@ const proofInput = z.object({ challengeId: z.uuid(), code: z.string().regex(/^[0
 const newPassword = z.string().min(12).max(72).refine(value => Buffer.byteLength(value, "utf8") <= 72);
 const resetInput = proofInput.extend({ password: newPassword, confirmPassword: z.string() }).refine(value => value.password === value.confirmPassword);
 
-export function createJobsEmailAuth(client: PrismaClient = prisma, options: { now?: () => Date; env?: Record<string, string | undefined>; send?: (message: OtpDelivery) => Promise<string> } = {}) {
+export function createJobsEmailAuth(client: PrismaClient = prisma, options: { now?: () => Date; env?: Record<string, string | undefined>; send?: (message: OtpDelivery) => Promise<string>; notifyPinChange?: (id: string, email: string) => Promise<void> } = {}) {
   const now = options.now ?? (() => new Date()), env = options.env ?? process.env;
-  const send = options.send ?? createResendOtpSender(env), auth = createAuthenticationService(client, now), consume = createSecurityLimiter(client, now);
+  const send = options.send ?? createResendOtpSender(env), notifyPinChange = options.notifyPinChange ?? createResendPinNoticeSender(env), auth = createAuthenticationService(client, now), consume = createSecurityLimiter(client, now);
   function ready() { return emailAuthSettings(env); }
   async function requestBudget(email: string) {
     await consume("nicejobs:otp:global", 30, 60);
@@ -27,13 +30,14 @@ export function createJobsEmailAuth(client: PrismaClient = prisma, options: { no
     await consume(securityKey("nicejobs:otp:hour", email), 3, 3600);
     await consume(securityKey("nicejobs:otp:day", email), 10, 86400);
   }
-  async function dispatch(user: { id: string; email: string; passwordHash: string | null }, purpose: "LOGIN" | "RESET") {
+  async function dispatch(user: { id: string; email: string; passwordHash: string | null; jobsPinHash?: string | null }, purpose: "LOGIN" | "RESET" | "REGISTER" | "RESET_PIN") {
     const settings = ready(), id = randomUUID(), code = String(randomInt(0, 1000000)).padStart(6, "0");
-    if (!user.passwordHash) throw new AccessError("Account unavailable");
+    const credentialHash = purpose === "LOGIN" || purpose === "RESET" ? user.passwordHash : user.jobsPinHash;
+    if (!credentialHash) throw new AccessError("Account unavailable");
     await client.$transaction(async db => {
       if (await db.emailAuthChallenge.findFirst({ where: { userId: user.id, createdAt: { gt: new Date(now().getTime() - 60000) } }, select: { id: true } })) throw new RateLimitError();
       await db.emailAuthChallenge.updateMany({ where: { userId: user.id, purpose, status: { in: ["PENDING", "SENT"] } }, data: { status: "CANCELLED" } });
-      await db.emailAuthChallenge.create({ data: { id, userId: user.id, email: user.email, purpose, credentialHash: user.passwordHash!, otpHash: jobsOtpHash(id, code, settings.NICEJOBS_OTP_SECRET), createdAt: now(), expiresAt: new Date(now().getTime() + 600000) } });
+      await db.emailAuthChallenge.create({ data: { id, userId: user.id, email: user.email, purpose, credentialHash, otpHash: jobsOtpHash(id, code, settings.NICEJOBS_OTP_SECRET), createdAt: now(), expiresAt: new Date(now().getTime() + 600000) } });
       await db.auditEvent.create({ data: buildAuditEventData({ action: "auth.otp_requested", entityType: "EmailAuthChallenge", entityId: id, result: "SUCCESS", metadata: { portal: "jobs", purpose } }) });
     });
     try {
@@ -100,6 +104,65 @@ export function createJobsEmailAuth(client: PrismaClient = prisma, options: { no
       await db.auditEvent.create({ data: buildAuditEventData({ actorUserId: user.id, actorPersonId: user.personId, organizationId: scope.divisionId, action: "auth.password_reset", entityType: "User", entityId: user.id, result: "SUCCESS", metadata: { portal: "jobs", challengeId: input.challengeId } }) });
     });
   }
-  return { ready, beginLogin, completeLogin, beginReset, completeReset };
+  async function beginRegistration(userId: string) {
+    ready();
+    const user = await client.user.findUniqueOrThrow({ where: { id: userId } });
+    if (!user.jobsPinHash || user.emailVerifiedAt) throw new AccessError("Account unavailable");
+    await requestBudget(user.email);
+    return dispatch(user, "REGISTER");
+  }
+  async function resendRegistration(raw: unknown) {
+    ready();
+    const input = z.object({ country: z.string(), nationalNumber: z.string(), pin: jobsPinInput }).strict().parse(raw);
+    const phone = jobsPhoneInput.parse({ country: input.country, nationalNumber: input.nationalNumber });
+    await consume("nicejobs:registration-resend:global", 30, 60);
+    await consume(securityKey("nicejobs:registration-resend:phone", phone), 3, 3600);
+    const user = await client.user.findUnique({ where: { jobsPhone: phone }, include: { person: { select: { metadata: true, status: true } } } });
+    if (!user || !user.jobsPinHash || user.emailVerifiedAt || user.status !== "ACTIVE" || user.person?.status !== "ACTIVE" || accountPortalRealm(user.person?.metadata) !== "jobs" || !await verifyJobsPin(input.pin, user.jobsPinHash)) return { challengeId: randomUUID() };
+    try { return await beginRegistration(user.id); }
+    catch (error) { if (error instanceof EmailAuthUnavailable) return { challengeId: randomUUID() }; throw error; }
+  }
+  async function completeRegistration(raw: unknown, secret: string) {
+    const settings = ready(), proof = proofInput.parse(raw);
+    await consume("nicejobs:otp:verify:global", 120, 60);
+    const challenge = await client.emailAuthChallenge.findUnique({ where: { id: proof.challengeId } });
+    if (!challenge || challenge.purpose !== "REGISTER") throw new AccessError("Invalid or expired code");
+    return auth.create(challenge.userId, secret, undefined, 8 * 3600000, "jobs", { ...proof, pepper: settings.NICEJOBS_OTP_SECRET, purpose: "REGISTER" });
+  }
+  async function beginPinReset(raw: unknown) {
+    ready();
+    const input = z.object({ country: z.string(), nationalNumber: z.string() }).strict().parse(raw);
+    const phone = jobsPhoneInput.parse(input);
+    await consume("nicejobs:pin-reset:global", 30, 60);
+    await consume(securityKey("nicejobs:pin-reset:phone", phone), 3, 3600);
+    const user = await client.user.findUnique({ where: { jobsPhone: phone }, include: { person: { select: { metadata: true, status: true } } } });
+    if (!user || !user.jobsPinHash || !user.emailVerifiedAt || user.status !== "ACTIVE" || user.person?.status !== "ACTIVE" || accountPortalRealm(user.person?.metadata) !== "jobs") return { challengeId: randomUUID() };
+    try { await requirePortalAccess(client, user.id, "jobs"); return await dispatch(user, "RESET_PIN"); }
+    catch (error) { if (error instanceof AccessError || error instanceof EmailAuthUnavailable) return { challengeId: randomUUID() }; throw error; }
+  }
+  async function completePinReset(raw: unknown) {
+    const settings = ready(), input = proofInput.extend({ pin: jobsPinInput, confirmPin: jobsPinInput }).refine(value => value.pin === value.confirmPin).parse(raw);
+    await consume("nicejobs:otp:verify:global", 120, 60);
+    const attempted = await client.emailAuthChallenge.updateMany({ where: { id: input.challengeId, purpose: "RESET_PIN", status: "SENT", expiresAt: { gt: now() }, attempts: { lt: 5 } }, data: { attempts: { increment: 1 } } });
+    if (attempted.count !== 1) throw new AccessError("Invalid or expired code");
+    const jobsPinHash = await hashJobsPin(input.pin);
+    const recipient = await client.$transaction(async db => {
+      const challenge = await db.emailAuthChallenge.findUniqueOrThrow({ where: { id: input.challengeId } });
+      const user = await db.user.findUnique({ where: { id: challenge.userId }, include: { person: { select: { metadata: true, status: true } } } });
+      if (!user || !user.jobsPinHash || !user.emailVerifiedAt || user.status !== "ACTIVE" || user.person?.status !== "ACTIVE" || accountPortalRealm(user.person?.metadata) !== "jobs") throw new AccessError("Invalid or expired code");
+      const scope = await requirePortalAccess(db, user.id, "jobs");
+      await claimJobsOtp(db, { challengeId: input.challengeId, code: input.code, pepper: settings.NICEJOBS_OTP_SECRET }, user, "RESET_PIN", now());
+      await db.user.update({ where: { id: user.id }, data: { jobsPinHash } });
+      await db.session.deleteMany({ where: { userId: user.id } });
+      await db.emailAuthChallenge.updateMany({ where: { userId: user.id, status: { in: ["PENDING", "SENT"] } }, data: { status: "CANCELLED" } });
+      await db.auditEvent.create({ data: buildAuditEventData({ actorUserId: user.id, actorPersonId: user.personId, organizationId: scope.divisionId, action: "auth.pin_reset", entityType: "User", entityId: user.id, result: "SUCCESS", metadata: { portal: "jobs", challengeId: input.challengeId } }) });
+      return user.email;
+    });
+    try { await notifyPinChange(input.challengeId, recipient); }
+    catch {
+      await client.auditEvent.create({ data: buildAuditEventData({ action: "auth.pin_reset_notice_failed", entityType: "EmailAuthChallenge", entityId: input.challengeId, result: "FAILURE", metadata: { portal: "jobs" } }) });
+    }
+  }
+  return { ready, beginLogin, completeLogin, beginReset, completeReset, beginRegistration, resendRegistration, completeRegistration, beginPinReset, completePinReset };
 }
 export const jobsEmailAuth = createJobsEmailAuth();

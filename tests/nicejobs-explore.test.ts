@@ -53,15 +53,15 @@ describe("Nice Jobs Explore Opportunities", () => {
     expect(html).not.toContain("Save job");
   });
 
-  it("opens a read-only existing-view detail and preserves a back path", async () => {
+  it("opens a published detail and hands off to the existing application form", async () => {
     const fixture = setup();
     const html = await fixture.render({ versionId: "published-id", search: "Verified" });
     expect(fixture.opportunities).toHaveBeenCalledWith("server-user", { versionId: "published-id", limit: 1 });
     expect(fixture.options).not.toHaveBeenCalled();
     expect(html).toContain("Terms and requirements");
-    expect(html).toContain("Opening this page does not submit an application.");
+    expect(html).toContain("The next screen opens the application form; this does not submit an application.");
     expect(html).toContain('href="/sites/jobs/gateway?view=opportunities&amp;search=Verified"');
-    expect(html).not.toContain("Start application");
+    expect(html).toContain('href="/sites/jobs/gateway?view=apply&amp;versionId=published-id"');
   });
 
   it("distinguishes empty, filtered-empty and closed detail states", async () => {
@@ -84,6 +84,7 @@ describe("Nice Jobs Explore Opportunities", () => {
 
   it("remains under the authenticated participant gateway", () => {
     expect(isParticipantDashboardView("opportunities")).toBe(true);
+    expect(isParticipantDashboardView("apply")).toBe(true);
     expect(isParticipantDashboardView("opportunities", { control: "boss" })).toBe(false);
   });
 });

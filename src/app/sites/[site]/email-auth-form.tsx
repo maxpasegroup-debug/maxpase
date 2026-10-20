@@ -18,7 +18,8 @@ export function JobsEmailAuthForm({ paths, reset = false, versionId }: { paths: 
   const [attempted, setAttempted] = useState(false);
   const mismatch = confirmation.length > 0 && password !== confirmation;
   const selected = versionId ? `?versionId=${encodeURIComponent(versionId)}` : "";
-  const resetPath = paths.login.replace(/\/login$/, "/reset-password");
+  const resetPath = paths.login.replace(/\/login$/, "/legacy-recovery");
+  const activationPath = paths.login.replace(/\/login$/, "/activate-pin");
   const verifying = Boolean(state.challengeId);
   const title = state.complete ? "Password changed." : reset ? verifying ? "Set a new password." : "Reset your password." : verifying ? "Check your email." : "Welcome back.";
   const description = state.complete ? "Your other sessions have been signed out. Sign in again with your new password." : reset ? verifying ? "Enter the code from your email, then choose a new password." : "Enter your account email to request a reset code." : verifying ? "Enter the six-digit code to finish signing in." : "Sign in to continue your Nice Jobs journey.";
@@ -34,9 +35,9 @@ export function JobsEmailAuthForm({ paths, reset = false, versionId }: { paths: 
       </fieldset>
       {state.error && <p role="alert" className={styles.alert}>{state.error}</p>}
     </form>}
-    {state.complete ? <p className={styles.switch}><Link href={paths.login + selected}>Sign in with your new password <ArrowRight size={16} /></Link></p> : <>
+    {state.complete ? <p className={styles.switch}><Link href={activationPath}>Continue to phone activation <ArrowRight size={16} /></Link></p> : <>
       {verifying && <p className={styles.switch}><Link href={(reset ? resetPath : paths.login) + selected}>Start again or request a new code</Link></p>}
-      {reset ? <p className={styles.switch}><Link href={paths.login + selected}>Back to sign in</Link></p> : <><p className={styles.supportLink}><Link href={resetPath + selected}>Forgot password?</Link></p><p className={styles.switch}>New to Nice Jobs? <Link href={paths.signup + selected}>Create an account</Link></p></>}
+      {reset ? <p className={styles.switch}><Link href={activationPath}>Back to activation</Link></p> : <p className={styles.supportLink}><Link href={resetPath}>Forgot your old password?</Link></p>}
     </>}
   </JobsAuthShell>;
 }

@@ -17,6 +17,7 @@ import { createExecutionService } from "@/server/domain/execution-service";
 import { projectBossStructure } from "@/server/group/boss-structure";
 import { airaProductDrafts, assertControlledProductDraft, seniorAcademicAdvisorDraft } from "@/server/group/product-drafts";
 import { createBusinessService } from "@/server/domain/business-service";
+import { createNiceJobsControlPanel } from "@/server/nicejobs/control-panel";
 
 const directory = mkdtempSync(join(tmpdir(), "maxspace-boss-")), file = join(directory, "test.db");
 const db = new PrismaClient({ datasourceUrl: "file:" + file.replaceAll("\\", "/") });
@@ -38,6 +39,14 @@ beforeEach(async () => { now = new Date(); await db.securityRateBucket.deleteMan
 afterAll(async () => { await db.$disconnect(); rmSync(directory, { recursive: true, force: true }); });
 
 describe("MAXPASE group and Boss controls", () => {
+  it("gives the provisioned Boss scoped Nice Jobs control without accepting a foreign company", async () => {
+    const panel = createNiceJobsControlPanel(db);
+    const navigation = await panel.navigation(userId, { companyId: airaId });
+    expect(navigation.companyId).toBe(airaId);
+    expect(navigation.groups.map(group => group.label)).toEqual(["Overview", "Opportunities", "Applicants", "Workforce", "Earnings", "System"]);
+    expect(navigation.groups.find(group => group.key === "overview")?.entries[0].view).toBe("workforce-command");
+    await expect(panel.navigation(userId, { companyId: pearnId })).rejects.toThrow();
+  });
   it("validates filters, includes the entire UTC end day, and preserves company/view/filter navigation", () => {
     const query = { from: "2026-10-01", until: "2026-10-06", status: "ACTIVE", projectId: "project", productId: "product", severity: "HIGH" };
     const parsed = parseBossFilters(query);

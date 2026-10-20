@@ -6,11 +6,12 @@ import { requirePortalAccess } from "./policy";
 import type { PortalSite } from "./sites";
 import { AccessError } from "@/server/authorization/engine";
 
-export async function getPortalSession(site: PortalSite) {
+export async function getPortalSession(site: PortalSite, allowLegacyJobsActivation = false) {
   const token = (await cookies()).get(site.cookie)?.value;
   if (!token) return null;
   const session = await authenticationService.validate(token, config.AUTH_SECRET, site.id);
   if (!session) return null;
+  if (session.needsJobsPinActivation && !allowLegacyJobsActivation) return null;
   try { await requirePortalAccess(prisma, session.userId, site.id, site.id === "labs" && session.needsPinChange); return session; } catch (e) { if (e instanceof AccessError) return null; throw e; }
 }
 export async function setPortalCookie(site: PortalSite, token: string, expires: Date) {

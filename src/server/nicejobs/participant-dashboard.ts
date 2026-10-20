@@ -56,6 +56,13 @@ export function createParticipantDashboard(services = dependencies) {
     ]);
     return { applications, opportunities };
   }
+  async function candidateSpace(userId: string) {
+    const [applications, learning] = await Promise.all([
+      dashboardRead(() => services.applications.list(userId, true, { limit: 5, recent: true })),
+      dashboardRead(() => services.onboarding.list(userId, true, { limit: 5 }))
+    ]);
+    return { applications, learning };
+  }
   async function search(userId: string, worker: boolean, query: string) {
     const search = query.trim();
     if (!search || search.length > 120) return null;
@@ -64,6 +71,6 @@ export function createParticipantDashboard(services = dependencies) {
     const resources = worker ? await dashboardRead(() => services.knowledge.list(userId, { kind: "RESOURCE", management: false, search, limit: 10 })) : null;
     return { jobs, learning, resources };
   }
-  return { context, home, candidateHome, search, notifications, notificationPage };
+  return { context, home, candidateHome, candidateSpace, search, notifications, notificationPage };
 }
 export const participantDashboard = createParticipantDashboard();

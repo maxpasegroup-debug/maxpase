@@ -15,6 +15,7 @@ import { createOperationsService } from "@/server/domain/operations-service";
 import { fixtureOpportunity } from "./fixtures/nicejobs-opportunity";
 import { fixtureProgramme } from "./fixtures/nicejobs-programme";
 import { createApplicantAccess } from "@/server/nicejobs/applicant-access";
+import { hashPassword } from "@/server/auth/password";
 import { createAuthenticationService } from "@/server/auth/service";
 import { createJobsEmailAuth } from "@/server/auth/jobs-email-auth";
 import { opportunityProfile, publicationIssues } from "@/server/nicejobs/opportunity-configuration";
@@ -104,10 +105,12 @@ describe("Nice Jobs applications and screening", () => {
   });
   it("registers one scoped applicant identity and isolates its sessions from corporate and other portals", async () => {
     for (const key of ["notification.read", "sia.access.read"]) await db.permission.upsert({ where: { key }, update: {}, create: { key, name: key, scope: "GROUP" } });
+    process.env.NICEJOBS_PIN_PEPPER = "isolated-test-pepper-at-least-thirty-two-characters";
     const access = createApplicantAccess(db), password = "isolated-test-password-123";
-    const raw = { displayName: "Public applicant", email: "public-applicant@test.invalid", password, confirmPassword: password, acknowledge: true };
+    const raw = { displayName: "Public applicant", email: "public-applicant@test.invalid", country: "IN", nationalNumber: "9876543211", pin: "123456", confirmPin: "123456", acknowledge: true };
     const registered = await access.register(raw);
     const user = await db.user.findUniqueOrThrow({ where: { id: registered.userId }, include: { person: { include: { memberships: true } } } });
+    await db.user.update({ where: { id: registered.userId }, data: { passwordHash: await hashPassword(password) } });
     expect(user.person?.memberships).toHaveLength(1);
     expect(user.person?.memberships[0]).toMatchObject({ organizationId: career, scope: "ORGANIZATION" });
     expect(JSON.parse(user.person!.metadata!)).toMatchObject({ authenticationRealm: "jobs", contactStatus: "UNVERIFIED" });
@@ -161,8 +164,8 @@ describe("Nice Jobs applications and screening", () => {
     const sql = new DatabaseSync(file);
     sql.exec("CREATE TRIGGER fail_signup_audit BEFORE INSERT ON AuditEvent WHEN NEW.action = 'nicejobs.applicant.registered' BEGIN SELECT RAISE(ABORT, 'Isolated signup audit failure'); END;"); sql.close();
     try {
-      const email = "rollback-signup@test.invalid", password = "isolated-rollback-password-123";
-      await expect(createApplicantAccess(db).register({ displayName: "Rollback fixture", email, password, confirmPassword: password, acknowledge: true })).rejects.toThrow();
+      const email = "rollback-signup@test.invalid";
+      await expect(createApplicantAccess(db).register({ displayName: "Rollback fixture", email, country: "IN", nationalNumber: "9876543212", pin: "123456", confirmPin: "123456", acknowledge: true })).rejects.toThrow();
       expect(await db.user.findUnique({ where: { email } })).toBeNull();
       expect(await db.person.findUnique({ where: { email } })).toBeNull();
     } finally { const cleanup = new DatabaseSync(file); cleanup.exec("DROP TRIGGER fail_signup_audit"); cleanup.close(); }

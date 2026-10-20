@@ -30,6 +30,10 @@
 .field input:hover { border-color: #5c9879; }
 .field input:focus { border-color: #217658; }
 .field input[aria-invalid="true"] { border-color: #bf4f39; }
+.field select { width: 100%; min-height: 48px; padding: 11px 13px; border: 1px solid #bccfc3; border-radius: 5px; color: #172e22; background: #fff; font: inherit; }
+.phoneRow { display: flex; align-items: center; gap: 8px; }
+.phoneRow span { flex: none; min-width: 56px; padding: 12px; border: 1px solid #bccfc3; border-radius: 5px; text-align: center; }
+.phoneRow input { min-width: 0; }
 .passwordInput { position: relative; }
 .passwordInput input { padding-right: 52px; }
 .passwordInput button { position: absolute; top: 2px; right: 2px; width: 44px; height: 44px; display: grid; place-items: center; border: 0; background: transparent; color: #49645a; cursor: pointer; }
@@ -86,6 +90,7 @@
 .description, .hint, .notice { color: #b9b0af; }
 .field label, .acknowledge { color: #e9e1e0; }
 .field input { border-color: #514244; color: #f6f2f1; background: #0f1012; }
+.field select, .phoneRow span { border-color: #514244; color: #f6f2f1; background: #0f1012; }
 .field input:hover, .field input:focus { border-color: #ed6262; }
 .passwordInput button { color: #d1c6c5; }
 .acknowledge input { accent-color: #ef5555; }

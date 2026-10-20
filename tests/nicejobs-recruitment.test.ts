@@ -104,7 +104,8 @@ describe("Nice Jobs interview, approval and offer controls", () => {
   it("completes one approved 100-day candidate journey with no skipped decision, policy or enrollment",async()=>{
     await db.permission.upsert({where:{key:"sia.access.read"},update:{},create:{key:"sia.access.read",name:"Read SIA availability",scope:"GROUP"}});
     const previousCandidate=candidate;
-    candidate=(await createApplicantAccess(db).register({displayName:"Isolated public journey candidate",email:"journey-candidate@test.invalid",password:"isolated-journey-password-123",confirmPassword:"isolated-journey-password-123",acknowledge:true})).userId;
+    process.env.NICEJOBS_PIN_PEPPER = "isolated-test-pepper-at-least-thirty-two-characters";
+    candidate=(await createApplicantAccess(db).register({displayName:"Isolated public journey candidate",email:"journey-candidate@test.invalid",country:"IN",nationalNumber:"9876543215",pin:"123456",confirmPin:"123456",acknowledge:true})).userId;
     try{
     const configured=fixtureProgramme(manager);
     const v=await jobs.create(manager,{code:"JOURNEY-04",title:"Synthetic full journey",description:"Isolated candidate journey",visibility:"PUBLIC",divisionIds:[labs],configuration:{...formConfig,opportunity:await fixtureOpportunity(db,manager),...configured,interview:interviewConfig,management:{policies:[{divisionId:labs,controlPointId:controlId}]},offer:offerConfig}});

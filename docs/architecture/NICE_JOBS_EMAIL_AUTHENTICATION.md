@@ -1,5 +1,7 @@
 # Nice Jobs Email Authentication
 
+Historical implementation record. Candidate-facing flows were superseded by [NICE_JOBS_PHONE_PIN_AUTHENTICATION.md](NICE_JOBS_PHONE_PIN_AUTHENTICATION.md) on 2026-10-20. Email/password plus OTP remains only for verified legacy account activation/recovery; the statements below describe the earlier release, not the current primary sign-in screen.
+
 Implemented locally on 2026-10-10. This supersedes the original Phase 1 password-only web flow; historical validation reports remain historical. Live launch is not verified. The Phase 6 pilot remains BLOCKED independently of authentication.
 
 ## Account Flows

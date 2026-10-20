@@ -1490,11 +1490,31 @@ progress { width: 120px; accent-color: var(--accent); }
   .nj-dashboard-content { padding: 16px 16px 100px; }.nj-dashboard-home { gap: 16px; }
   .nj-dashboard-welcome { min-height: 215px; }.nj-dashboard-welcome > div { padding: 20px; }.nj-dashboard-welcome h1 { font-size: 28px; }.nj-dashboard-welcome p { font-size: 13px; max-width: 250px; }
   .nj-dashboard-bottom { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); position: fixed; z-index: 25; bottom: 0; left: 0; right: 0; background: #fff; border-top: 1px solid #dce5e0; padding: 6px 8px max(8px, env(safe-area-inset-bottom)); }
-  .nj-dashboard-candidate .nj-dashboard-bottom { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .nj-dashboard-candidate .nj-dashboard-bottom { grid-template-columns: repeat(5, minmax(0, 1fr)); }
   .nj-dashboard-bottom a { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-height: 54px; font-size: 11px; border-radius: 6px; }.nj-dashboard-panel { padding-block: 14px; }
   .nj-dashboard-row { flex-wrap: wrap; }.nj-dashboard-row .nj-dashboard-button { margin-left: 48px; }
 }
 @media (prefers-reduced-motion: reduce) { .nj-dashboard * { scroll-behavior: auto; transition: none; } }
+.nj-dashboard-unified { display: block; max-width: none; background: #f8faf8; }
+.nj-dashboard-unified .nj-dashboard-header { max-width: none; justify-content: space-between; gap: 24px; padding: 12px max(24px, calc((100vw - 1200px) / 2)); min-height: 74px; }
+.nj-dashboard-unified .nj-dashboard-brand { flex: none; padding: 0; font-size: 18px; white-space: nowrap; }
+.nj-dashboard-unified .nj-dashboard-brand strong { line-height: 1.2; }
+.nj-dashboard-unified .nj-dashboard-primary { display: flex; justify-content: center; gap: 6px; min-width: 0; }
+.nj-dashboard-unified .nj-dashboard-primary a { display: inline-flex; align-items: center; gap: 8px; min-height: 46px; padding: 8px 14px; border-radius: 6px; font-weight: 600; white-space: nowrap; }
+.nj-dashboard-unified .nj-dashboard-tools { display: flex; align-items: center; gap: 12px; }
+.nj-dashboard-unified .nj-dashboard-account summary > span:nth-child(2) { display: block; max-width: 155px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.nj-dashboard-unified .nj-dashboard-account > div a { gap: 10px; }
+.nj-dashboard-unified .nj-dashboard-signout { display: flex; align-items: center; gap: 10px; border-top: 1px solid #dbe6df; }
+.nj-dashboard-unified .nj-dashboard-content { max-width: 1200px; margin-inline: auto; padding: 28px 24px 70px; }
+.nj-dashboard-unified .nj-dashboard-bottom { display: none; }
+@media (max-width: 760px) {
+  .nj-dashboard-unified .nj-dashboard-header { flex-wrap: nowrap; padding: 10px 16px; min-height: 66px; }
+  .nj-dashboard-unified .nj-dashboard-primary { display: none; }
+  .nj-dashboard-unified .nj-dashboard-account summary > span:nth-child(2) { display: none; }
+  .nj-dashboard-unified .nj-dashboard-content { padding: 18px 16px 96px; }
+  .nj-dashboard-unified .nj-dashboard-bottom { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .nj-dashboard-unified .nj-dashboard-bottom a { min-height: 58px; }
+}
 .nj-programme-checklist { margin-block: 1.5rem; border-block: 1px solid var(--border, #d9e1dd); padding-block: 1rem; }
 .nj-programme-checklist > header, .nj-setup-items > li > div { display: flex; align-items: center; flex-wrap: wrap; gap: .75rem; }
 .nj-programme-checklist h2, .nj-programme-checklist h3 { margin: 0; }

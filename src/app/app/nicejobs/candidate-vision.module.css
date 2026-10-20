@@ -1,0 +1,20 @@
+.board { display: grid; gap: 30px; max-width: 1000px; color: #19392c; }
+.board > header { padding-bottom: 22px; border-bottom: 1px solid #dce8e0; }
+.board h1 { margin: 0 0 8px; font-size: 30px; }
+.board h2 { margin: 0 0 18px; font-size: 20px; }
+.board p { max-width: 680px; color: #52675a; line-height: 1.55; }
+.eyebrow { color: #2f7654 !important; font-size: 11px; font-weight: 800; }
+.layout { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(240px, 1fr); gap: 38px; }
+.layout > section, .layout > aside { min-width: 0; }
+.layout aside { border-left: 1px solid #dce8e0; padding-left: 30px; }
+.layout a { display: inline-flex; align-items: center; min-height: 44px; color: #116849; font-weight: 800; }
+.note { font-size: 13px; }
+.form { display: grid; gap: 18px; }
+.form label { display: grid; gap: 8px; color: #314e3d; font-size: 14px; font-weight: 700; }
+.form input, .form textarea { width: 100%; min-height: 46px; padding: 12px; border: 1px solid #aebfb2; border-radius: 5px; background: #fff; color: #18392a; font: inherit; font-weight: 400; }
+.form input:focus-visible, .form textarea:focus-visible, .form button:focus-visible, .layout a:focus-visible { outline: 3px solid #c7634e; outline-offset: 3px; }
+.form button { justify-self: start; min-height: 46px; padding: 10px 22px; border: 0; border-radius: 5px; background: #196b4e; color: #fff; font: inherit; font-weight: 800; cursor: pointer; }
+.form button:disabled { opacity: .65; cursor: wait; }
+.success { color: #146445 !important; }
+.error { color: #ac392c !important; }
+@media (max-width: 700px) { .layout { grid-template-columns: 1fr; gap: 28px; } .layout aside { border-left: 0; border-top: 1px solid #dce8e0; padding: 24px 0 0; } }

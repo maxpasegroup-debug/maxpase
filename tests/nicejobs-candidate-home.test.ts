@@ -48,6 +48,20 @@ describe("Nice Jobs candidate home", () => {
     expect(training).not.toHaveBeenCalled();
   });
 
+  it("loads My Space without an unused opportunity or worker-day read", async () => {
+    const list = vi.fn(async () => ({ records: [], nextCursor: null }));
+    const learning = vi.fn(async () => ({ records: [], nextCursor: null }));
+    const opportunities = vi.fn(), day = vi.fn();
+    const dashboard = createParticipantDashboard({ account: {} as never, applications: { list, opportunities } as never, onboarding: { list: learning } as never, employee: { day } as never, knowledge: {} as never, operations: {} as never });
+    const result = await dashboard.candidateSpace("own-user");
+    expect(result.applications.status).toBe("AVAILABLE");
+    expect(result.learning.status).toBe("AVAILABLE");
+    expect(list).toHaveBeenCalledWith("own-user", true, { limit: 5, recent: true });
+    expect(learning).toHaveBeenCalledWith("own-user", true, { limit: 5 });
+    expect(opportunities).not.toHaveBeenCalled();
+    expect(day).not.toHaveBeenCalled();
+  });
+
   it("shows the signed-in name, a real published preview, and recorded application status", async () => {
     const html = await renderCandidate({ applications: { status: "AVAILABLE", data: { records: [application] } }, opportunities: { status: "AVAILABLE", data: { records: [published] } } }, "Maya & Co");
     expect(html).toContain("Hello, Maya &amp; Co.");
@@ -77,14 +91,16 @@ describe("Nice Jobs candidate home", () => {
     expect(html).not.toContain("No approved opportunities are open for applications right now.");
   });
 
-  it("uses four compact candidate destinations and existing sign-out", () => {
+  it("uses one three-destination workspace navigation and existing sign-out", () => {
     const { DashboardShell } = load<{ DashboardShell: (props: { base: string; view: string; name: string; email: string; unread: number; candidate: boolean; logout: ReactNode; children: ReactNode }) => ReactNode }>("src/app/app/nicejobs/dashboard-shell.tsx", { "@/lib/nicejobs-dashboard": { dashboardSection, dashboardSections } });
     const html = renderToStaticMarkup(createElement(DashboardShell, { base: "/sites/jobs/gateway", view: "home", name: "Maya", email: "maya@example.invalid", unread: 0, candidate: true, logout: createElement("button", null, "Logout"), children: null }));
     const bottom = html.slice(html.indexOf('aria-label="Quick navigation"'));
-    for (const view of ["home", "opportunities", "my-applications", "worker-profile"]) expect(bottom).toContain(`view=${view}`);
+    for (const view of ["home", "opportunities", "worker-wallet"]) expect(bottom).toContain(`view=${view}`);
     expect(html).toContain("Logout");
-    expect(bottom).not.toContain("view=my-earnings");
-    expect(bottom).not.toContain("view=my-work");
+    expect(html).toContain("My Workspace");
+    expect(html).toContain("Marketplace");
+    expect(html).not.toContain("nj-dashboard-sidebar");
+    expect(bottom).not.toContain("view=worker-profile");
   });
 });
 

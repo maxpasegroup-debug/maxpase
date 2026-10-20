@@ -84,6 +84,7 @@ describe("Nice Jobs participant dashboard", () => {
     expect(dashboardSections.map(([, label]) => label)).toEqual(["Home", "My Work", "Find Opportunities", "My Learning", "My Earnings", "My Profile", "Help & Support"]);
     for (const view of ["worker-wallet", "worker-payouts", "worker-incentive-detail", "worker-statement"]) expect(dashboardSection(view)).toBe("worker-wallet");
     expect(dashboardSection("my-applications")).toBe("opportunities");
+    expect(isParticipantDashboardView("vision")).toBe(true);
     expect(dashboardSection("worker-profile")).toBe("worker-profile");
     for (const view of ["templates", "applications", "onboarding", "activation", "finance-wallets", "workforce-command"]) expect(isParticipantDashboardView(view)).toBe(false);
     expect(isParticipantDashboardView("lead-detail", { control: "boss" })).toBe(false);
@@ -119,7 +120,10 @@ describe("Nice Jobs participant dashboard", () => {
     expect(html).not.toContain("3 unread");
     expect(html).toContain('aria-label="Quick navigation"');
     expect(html).toContain('href="#nicejobs-main"');
-    expect(html).toContain('value="ml" disabled');
+    expect(html).toContain("My Workspace");
+    expect(html).toContain("Marketplace");
+    expect(html).toContain("Wallet");
+    expect(html).not.toContain("nj-dashboard-sidebar");
   });
   it("never queries worker resources or production work for an applicant and bounds search", async () => {
     const list = vi.fn(async () => ({ records: [], nextCursor: null }));
@@ -136,9 +140,9 @@ describe("Nice Jobs participant dashboard", () => {
     expect(list).toHaveBeenCalledWith("own-user", true, { search: "role", limit: 10 });
     expect(list).toHaveBeenCalledWith("own-user", { search: "role", limit: 10 });
   });
-  it("preserves search values and names compact account and bottom navigation controls", () => {
+  it("names compact account and bottom navigation controls", () => {
     const html = renderToStaticMarkup(createElement(DashboardShell, { base: "/sites/jobs/gateway", view: "search", name: "Test Participant", email: "qa@example.invalid", search: "Advisor & training", unread: 0, logout: null, children: null }));
-    expect(html).toContain('value="Advisor &amp; training"');
+    expect(html).toContain('href="/sites/jobs/gateway?view=home"');
     expect(html).toContain('aria-label="Account menu for Test Participant"');
     const bottom = html.slice(html.indexOf('aria-label="Quick navigation"'));
     expect(bottom).not.toContain('class="sr-only"');

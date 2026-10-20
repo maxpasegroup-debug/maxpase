@@ -1,9 +1,13 @@
 import Link from "next/link";
 import { Suspense } from "react";
-import { participantDashboard } from "@/server/nicejobs/participant-dashboard";
+import { dashboardRead, participantDashboard } from "@/server/nicejobs/participant-dashboard";
+import { financeService } from "@/server/nicejobs/finance";
 import { DashboardShell } from "./dashboard-shell";
-import { DashboardHome, DashboardState } from "./dashboard-home";
-import { CandidateHome } from "./candidate-home";
+import { DashboardState } from "./dashboard-home";
+import { CandidateSpace } from "./candidate-space";
+import { JobSpace } from "./job-space";
+import { CandidateVision } from "./candidate-vision";
+import { GoalsPanel } from "./goals-panel";
 import { ExploreLoading, ExploreOpportunities } from "./explore-opportunities";
 import { ApplicationWorkspace } from "./application-workspace";
 import { OnboardingWorkspace } from "./onboarding-workspace";
@@ -24,7 +28,8 @@ export async function ParticipantDashboard({ userId, realm, base, query }: Props
   const shared = { userId, realm, base, query };
   const href = (next: string) => `${base}?view=${next}`;
   let content;
-  if (["home", "overview"].includes(view)) content = worker ? <DashboardHome userId={userId} base={base} worker name={context.account.name} timezone={context.account.timezone} /> : <CandidateHome userId={userId} base={base} name={context.account.name} />;
+  if (["home", "overview", "my-work"].includes(view)) content = <CandidateSpace userId={userId} base={base} name={context.account.name} worker={worker} />;
+  else if (view === "job-space") content = <JobSpace {...shared} worker={worker} />;
   else if (view === "search") {
     const search = typeof query.search === "string" ? query.search : "";
     const results = await participantDashboard.search(userId, worker, search);
@@ -38,16 +43,22 @@ export async function ParticipantDashboard({ userId, realm, base, query }: Props
     const page = await participantDashboard.notificationPage(userId, read, typeof query.cursor === "string" ? query.cursor : undefined);
     content = <section><h1>Notifications</h1><form method="get" action={base} className="nj-filters"><input type="hidden" name="view" value="notifications" /><label>Read status<select name="read" defaultValue={read ?? ""}><option value="">All</option><option value="unread">Unread</option><option value="read">Read</option></select></label><button className="nj-dashboard-button">Filter</button></form>{!page.data?.records.length && <DashboardState result={page} empty="No notifications match this view." base={href("notifications")} />}{page.data?.records.map(n => <article key={n.id} className="nj-dashboard-notification"><h2>{String(n.title ?? "Notification")}</h2><p>{String(n.message ?? "")}</p><small>{n.createdAt instanceof Date ? formatUserTime(n.createdAt, context.account.timezone) : ""} · {n.readAt ? "Read" : "Unread"}</small><DashboardNotificationButton id={n.id} realm={realm} read={!!n.readAt} /></article>)}{page.data?.nextCursor && <Link href={`${href("notifications")}${read ? `&read=${read}` : ""}&cursor=${encodeURIComponent(page.data.nextCursor)}`}>More notifications</Link>}</section>;
   } else if (view === "worker-profile") content = <section><h1>My Profile</h1><dl className="nj-detail"><dt>Name</dt><dd>{context.account.name}</dd><dt>Email</dt><dd>{context.account.email}</dd><dt>Timezone</dt><dd>{context.account.timezone}</dd><dt>Account</dt><dd>{worker ? "Active worker assignment verified" : context.navigation.status === "UNAVAILABLE" ? "Temporarily unavailable" : "Candidate account"}</dd></dl><Link href={href("my-applications")}>My applications and offers</Link>{realm === "jobs" ? <p><Link href={base.startsWith("/sites/") ? "/sites/jobs/reset-password" : "/reset-password"}>Reset my password</Link></p> : <p><Link href="/app/account">Account preferences</Link></p>}</section>;
+  else if (view === "vision") content = <><CandidateVision userId={userId} realm={realm} base={base} />{worker && <GoalsPanel userId={userId} realm={realm} base={base} />}</>;
+  else if (view === "worker-wallet" && !worker) {
+    const wallet = await dashboardRead(() => financeService.list(userId, { limit: 1 }));
+    content = wallet.status === "AVAILABLE" ? <FinanceWorkspace {...shared} /> : <section><h1>Wallet</h1><p>{wallet.status === "UNAVAILABLE" ? "Financial records are temporarily unavailable. Try again later." : "This account does not have access to a wallet yet. Applying, accepting an offer and training do not create earnings or a payable balance."}</p><Link href={href("home")}>Back to My Workspace</Link></section>;
+  }
   else if (view === "worker-help" && !worker) content = <section><h1>Help &amp; Support</h1><p>Check your application’s recorded next step and any candidate-visible message from management.</p><Link href={href("my-applications")}>My applications</Link><p>No support messaging channel has been configured for applicants. This page does not send messages.</p></section>;
   else if (view === "opportunities") content = <Suspense fallback={<ExploreLoading />}><ExploreOpportunities userId={userId} base={base} query={query} /></Suspense>;
+  else if (view === "apply") content = <ApplicationWorkspace {...shared} query={{ ...query, view: "opportunities" }} />;
   else if (view === "my-applications") content = <ApplicationWorkspace {...shared} />;
   else if (financeViews.includes(view)) content = <FinanceWorkspace {...shared} />;
   else if (["my-onboarding", "worker-training"].includes(view) || view === "my-day" && !worker) content = <OnboardingWorkspace {...shared} query={{ ...query, view: view === "my-day" ? "my-day" : "my-onboarding" }} />;
-  else if (!worker) content = <section><h1>{view === "my-work" ? "My Work" : "Your workspace"}</h1><p>{context.navigation.status === "UNAVAILABLE" ? "Worker access could not be verified. Try again before continuing." : "This workspace requires an authorized active worker assignment. Offer acceptance and training alone do not grant work access."}</p><Link href={href("my-applications")}>My applications</Link><Link href={href("my-onboarding")}>My learning</Link></section>;
+  else if (!worker) content = <section><h1>Your workspace</h1><p>{context.navigation.status === "UNAVAILABLE" ? "Worker access could not be verified. Try again before continuing." : "Work tools require an authorized active worker assignment. Offer acceptance and training alone do not grant work access."}</p><Link href={href("my-work")}>My Space</Link><Link href={href("my-onboarding")}>My learning</Link></section>;
   else if (knowledgeViews.includes(view)) content = <KnowledgeWorkspace {...shared} />;
   else if (performanceViews.includes(view)) content = <PerformanceWorkspace {...shared} />;
   else if (leadViews.includes(view)) content = <LeadWorkspace {...shared} />;
   else content = <EmployeeWorkspace {...shared} />;
   const logout = realm === "jobs" ? <form action={portalLogoutAction}><input type="hidden" name="site" value="jobs" /><button type="submit">Logout</button></form> : <form action={logoutAction}><button type="submit">Logout</button></form>;
-  return <DashboardShell base={base} view={view} candidate={!worker} search={typeof query.search === "string" ? query.search.slice(0, 120) : ""} {...context.account} unread={context.notifications.data?.length ?? null} logout={logout}>{content}</DashboardShell>;
+  return <DashboardShell base={base} view={view} candidate={!worker} {...context.account} unread={context.notifications.data?.length ?? null} logout={logout}>{content}</DashboardShell>;
 }

@@ -2,6 +2,8 @@
 
 Reviewed: 2026-10-10 (Asia/Calcutta). Phase 6: **BLOCKED**.
 
+The 2026-10-16 [revised single-role readiness audit](NICE_JOBS_REVISED_PILOT_READINESS_2026-10-16.md) maps the existing candidate/work states and the Academic Advisor - Junior pilot checklist. It does not supply any missing approval or change this register's BLOCKED status.
+
 Programme Phase 7 technical validation (2026-10-14) is tracked separately in [Phase 7 evidence](NICE_JOBS_PROGRAMME_PHASE_7_VALIDATION.md). Synthetic rehearsals and recovery checks do not appoint managers, verify legal entities, establish participant consent or approve terms/content. Every real-job restriction and unresolved decision below remains in force; controlled pilot/launch stays BLOCKED.
 
 Scope updated by the owner on 2026-10-11: only the three jobs below are in the current catalogue and pilot scope. First Oppo and internships are removed from the current scope. Historical phase evidence is retained; this scope change does not approve publication.

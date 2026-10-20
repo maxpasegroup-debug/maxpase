@@ -14,7 +14,7 @@ export function emailAuthSettings(env: Record<string, string | undefined> = proc
   if (!result.success) throw new EmailAuthUnavailable();
   return result.data;
 }
-export type OtpDelivery = { id: string; email: string; code: string; purpose: "LOGIN" | "RESET" };
+export type OtpDelivery = { id: string; email: string; code: string; purpose: "LOGIN" | "RESET" | "REGISTER" | "RESET_PIN" };
 export function createResendOtpSender(env: Record<string, string | undefined> = process.env, transport: typeof fetch = fetch) {
   return async (message: OtpDelivery) => {
     const config = emailAuthSettings(env);
@@ -22,11 +22,24 @@ export function createResendOtpSender(env: Record<string, string | undefined> = 
       const response = await transport("https://api.resend.com/emails", {
         method: "POST", redirect: "error", signal: AbortSignal.timeout(8000),
         headers: { Authorization: `Bearer ${config.RESEND_API_KEY}`, "Content-Type": "application/json", "Idempotency-Key": `nicejobs-otp/${message.id}` },
-        body: JSON.stringify({ from: config.NICEJOBS_AUTH_FROM, to: [message.email], subject: message.purpose === "RESET" ? "Reset your Nice Jobs password" : "Your Nice Jobs verification code", text: `Your Nice Jobs code is ${message.code}. It expires in 10 minutes. Do not share this code. If you did not request it, ignore this email.` })
+        body: JSON.stringify({ from: config.NICEJOBS_AUTH_FROM, to: [message.email], subject: message.purpose === "RESET" ? "Reset your Nice Jobs password" : message.purpose === "RESET_PIN" ? "Reset your Nice Jobs PIN" : "Your Nice Jobs verification code", text: `Your Nice Jobs code is ${message.code}. It expires in 10 minutes. Do not share this code. If you did not request it, ignore this email.` })
       });
       if (!response.ok) throw new EmailAuthUnavailable();
       const receipt = z.object({ id: z.string().min(1).max(200) }).parse(await response.json());
       return receipt.id;
+    } catch { throw new EmailAuthUnavailable(); }
+  };
+}
+export function createResendPinNoticeSender(env: Record<string, string | undefined> = process.env, transport: typeof fetch = fetch) {
+  return async (id: string, email: string) => {
+    const config = emailAuthSettings(env);
+    try {
+      const response = await transport("https://api.resend.com/emails", {
+        method: "POST", redirect: "error", signal: AbortSignal.timeout(8000),
+        headers: { Authorization: `Bearer ${config.RESEND_API_KEY}`, "Content-Type": "application/json", "Idempotency-Key": `nicejobs-pin-changed/${id}` },
+        body: JSON.stringify({ from: config.NICEJOBS_AUTH_FROM, to: [email], subject: "Your Nice Jobs PIN changed", text: "Your Nice Jobs PIN was changed. If this was not you, contact Nice Jobs support immediately." })
+      });
+      if (!response.ok) throw new EmailAuthUnavailable();
     } catch { throw new EmailAuthUnavailable(); }
   };
 }

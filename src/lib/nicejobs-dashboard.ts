@@ -5,7 +5,8 @@ export const dashboardSections = [
 ] as const;
 
 export function dashboardSection(view: string) {
-  if (["opportunities", "my-applications"].includes(view)) return "opportunities";
+  if (view === "vision") return "vision";
+  if (["opportunities", "apply", "my-applications"].includes(view)) return "opportunities";
   if (["my-onboarding", "worker-training"].includes(view)) return "my-onboarding";
   if (view === "worker-wallet" || /^worker-(incentive|statement|payout)/.test(view)) return "worker-wallet";
   if (view === "worker-profile") return view;
@@ -15,7 +16,7 @@ export function dashboardSection(view: string) {
 
 export function isParticipantDashboardView(view?: string, query: Record<string, unknown> = {}) {
   if (query.control === "boss" || query.management === "true") return false;
-  return !view || ["home", "overview", "search", "notifications", "opportunities", "my-applications", "my-onboarding", "my-day", "my-work", "worker-training", "worker-reports", "worker-wallet", "worker-incentives", "worker-incentive-detail", "worker-statements", "worker-statement", "worker-payouts", "worker-resources", "worker-sops", "worker-help", "worker-sia", "worker-profile", "worker-messages", "my-leads", "my-followups", "lead-detail", "work-sops", "knowledge-detail"].includes(view) || !!view?.startsWith("worker-performance") || !!view?.startsWith("worker-pip");
+  return !view || ["home", "overview", "search", "notifications", "opportunities", "apply", "my-applications", "my-onboarding", "my-day", "my-work", "job-space", "vision", "worker-training", "worker-reports", "worker-wallet", "worker-incentives", "worker-incentive-detail", "worker-statements", "worker-statement", "worker-payouts", "worker-resources", "worker-sops", "worker-help", "worker-sia", "worker-profile", "worker-messages", "my-leads", "my-followups", "lead-detail", "work-sops", "knowledge-detail"].includes(view) || !!view?.startsWith("worker-performance") || !!view?.startsWith("worker-pip");
 }
 
 export function learningPercent(completed: number, required: number, configured: boolean) {

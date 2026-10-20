@@ -34,7 +34,8 @@ import { SkillCityWorkspace } from "../../skillcity-ui/workspace";
 const views = ["overview", "programs", "projects", "tasks", "goals"];
 export default async function Gateway({ params, searchParams }: { params: Promise<{ site: string }>; searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const { site, paths } = await requestPortal((await params).site), query = await searchParams;
-  const session = await getPortalSession(site); if (!session) redirect(paths.login);
+  const session = await getPortalSession(site, site.id === "jobs"); if (!session) redirect(paths.login);
+  if (site.id === "jobs" && session.needsJobsPinActivation) redirect(paths.login.replace(/\/login$/, "/activate-pin"));
   if(site.id==="labs"&&session.needsPinChange)redirect(paths.gateway.replace(/\/gateway$/,"")+"/pin");
   await consumeSecurityBudget(securityKey("authenticated", session.userId), 300, 60);
   const view = typeof query.view === "string" ? query.view : "overview";

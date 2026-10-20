@@ -30,7 +30,8 @@ export const migrationManifest = [
   ["20261010100000_nicejobs_email_otp", "dd5abdb61b1b82292abb661928dee4ad2ae4a11ee41b3423269a35df0475edd0"],
   ["20261013090000_nicejobs_secure_content", "f2048c4912e0068a1b082e118c8b762f726d0279dda9e51013ae0e439897e682"],
   ["20261014090000_labs_customer_grants", "b028f2ee9ded01d0be125eec340ff322403e594b66ec3029e44179b1de4f69aa"],
-  ["20261015090000_nexa_directives", "9bf20876b4528ebea77e7887b1b2d22bef5183eaf0097f04d95732c6aed4bd99"]
+  ["20261015090000_nexa_directives", "9bf20876b4528ebea77e7887b1b2d22bef5183eaf0097f04d95732c6aed4bd99"],
+  ["20261020090000_nicejobs_phone_pin", "f390b19816bdca48b4887cdde34b1b6ee046f46bc7ee086a118206435338ab2d"]
 ] as const;
 
 export async function verifyDatabaseReadiness(db: Prisma.TransactionClient) {
@@ -39,6 +40,7 @@ export async function verifyDatabaseReadiness(db: Prisma.TransactionClient) {
   await db.$queryRaw`SELECT id FROM Session LIMIT 1`;
   await db.$queryRaw`SELECT timezone FROM User LIMIT 1`;
   await db.$queryRaw`SELECT emailVerifiedAt FROM User LIMIT 1`;
+  await db.$queryRaw`SELECT jobsPhone, jobsPinHash, jobsPhoneVerifiedAt FROM User LIMIT 1`;
   await db.$queryRaw`SELECT otpHash, credentialHash, attempts, consumedAt FROM EmailAuthChallenge LIMIT 1`;
   await db.$queryRaw`SELECT digest, bytes, organizationId FROM NiceJobsContentFile LIMIT 1`;
   await db.$queryRaw`SELECT customerUserId, leadId, status FROM LabsCustomerGrant LIMIT 1`;

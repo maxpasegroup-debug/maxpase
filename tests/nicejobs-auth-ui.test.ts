@@ -28,31 +28,18 @@ function surfaces(state: { challengeId?: string; message?: string; complete?: bo
   const shared = { JobsAuthShell };
   const password = { PasswordField };
   const email = load<{ JobsEmailAuthForm: ComponentType<Record<string, unknown>>; JobsCodeFields: ComponentType<Record<string, unknown>> }>("src/app/sites/[site]/email-auth-form.tsx", { ...common, "../jobs-ui/auth-shell": shared, "../jobs-ui/password-field": password, "./actions": { jobsEmailLoginAction: () => {}, jobsPasswordResetAction: () => {} } });
-  const signup = load<{ ApplicantSignupForm: ComponentType<Record<string, unknown>> }>("src/app/sites/[site]/signup/form.tsx", { ...common, "../../jobs-ui/auth-shell": shared, "../../jobs-ui/password-field": password, "../email-auth-form": email, "../actions": { applicantSignupAction: () => {}, jobsEmailLoginAction: () => {} } });
-  return { email, signup };
+  return { email };
 }
 
-describe("Nice Jobs auth screens", () => {
-  it("renders labelled signup fields, notice, account switch, and opportunity return context", () => {
-    const { ApplicantSignupForm } = surfaces().signup;
-    const html = renderToStaticMarkup(createElement(ApplicantSignupForm, { paths, versionId: "role-123" }));
-    expect(html).toContain("Full name");
-    expect(html).toContain("Confirm password");
-    expect(html).toContain('name="acknowledge"');
-    expect(html).toContain('name="versionId" value="role-123"');
-    expect(html).toContain('href="/sites/jobs/login?versionId=role-123"');
-    expect(html).toContain("Show password");
-    expect(html).not.toContain("Six-digit email code");
-  });
+describe("Nice Jobs legacy activation email screens", () => {
 
-  it("renders password login with recovery and signup links", () => {
+  it("renders legacy password login with recovery link", () => {
     const { JobsEmailAuthForm } = surfaces().email;
     const html = renderToStaticMarkup(createElement(JobsEmailAuthForm, { paths }));
     expect(html).toContain('name="email"');
     expect(html).toContain('name="password"');
     expect(html).toContain("Show password");
-    expect(html).toContain('href="/sites/jobs/reset-password"');
-    expect(html).toContain('href="/sites/jobs/signup"');
+    expect(html).toContain('href="/sites/jobs/legacy-recovery"');
     expect(html).toContain("Continue to email code");
     expect(html).not.toContain("Six-digit email code");
   });
@@ -85,7 +72,7 @@ describe("Nice Jobs auth screens", () => {
     expect(proof).toContain('name="code"');
     expect(proof).toContain('name="confirmPassword"');
     const complete = renderToStaticMarkup(createElement(surfaces({ complete: true }).email.JobsEmailAuthForm, { paths, reset: true }));
-    expect(complete).toContain("Sign in with your new password");
+    expect(complete).toContain("Continue to phone activation");
     expect(complete).not.toContain("<form");
   });
 });

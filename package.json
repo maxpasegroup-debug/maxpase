@@ -19,10 +19,12 @@
     "seed": "tsx prisma/seed.ts"
   },
   "dependencies": {
+    "@node-rs/argon2": "^2.2.2",
     "@prisma/client": "6.16.2",
     "bcryptjs": "^3.0.2",
     "file-type": "22.1.1",
     "jose": "^6.1.0",
+    "libphonenumber-js": "^1.13.15",
     "lucide-react": "^1.49.0",
     "next": "^15.5.4",
     "react": "^19.1.1",

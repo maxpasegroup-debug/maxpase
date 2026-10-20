@@ -14,7 +14,7 @@ export function GoalProposal({ realm, requestKey, previousGoalId, policies, siaI
     <label>Outcome quantity<input name="target" type="number" required min={1} max={1000000} step={1} /></label>
     <label>Unit<input name="unit" required maxLength={80} /></label>
     <label>Approved incentive rule (optional)<select name="policyVersionId"><option value="">Work goal only; no earnings rule selected</option>{policies.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
-    {siaId ? <label><input name="useSia" type="checkbox" defaultChecked /> Use authorized SIA planning assistance</label> : <p>{siaStatus === "NOT_AUTHORIZED" ? "SIA planning is not authorized for your account." : "SIA planning is not configured."} A standard planning draft is available for manager review.</p>}
+    {siaId ? <label><input name="useSia" type="checkbox" defaultChecked /> Use authorized TARA planning assistance</label> : <p>{siaStatus === "NOT_AUTHORIZED" ? "TARA planning is not authorized for your account." : "TARA planning is not configured."} A standard planning draft is available for manager review.</p>}
     <label><input name="confirmed" type="checkbox" required disabled={pending || !!state.success} /> Prepare a proposal, not a promise of earnings</label>
     <button className="button" disabled={pending || !!state.success}>{pending ? "Preparing..." : previousGoalId ? "Propose target change" : "Prepare my plan"}</button>
     {state.error && <p role="alert">{state.error}</p>}{state.success && <p role="status">Plan drafted. Review it and request manager approval.</p>}
