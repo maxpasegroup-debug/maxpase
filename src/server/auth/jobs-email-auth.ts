@@ -35,7 +35,7 @@ export function createJobsEmailAuth(client: PrismaClient = prisma, options: { no
     const credentialHash = purpose === "LOGIN" || purpose === "RESET" ? user.passwordHash : user.jobsPinHash;
     if (!credentialHash) throw new AccessError("Account unavailable");
     await client.$transaction(async db => {
-      if (await db.emailAuthChallenge.findFirst({ where: { userId: user.id, createdAt: { gt: new Date(now().getTime() - 60000) } }, select: { id: true } })) throw new RateLimitError();
+      if (await db.emailAuthChallenge.findFirst({ where: { userId: user.id, email: user.email, createdAt: { gt: new Date(now().getTime() - 60000) } }, select: { id: true } })) throw new RateLimitError();
       await db.emailAuthChallenge.updateMany({ where: { userId: user.id, purpose, status: { in: ["PENDING", "SENT"] } }, data: { status: "CANCELLED" } });
       await db.emailAuthChallenge.create({ data: { id, userId: user.id, email: user.email, purpose, credentialHash, otpHash: jobsOtpHash(id, code, settings.NICEJOBS_OTP_SECRET), createdAt: now(), expiresAt: new Date(now().getTime() + 600000) } });
       await db.auditEvent.create({ data: buildAuditEventData({ action: "auth.otp_requested", entityType: "EmailAuthChallenge", entityId: id, result: "SUCCESS", metadata: { portal: "jobs", purpose } }) });
@@ -122,6 +122,35 @@ export function createJobsEmailAuth(client: PrismaClient = prisma, options: { no
     try { return await beginRegistration(user.id); }
     catch (error) { if (error instanceof EmailAuthUnavailable) return { challengeId: randomUUID() }; throw error; }
   }
+  async function changeRegistrationEmail(raw: unknown) {
+    ready();
+    const input = z.object({ country: z.string(), nationalNumber: z.string(), pin: jobsPinInput, email: emailInput }).strict().parse(raw);
+    const phone = jobsPhoneInput.parse({ country: input.country, nationalNumber: input.nationalNumber });
+    await consume("nicejobs:registration-email:global", 30, 60);
+    await consume(securityKey("nicejobs:registration-email:phone", phone), 3, 3600);
+    await requestBudget(input.email);
+    const candidate = await client.user.findUnique({ where: { jobsPhone: phone }, include: { person: { select: { id: true, metadata: true, status: true } } } });
+    if (!candidate?.jobsPinHash || !await verifyJobsPin(input.pin, candidate.jobsPinHash)) return { challengeId: randomUUID() };
+    try {
+      const updated = await client.$transaction(async db => {
+        const user = await db.user.findUnique({ where: { id: candidate.id }, include: { person: { select: { id: true, metadata: true, status: true } } } });
+        if (!user?.person || !user.jobsPinHash || user.jobsPinHash !== candidate.jobsPinHash || user.jobsPhone !== phone || user.emailVerifiedAt || user.email === input.email || user.status !== "ACTIVE" || user.person.status !== "ACTIVE" || accountPortalRealm(user.person.metadata) !== "jobs" || JSON.parse(user.person.metadata ?? "{}").identitySource !== "SELF_REGISTRATION") throw new AccessError("Email change unavailable");
+        const scope = await requirePortalAccess(db, user.id, "jobs");
+        if (await db.user.findUnique({ where: { email: input.email } }) || await db.person.findUnique({ where: { email: input.email } })) throw new AccessError("Email change unavailable");
+        const changed = await db.user.update({ where: { id: user.id }, data: { email: input.email }, select: { id: true, email: true, passwordHash: true, jobsPinHash: true } });
+        await db.person.update({ where: { id: user.person.id }, data: { email: input.email } });
+        await db.emailAuthChallenge.updateMany({ where: { userId: user.id, status: { in: ["PENDING", "SENT"] } }, data: { status: "CANCELLED" } });
+        await db.session.deleteMany({ where: { userId: user.id } });
+        await db.auditEvent.create({ data: buildAuditEventData({ actorUserId: user.id, actorPersonId: user.person.id, organizationId: scope.divisionId, action: "auth.registration_email_changed", entityType: "User", entityId: user.id, result: "SUCCESS", metadata: { portal: "jobs", emailVerified: false } }) });
+        return changed;
+      });
+      try { return await dispatch(updated, "REGISTER"); }
+      catch (error) { if (error instanceof EmailAuthUnavailable) return { deliveryPending: true as const }; throw error; }
+    } catch (error) {
+      if (error && typeof error === "object" && "code" in error && error.code === "P2002") throw new AccessError("Email change unavailable");
+      throw error;
+    }
+  }
   async function completeRegistration(raw: unknown, secret: string) {
     const settings = ready(), proof = proofInput.parse(raw);
     await consume("nicejobs:otp:verify:global", 120, 60);
@@ -163,6 +192,6 @@ export function createJobsEmailAuth(client: PrismaClient = prisma, options: { no
       await client.auditEvent.create({ data: buildAuditEventData({ action: "auth.pin_reset_notice_failed", entityType: "EmailAuthChallenge", entityId: input.challengeId, result: "FAILURE", metadata: { portal: "jobs" } }) });
     }
   }
-  return { ready, beginLogin, completeLogin, beginReset, completeReset, beginRegistration, resendRegistration, completeRegistration, beginPinReset, completePinReset };
+  return { ready, beginLogin, completeLogin, beginReset, completeReset, beginRegistration, resendRegistration, changeRegistrationEmail, completeRegistration, beginPinReset, completePinReset };
 }
 export const jobsEmailAuth = createJobsEmailAuth();

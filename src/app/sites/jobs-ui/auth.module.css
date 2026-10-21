@@ -123,6 +123,20 @@
 .signupPage .acknowledge { font-size: 12px; }
 .signupPage .button { min-height: 44px; }
 .signupPage .switch { margin-top: 12px; font-size: 12px; }
+.verificationDialog { width: min(94vw, 440px); max-height: min(90svh, 760px); overflow-y: auto; padding: 24px; border: 1px solid #754246; border-radius: 8px; background: #191719; color: #f6f2f1; box-shadow: 0 24px 80px rgba(0,0,0,.6); }
+.verificationDialog::backdrop { background: rgba(5,7,8,.8); }
+.verificationHeader { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.verificationHeader h2 { margin: 0; font-size: 25px; line-height: 1.2; }
+.verificationHeader .eyebrow { margin-bottom: 5px; }
+.dialogClose { width: 44px; height: 44px; flex: none; display: grid; place-items: center; border: 0; border-radius: 5px; background: transparent; color: #e9e1e0; cursor: pointer; }
+.dialogClose:hover { background: #30272a; }
+.dialogIntro { margin: 12px 0 18px; color: #c9c1c0; font-size: 13px; line-height: 1.5; }
+.verifyChoices { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 18px; border-bottom: 1px solid #514244; }
+.verifyChoices button { min-height: 44px; padding: 9px 8px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: #c9c1c0; font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
+.verifyChoices button[aria-current] { border-bottom-color: #ff8585; color: #ff8585; }
+.verificationDialog .form, .verificationDialog .form fieldset { gap: 12px; }
+.verificationDialog .status, .verificationDialog .alert { margin-top: 12px; }
+.verificationDialog :where(button, input, select):focus-visible { outline: 3px solid #ff7474; outline-offset: 2px; }
 
 @media (max-width: 760px) {
   .story { display: flex; min-height: 210px; }
@@ -139,4 +153,5 @@
   .signupPage .formContent { padding: 16px; }
   .signupPage .formContent h1 { font-size: 26px; }
   .signupPage .phoneRow { grid-template-columns: minmax(104px, 40%) minmax(0, 1fr); }
+  .verificationDialog { padding: 18px; }
 }

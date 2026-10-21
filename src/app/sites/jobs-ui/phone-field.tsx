@@ -4,7 +4,7 @@ import { getCountries, getCountryCallingCode, type CountryCode } from "libphonen
 import styles from "./auth.module.css";
 
 const display = new Intl.DisplayNames(["en"], { type: "region" });
-const countries = getCountries().map(code => ({ code, name: display.of(code) ?? code, dial: `+${getCountryCallingCode(code)}` })).sort((a, b) => a.name.localeCompare(b.name));
+const countries = getCountries().map(code => ({ code, name: display.of(code) ?? code, dial: `+${getCountryCallingCode(code)}` })).sort((a, b) => a.code === "IN" ? -1 : b.code === "IN" ? 1 : a.name.localeCompare(b.name));
 
 export function PhoneField({ prefix = "jobs" }: { prefix?: string }) {
   const [country, setCountry] = useState<CountryCode>("IN");

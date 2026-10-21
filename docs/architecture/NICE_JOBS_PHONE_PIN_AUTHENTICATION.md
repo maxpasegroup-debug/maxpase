@@ -6,7 +6,9 @@ Implemented locally on 2026-10-20. This supersedes candidate-facing email/passwo
 
 New candidates provide name, selected country, national phone number, mandatory recovery email, six-digit PIN and consent. `libphonenumber-js` validates and normalizes the phone to E.164; `User.jobsPhone` is database-unique. The country selector is not phone ownership proof. `User.jobsPhoneVerifiedAt` remains null until a real SMS verification integration is approved and implemented. No SMS credentials or test-code bypass are present.
 
-The PIN is stored only as an Argon2id hash with a distinct server-side pepper. Registration creates the existing Person/User and least-privilege Career Hub applicant membership, then sends a ten-minute email OTP through the existing Resend transport. The account cannot sign in with PIN until email verification completes. A failed send leaves the unverified account intact; `/verify-email` can request a fresh code with the registered phone and PIN. On verification, the existing Jobs-realm session opens My Workspace.
+The PIN is stored only as an Argon2id hash with a distinct server-side pepper. Registration creates the existing Person/User and least-privilege Career Hub applicant membership, then sends a ten-minute email OTP through the existing Resend transport. The account cannot sign in with PIN until email verification completes. Signup opens a verification dialog after account creation. A failed send leaves the unverified account intact; the dialog or `/verify-email` can request a fresh code with the registered phone and PIN. On verification, the existing Jobs-realm session opens My Workspace.
+
+Before verification, a candidate who entered the wrong recovery email can correct it in the dialog using the registered phone and PIN. The server checks the active self-registered account and portal scope, updates User and Person email transactionally with audit, cancels old codes and sessions, then requests a new Resend OTP. Old codes cannot verify the new address. A delivery failure leaves the corrected address unverified; the candidate can request another code after the cooldown. This is not a general post-verification email-change or account-recovery mechanism.
 
 Regular login is normalized phone plus PIN. It uses account/global database-backed budgets, generic denial, the existing scoped portal permission checks, eight-hour server-recorded session, realm-specific JWT audience and secure HTTP-only portal cookie. Candidate PIN alone does not authorize payout changes or financial actions.
 
@@ -31,6 +33,10 @@ Required server variables:
 | `NICEJOBS_PIN_PEPPER` | Independent random secret, at least 32 characters, for Argon2id PIN hashing. Rotation requires a planned reset process. |
 
 The existing `DATABASE_URL`, `AUTH_SECRET`, `APP_ORIGIN`, secure-cookie settings and portal host routing are also required. Never use `NEXT_PUBLIC_*` for secrets. Provider receipts mean acceptance by Resend, not inbox delivery.
+
+For the service hosting Nice Jobs, configure `NICEJOBS_EMAIL_AUTH_ENABLED=true`, `RESEND_API_KEY`, `NICEJOBS_AUTH_FROM`, `NICEJOBS_OTP_SECRET` and `NICEJOBS_PIN_PEPPER` as private deployment variables. The sender address must be authorized for the Resend account. The OTP secret and PIN pepper must be different independent values; do not change either casually after candidates enroll. Set the canonical HTTPS `APP_ORIGIN`, database and auth-cookie settings for the same deployment. After an authorized deployment, verify a real inbox delivery and successful signup using a controlled test account. Do not paste secrets into logs, chat or source files.
+
+The signup action checks email configuration before creating an account. If that check fails, it reports that no account was created. If an account was saved but the provider did not accept the OTP, the account remains unverified and the dialog offers a resend path. The previous combined error could not tell these cases apart. Application-side audit records distinguish OTP request, provider acceptance and delivery failure without storing the code. A provider acceptance receipt is not proof of inbox receipt.
 
 ## Authorized Release Checklist
 

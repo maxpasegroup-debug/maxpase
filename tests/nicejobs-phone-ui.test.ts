@@ -18,7 +18,7 @@ function load<T>(path: string, mocks: Record<string, unknown>): T {
 }
 function surfaces(state: Record<string, unknown> = {}, pending = false) {
   const react = { ...React, useActionState: () => [state, () => {}, pending] };
-  const icons = { ArrowRight: () => null, ArrowLeft: () => null, BriefcaseBusiness: () => null, Eye: () => null, EyeOff: () => null };
+  const icons = { ArrowRight: () => null, ArrowLeft: () => null, BriefcaseBusiness: () => null, Eye: () => null, EyeOff: () => null, X: () => null };
   const common = { react, "next/link": Link, "lucide-react": icons, "./auth.module.css": css, "../jobs-ui/auth.module.css": css, "../../jobs-ui/auth.module.css": css };
   const { JobsAuthShell } = load<{ JobsAuthShell: ComponentType<Record<string, unknown>> }>("src/app/sites/jobs-ui/auth-shell.tsx", { ...common, "next/image": () => null });
   const phone = load<{ PhoneField: ComponentType<Record<string, unknown>> }>("src/app/sites/jobs-ui/phone-field.tsx", common);
@@ -39,9 +39,22 @@ describe("Nice Jobs candidate phone screens", () => {
     expect(html).toContain('name="displayName"'); expect(html).toContain('name="email"'); expect(html).toContain('name="confirmPin"');
     expect(html).toContain('name="acknowledge"'); expect(html).toContain("Phone ownership is not verified");
     expect(/<select[^>]*name="country"[\s\S]*?<\/select><input[^>]*name="nationalNumber"/.test(html)).toBe(true);
+    expect(/<select[^>]*name="country"[^>]*><option value="IN"[^>]*>India \(\+91\)<\/option>/.test(html)).toBe(true);
     expect(html).not.toContain('type="search"');
     expect(html).not.toContain('aria-label="Selected calling code"');
     expect(html).toContain('name="pin"');
+  });
+  it("opens an OTP dialog after account creation with resend and edit-email choices", () => {
+    const sent = renderToStaticMarkup(createElement(surfaces({ pendingVerification: true, challengeId: "fixture-challenge" }).signup.ApplicantPhoneSignupForm, { paths }));
+    expect(sent).toContain("<dialog");
+    expect(sent).toContain("Verify your email");
+    expect(sent).toContain("Edit email");
+    expect(sent).toContain("Resend code");
+    expect(sent).toContain('name="challengeId" value="fixture-challenge"');
+    const failed = renderToStaticMarkup(createElement(surfaces({ pendingVerification: true, error: "Delivery unavailable" }).signup.ApplicantPhoneSignupForm, { paths }));
+    expect(failed).toContain("Your account is saved");
+    expect(failed).toContain("Delivery unavailable");
+    expect(failed).toContain("Send a new code");
   });
   it("shows recovery request, challenge and success as distinct states", () => {
     const initial = renderToStaticMarkup(createElement(surfaces().auth.JobsPhoneAuthForm, { paths, reset: true }));

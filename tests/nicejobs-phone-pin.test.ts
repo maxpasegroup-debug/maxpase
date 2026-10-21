@@ -34,7 +34,7 @@ beforeAll(async () => {
   for (const key of applicantPermissionKeys) await db.permission.upsert({ where: { key }, update: {}, create: { key, name: key, scope: "GROUP" } });
   userId = (await createApplicantAccess(db).register(raw)).userId;
 }, 30000);
-beforeEach(async () => { now = new Date("2026-10-20T09:00:00Z"); messages.length = 0; notices.length = 0; await db.securityRateBucket.deleteMany(); await db.emailAuthChallenge.deleteMany(); await db.session.deleteMany(); await db.user.update({ where: { id: userId }, data: { jobsPhone: "+919876543210", jobsPinHash: await hashJobsPin(raw.pin), passwordHash: null, emailVerifiedAt: null, status: "ACTIVE" } }); });
+beforeEach(async () => { now = new Date("2026-10-20T09:00:00Z"); messages.length = 0; notices.length = 0; await db.securityRateBucket.deleteMany(); await db.emailAuthChallenge.deleteMany(); await db.session.deleteMany(); await db.user.update({ where: { id: userId }, data: { email: raw.email, jobsPhone: "+919876543210", jobsPinHash: await hashJobsPin(raw.pin), passwordHash: null, emailVerifiedAt: null, status: "ACTIVE", person: { update: { email: raw.email } } } }); });
 afterAll(async () => { await db.$disconnect(); rmSync(directory, { recursive: true, force: true }); });
 
 describe("Nice Jobs phone and PIN candidate authentication", () => {
@@ -102,6 +102,52 @@ describe("Nice Jobs phone and PIN candidate authentication", () => {
     await expect(failing.beginRegistration(userId)).rejects.toThrow("temporarily unavailable");
     expect((await db.emailAuthChallenge.findFirstOrThrow({ where: { userId } })).status).toBe("FAILED");
     expect((await db.user.findUniqueOrThrow({ where: { id: userId } })).emailVerifiedAt).toBeNull();
+  });
+  it("corrects an unverified recovery email, cancels the old code and verifies only the new address", async () => {
+    const old = await service.beginRegistration(userId);
+    const oldCode = messages.at(-1)!.code;
+    const corrected = await service.changeRegistrationEmail({ country: "IN", nationalNumber: raw.nationalNumber, pin: raw.pin, email: "corrected@test.invalid" });
+    if (!("challengeId" in corrected)) throw new Error("Expected a new verification challenge");
+    const user = await db.user.findUniqueOrThrow({ where: { id: userId }, include: { person: true } });
+    expect(user.email).toBe("corrected@test.invalid");
+    expect(user.person?.email).toBe("corrected@test.invalid");
+    expect(user.emailVerifiedAt).toBeNull();
+    expect(messages.at(-1)?.email).toBe("corrected@test.invalid");
+    expect((await db.emailAuthChallenge.findUniqueOrThrow({ where: { id: old.challengeId } })).status).toBe("CANCELLED");
+    await expect(service.completeRegistration({ ...old, code: oldCode }, secret)).rejects.toThrow();
+    const session = await service.completeRegistration({ ...corrected, code: messages.at(-1)!.code }, secret);
+    expect(await auth.validate(session.token, secret, "jobs")).toMatchObject({ userId });
+    expect(await db.auditEvent.count({ where: { actorUserId: userId, action: "auth.registration_email_changed" } })).toBe(1);
+    await expect(service.changeRegistrationEmail({ country: "IN", nationalNumber: raw.nationalNumber, pin: raw.pin, email: "another@test.invalid" })).rejects.toThrow();
+  });
+  it("does not change email with a wrong PIN or turn failed delivery into verification", async () => {
+    const rejected = await service.changeRegistrationEmail({ country: "IN", nationalNumber: raw.nationalNumber, pin: "654321", email: "wrong@test.invalid" });
+    if (!("challengeId" in rejected)) throw new Error("Expected an opaque challenge");
+    expect(rejected.challengeId).toMatch(/^[a-f0-9-]{36}$/);
+    expect(messages).toHaveLength(0);
+    expect((await db.user.findUniqueOrThrow({ where: { id: userId } })).email).toBe(raw.email);
+    const failing = createJobsEmailAuth(db, { now: () => now, env, send: async () => { throw new Error("mock delivery failed"); } });
+    expect(await failing.changeRegistrationEmail({ country: "IN", nationalNumber: raw.nationalNumber, pin: raw.pin, email: "undelivered@test.invalid" })).toEqual({ deliveryPending: true });
+    const user = await db.user.findUniqueOrThrow({ where: { id: userId }, include: { person: true } });
+    expect(user.email).toBe("undelivered@test.invalid");
+    expect(user.person?.email).toBe(user.email);
+    expect(user.emailVerifiedAt).toBeNull();
+    expect((await db.emailAuthChallenge.findFirstOrThrow({ where: { userId } })).status).toBe("FAILED");
+    now = new Date(now.getTime() + 61000);
+    const retry = await service.resendRegistration({ country: "IN", nationalNumber: raw.nationalNumber, pin: raw.pin });
+    expect(messages.at(-1)?.email).toBe("undelivered@test.invalid");
+    expect(await service.completeRegistration({ ...retry, code: messages.at(-1)!.code }, secret)).toBeTruthy();
+  });
+  it("rolls back an unverified email correction when audit persistence fails", async () => {
+    const sql = new DatabaseSync(file);
+    sql.exec("CREATE TRIGGER EmailChangeAuditFailure BEFORE INSERT ON AuditEvent WHEN NEW.action = 'auth.registration_email_changed' BEGIN SELECT RAISE(ABORT, 'audit unavailable'); END;");
+    try {
+      await expect(service.changeRegistrationEmail({ country: "IN", nationalNumber: raw.nationalNumber, pin: raw.pin, email: "rollback@test.invalid" })).rejects.toThrow();
+      const user = await db.user.findUniqueOrThrow({ where: { id: userId }, include: { person: true } });
+      expect(user.email).toBe(raw.email);
+      expect(user.person?.email).toBe(raw.email);
+      expect(messages).toHaveLength(0);
+    } finally { sql.exec("DROP TRIGGER EmailChangeAuditFailure"); sql.close(); }
   });
   it("allows only one concurrent PIN reset effect", async () => {
     const registration = await service.beginRegistration(userId);

@@ -17,20 +17,36 @@ import { getPortalSession } from "@/server/portals/session";
 import { prisma } from "@/server/db";
 import { jobsPinActivation } from "@/server/auth/jobs-pin-activation";
 
-export type PortalLoginState = { error?: string; challengeId?: string; message?: string; complete?: boolean };
+export type PortalLoginState = { error?: string; challengeId?: string; message?: string; complete?: boolean; pendingVerification?: boolean; deliveryPending?: boolean };
 export async function jobsPhoneSignupAction(_state: PortalLoginState, form: FormData): Promise<PortalLoginState> {
   await requestPortal("jobs", true);
+  let accountCreated = false;
   try {
     jobsEmailAuth.ready();
     const registered = await applicantAccess.register({ displayName: form.get("displayName"), country: form.get("country"), nationalNumber: form.get("nationalNumber"), email: form.get("email"), pin: form.get("pin"), confirmPin: form.get("confirmPin"), acknowledge: form.get("acknowledge") === "on" });
+    accountCreated = true;
     const result = await jobsEmailAuth.beginRegistration(registered.userId);
-    return { ...result, message: "Check your email for a six-digit verification code. It expires in 10 minutes." };
+    return { ...result, pendingVerification: true, message: "Check your email for a six-digit verification code. It expires in 10 minutes." };
   } catch (error) {
+    if (accountCreated) return { pendingVerification: true, error: "Account created, but a verification code could not be sent. Request a new code after email delivery is available." };
     if (error instanceof RateLimitError || error instanceof NiceJobsError) return { error: error.message };
     if (error instanceof ZodError) return { error: "Check your name, country, phone, email and matching six-digit PINs." };
-    if (error instanceof NiceJobsUnavailable || error instanceof EmailAuthUnavailable) return { error: "Registration or email delivery is temporarily unavailable. If your account was created, request a new verification code." };
+    if (error instanceof EmailAuthUnavailable) return { error: "Email verification is not configured or available. No account was created. Please try again later." };
+    if (error instanceof NiceJobsUnavailable) return { error: "Registration is temporarily unavailable. No account was created." };
     safeDiagnostic("operation_failed");
     return { error: "Could not finish registration. Please try again later." };
+  }
+}
+export async function jobsChangeRecoveryEmailAction(_state: PortalLoginState, form: FormData): Promise<PortalLoginState> {
+  await requestPortal("jobs", true);
+  try {
+    const result = await jobsEmailAuth.changeRegistrationEmail({ country: form.get("country"), nationalNumber: form.get("nationalNumber"), pin: form.get("pin"), email: form.get("email") });
+    if ("deliveryPending" in result) return { deliveryPending: true, error: "Recovery email updated, but a code could not be sent. Request a new code when delivery is available." };
+    return { ...result, message: "If these details match an unverified account, a code will arrive at the updated email." };
+  } catch (error) {
+    if (error instanceof RateLimitError) return { error: error.message };
+    if (!(error instanceof ZodError || error instanceof EmailAuthUnavailable)) safeDiagnostic("operation_failed");
+    return { error: "Could not update or send a code. Check your details and try again later." };
   }
 }
 export async function jobsPhoneLoginAction(_state: PortalLoginState, form: FormData): Promise<PortalLoginState> {
