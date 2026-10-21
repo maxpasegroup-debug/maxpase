@@ -38,6 +38,10 @@ describe("Nice Jobs candidate phone screens", () => {
     const html = renderToStaticMarkup(createElement(surfaces().signup.ApplicantPhoneSignupForm, { paths }));
     expect(html).toContain('name="displayName"'); expect(html).toContain('name="email"'); expect(html).toContain('name="confirmPin"');
     expect(html).toContain('name="acknowledge"'); expect(html).toContain("Phone ownership is not verified");
+    expect(/<select[^>]*name="country"[\s\S]*?<\/select><input[^>]*name="nationalNumber"/.test(html)).toBe(true);
+    expect(html).not.toContain('type="search"');
+    expect(html).not.toContain('aria-label="Selected calling code"');
+    expect(html).toContain('name="pin"');
   });
   it("shows recovery request, challenge and success as distinct states", () => {
     const initial = renderToStaticMarkup(createElement(surfaces().auth.JobsPhoneAuthForm, { paths, reset: true }));

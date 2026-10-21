@@ -31,9 +31,11 @@
 .field input:focus { border-color: #217658; }
 .field input[aria-invalid="true"] { border-color: #bf4f39; }
 .field select { width: 100%; min-height: 48px; padding: 11px 13px; border: 1px solid #bccfc3; border-radius: 5px; color: #172e22; background: #fff; font: inherit; }
-.phoneRow { display: flex; align-items: center; gap: 8px; }
-.phoneRow span { flex: none; min-width: 56px; padding: 12px; border: 1px solid #bccfc3; border-radius: 5px; text-align: center; }
+.phoneRow { display: grid; grid-template-columns: minmax(115px, 39%) minmax(0, 1fr); align-items: center; gap: 8px; }
+.phoneRow select { min-width: 0; }
 .phoneRow input { min-width: 0; }
+.pinPair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.pinPair > * { min-width: 0; }
 .passwordInput { position: relative; }
 .passwordInput input { padding-right: 52px; }
 .passwordInput button { position: absolute; top: 2px; right: 2px; width: 44px; height: 44px; display: grid; place-items: center; border: 0; background: transparent; color: #49645a; cursor: pointer; }
@@ -90,7 +92,7 @@
 .description, .hint, .notice { color: #b9b0af; }
 .field label, .acknowledge { color: #e9e1e0; }
 .field input { border-color: #514244; color: #f6f2f1; background: #0f1012; }
-.field select, .phoneRow span { border-color: #514244; color: #f6f2f1; background: #0f1012; }
+.field select { border-color: #514244; color: #f6f2f1; background: #0f1012; }
 .field input:hover, .field input:focus { border-color: #ed6262; }
 .passwordInput button { color: #d1c6c5; }
 .acknowledge input { accent-color: #ef5555; }
@@ -100,9 +102,41 @@
 .supportLink a, .switch a, .footer a { color: #ff8585; }
 .footer { color: #aaa3a2; }
 .page :where(a,button,input):focus-visible { outline-color: #ff7474; }
+.page select:focus-visible { outline: 3px solid #ff7474; outline-offset: 3px; }
+
+.signupPage { height: 100svh; min-height: 0; overflow: hidden; }
+.signupPage .story, .signupPage .content { min-height: 0; height: 100svh; }
+.signupPage .content { overflow: hidden; }
+.signupPage .header { min-height: 64px; padding-block: 10px; }
+.signupPage .footer { min-height: 52px; padding-block: 4px; }
+.signupPage .formWrap { min-height: 0; overflow-y: auto; align-items: safe center; padding: 12px 26px; }
+.signupPage .formContent { width: min(100%, 550px); padding: 20px 24px; border-radius: 8px; }
+.signupPage .eyebrow { margin-bottom: 6px; }
+.signupPage .formContent h1 { font-size: 30px; line-height: 1.14; }
+.signupPage .description { margin: 8px 0 14px; font-size: 13px; line-height: 1.4; }
+.signupPage .form, .signupPage .form fieldset { gap: 10px; }
+.signupPage .field { gap: 4px; }
+.signupPage .field input, .signupPage .field select { min-height: 42px; padding: 8px 11px; }
+.signupPage .passwordInput button { top: 0; right: 0; width: 42px; height: 42px; }
+.signupPage .notice { font-size: 11px; line-height: 1.4; }
+.signupPage .hint { font-size: 11px; }
+.signupPage .acknowledge { font-size: 12px; }
+.signupPage .button { min-height: 44px; }
+.signupPage .switch { margin-top: 12px; font-size: 12px; }
 
 @media (max-width: 760px) {
   .story { display: flex; min-height: 210px; }
   .storyContent { padding: 28px 24px; }
   .storyContent h2 { font-size: 27px; }
+  .signupPage .story { display: none; }
+  .signupPage .content { min-height: 0; }
+  .signupPage .formWrap { align-items: safe center; }
+  .signupPage .footer { display: none; }
+}
+@media (max-width: 480px) {
+  .signupPage .header { padding-inline: 16px; }
+  .signupPage .formWrap { padding: 12px 14px; }
+  .signupPage .formContent { padding: 16px; }
+  .signupPage .formContent h1 { font-size: 26px; }
+  .signupPage .phoneRow { grid-template-columns: minmax(104px, 40%) minmax(0, 1fr); }
 }

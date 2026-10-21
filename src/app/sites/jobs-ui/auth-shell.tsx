@@ -14,7 +14,7 @@ export function JobsAuthShell({ paths, title, eyebrow, description, mode, childr
   mode: "signup" | "login" | "reset" | "verify";
   children: ReactNode;
 }) {
-  return <main className={styles.page}>
+  return <main className={`${styles.page} ${mode === "signup" ? styles.signupPage : ""}`}>
     <aside className={styles.story} aria-label="Nice Jobs">
       <Image className={styles.storyImage} src="/images/nice-jobs-hero-v2.webp" alt="" fill sizes="(max-width: 900px) 100vw, 48vw" priority />
       <div className={styles.storyContent}>

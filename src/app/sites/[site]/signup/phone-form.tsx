@@ -24,8 +24,8 @@ export function ApplicantPhoneSignupForm({ paths }: { paths: JobsAuthPaths }) {
     <form action={action} className={styles.form} aria-busy={pending} onSubmit={event => { if (pin !== confirm) event.preventDefault(); }}><fieldset disabled={pending}>
       <div className={styles.field}><label htmlFor="jobs-name">Full name</label><input id="jobs-name" name="displayName" autoComplete="name" minLength={2} maxLength={120} required /></div>
       <PhoneField prefix="signup" />
-      <div className={styles.field}><label htmlFor="jobs-email">Email address for recovery</label><input id="jobs-email" name="email" type="email" autoComplete="email" maxLength={254} required /><p className={styles.hint}>You must verify this address before you can recover your PIN.</p></div>
-      <PinField label="Create six-digit PIN" onChange={setPin} /><PinField name="confirmPin" label="Confirm six-digit PIN" onChange={setConfirm} />
+      <div className={styles.field}><label htmlFor="jobs-email">Recovery email</label><input id="jobs-email" name="email" type="email" autoComplete="email" maxLength={254} required /><p className={styles.hint}>Verify this email to recover your PIN later.</p></div>
+      <div className={styles.pinPair}><PinField label="Create six-digit PIN" onChange={setPin} /><PinField name="confirmPin" label="Confirm PIN" onChange={setConfirm} /></div>
       {confirm && pin !== confirm && <p role="alert" className={styles.inlineError}>PINs do not match.</p>}
       <p className={styles.notice}>We use your contact details and answers to process applications. An account does not guarantee employment or an offer. Phone ownership is not verified until a supported verification service is configured.</p>
       <label className={styles.acknowledge}><input name="acknowledge" type="checkbox" required /><span>I understand how my applicant account will be used.</span></label>
