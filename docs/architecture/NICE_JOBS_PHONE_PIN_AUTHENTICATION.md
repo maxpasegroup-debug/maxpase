@@ -14,6 +14,8 @@ Forgot PIN takes the registered phone, never a replacement email. The response i
 
 Existing self-registered password accounts are not converted automatically. `/activate-pin` requires the existing password **and** email OTP via the previous login service, then allows phone/PIN setup only from that fresh, scoped session. An old candidate session can reach activation but is denied normal portal actions until setup is complete. `/legacy-recovery` provides the existing email-OTP password reset to candidates who forgot their old password before activation. Other accounts cannot use this candidate activation path. Historic IDs, applications, membership, training, wallet and audit rows are not rewritten.
 
+Activation atomically removes the old password hash, revokes all existing sessions and records its audit event. The candidate signs in again with the new PIN. PIN login also binds the successful hash check to the hash present when the session is issued, so a concurrent PIN reset cannot produce a session from the old PIN.
+
 ## Database And Operations
 
 `20261020090000_nicejobs_phone_pin` adds nullable `User.jobsPhone`, `jobsPinHash`, `jobsPhoneVerifiedAt`, a unique phone index, and broadens the existing challenge-purpose check to REGISTER and RESET_PIN through a row-copy table rebuild. The migration preserves existing challenges. Apply only after identifying/backing up the authorized SQLite target; no application or production database migration was run in this task. Prisma Client generation is not a database migration.
@@ -29,6 +31,14 @@ Required server variables:
 | `NICEJOBS_PIN_PEPPER` | Independent random secret, at least 32 characters, for Argon2id PIN hashing. Rotation requires a planned reset process. |
 
 The existing `DATABASE_URL`, `AUTH_SECRET`, `APP_ORIGIN`, secure-cookie settings and portal host routing are also required. Never use `NEXT_PUBLIC_*` for secrets. Provider receipts mean acceptance by Resend, not inbox delivery.
+
+## Authorized Release Checklist
+
+1. Identify the exact staging or production database target and owner. Take a protected backup and prove restoration in an isolated target before changing schema. Preserve the backup and record the restore point.
+2. Supply the variables above through the deployment secret store; verify the Resend sender/domain and intended public origin without exposing values. Establish trusted ingress and IP-abuse controls before opening candidate authentication. No SMS provider is implemented yet, so phone ownership must remain unverified.
+3. Apply the additive migration chain with the existing deployment procedure only after authorization. Check migration status and readiness-manifest integrity against that target. Do not treat local Prisma Client generation as evidence that a database was migrated.
+4. Canary-test signup, OTP delivery/verification, PIN login/reset, legacy activation, account isolation and session revocation with authorized test identities. Check logs for secret redaction, throttling, delivery failures and unexpected authentication errors.
+5. Roll back application traffic using a compatible prior build if necessary. The migration is additive; do not drop columns or reverse the challenge-table rebuild on a live database. Restore the protected backup only under an approved data-recovery plan that accounts for writes since the restore point. Reconcile provider delivery and audit records before reopening traffic.
 
 ## Launch Gaps
 

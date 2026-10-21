@@ -28,7 +28,7 @@ export async function ParticipantDashboard({ userId, realm, base, query }: Props
   const shared = { userId, realm, base, query };
   const href = (next: string) => `${base}?view=${next}`;
   let content;
-  if (["home", "overview", "my-work"].includes(view)) content = <CandidateSpace userId={userId} base={base} name={context.account.name} worker={worker} />;
+  if (["home", "overview"].includes(view)) content = <CandidateSpace userId={userId} base={base} name={context.account.name} worker={worker} />;
   else if (view === "job-space") content = <JobSpace {...shared} worker={worker} />;
   else if (view === "search") {
     const search = typeof query.search === "string" ? query.search : "";
@@ -54,7 +54,7 @@ export async function ParticipantDashboard({ userId, realm, base, query }: Props
   else if (view === "my-applications") content = <ApplicationWorkspace {...shared} />;
   else if (financeViews.includes(view)) content = <FinanceWorkspace {...shared} />;
   else if (["my-onboarding", "worker-training"].includes(view) || view === "my-day" && !worker) content = <OnboardingWorkspace {...shared} query={{ ...query, view: view === "my-day" ? "my-day" : "my-onboarding" }} />;
-  else if (!worker) content = <section><h1>Your workspace</h1><p>{context.navigation.status === "UNAVAILABLE" ? "Worker access could not be verified. Try again before continuing." : "Work tools require an authorized active worker assignment. Offer acceptance and training alone do not grant work access."}</p><Link href={href("my-work")}>My Space</Link><Link href={href("my-onboarding")}>My learning</Link></section>;
+  else if (!worker) content = <section><h1>Your workspace</h1><p>{context.navigation.status === "UNAVAILABLE" ? "Worker access could not be verified. Try again before continuing." : "Work tools require an authorized active worker assignment. Offer acceptance and training alone do not grant work access."}</p><Link href={href("home")}>My Workspace</Link><Link href={href("my-onboarding")}>My learning</Link></section>;
   else if (knowledgeViews.includes(view)) content = <KnowledgeWorkspace {...shared} />;
   else if (performanceViews.includes(view)) content = <PerformanceWorkspace {...shared} />;
   else if (leadViews.includes(view)) content = <LeadWorkspace {...shared} />;

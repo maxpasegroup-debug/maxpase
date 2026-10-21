@@ -18,14 +18,15 @@ const loginSchema = z.object({ email: z.string().trim().email().max(254).transfo
 const issuer = "maxpase-os", audience = "maxpase-os-web";
 const dummyHash = hashPassword("non-account-timing-comparison-only");
 const jobsPinProof = Symbol("verified-jobs-pin");
+type VerifiedJobsPin = { kind: typeof jobsPinProof; credentialHash: string };
 
 export function createAuthenticationService(client: PrismaClient = prisma, now = () => new Date()) {
   const consume = createSecurityLimiter(client, now);
   let dummyJobsHash: Promise<string> | undefined;
-  async function issue(userId: string, secret: string, passwordHash?: string | null, lifetimeMs = 7 * 86400000, portal?: PortalId, proof?: JobsOtpProof | typeof jobsPinProof) {
+  async function issue(userId: string, secret: string, passwordHash?: string | null, lifetimeMs = 7 * 86400000, portal?: PortalId, proof?: JobsOtpProof | VerifiedJobsPin) {
     if (portal === "jobs") {
       if (!proof) throw new AccessError("Email verification required");
-      if (proof !== jobsPinProof) {
+      if (!("kind" in proof)) {
         const attempt = await client.emailAuthChallenge.updateMany({ where: { id: proof.challengeId, userId, purpose: proof.purpose ?? "LOGIN", status: "SENT", expiresAt: { gt: now() }, attempts: { lt: 5 } }, data: { attempts: { increment: 1 } } });
         if (attempt.count !== 1) throw new AccessError("Invalid or expired code");
       }
@@ -37,8 +38,8 @@ export function createAuthenticationService(client: PrismaClient = prisma, now =
       if (accountRealm && portal !== accountRealm) throw new AccessError("Account realm unavailable");
       const portalScope = portal ? await requirePortalAccess(db, userId, portal, portal === "labs") : null;
       if (portal === "jobs") {
-        if (proof === jobsPinProof) {
-          if (!user.emailVerifiedAt || !user.jobsPhone || !user.jobsPinHash) throw new AccessError("Account verification required");
+        if (proof && "kind" in proof) {
+          if (proof.kind !== jobsPinProof || !user.emailVerifiedAt || !user.jobsPhone || !user.jobsPinHash || user.jobsPinHash !== proof.credentialHash) throw new AccessError("Account verification required");
         } else {
           await claimJobsOtp(db, proof, user, proof?.purpose ?? "LOGIN", now());
           await db.user.update({ where: { id: user.id }, data: { emailVerifiedAt: now() } });
@@ -104,7 +105,7 @@ export function createAuthenticationService(client: PrismaClient = prisma, now =
       await client.auditEvent.create({ data: buildAuditEventData({ action: "auth.login", entityType: "User", result: "DENIED", metadata: { portal: "jobs", accountReference: securityKey("account", accountKey) } }) });
       return null;
     }
-    try { return await issue(candidate.id, secret, undefined, 8 * 3600000, "jobs", jobsPinProof); }
+    try { return await issue(candidate.id, secret, undefined, 8 * 3600000, "jobs", { kind: jobsPinProof, credentialHash: candidate.jobsPinHash }); }
     catch (error) { if (error instanceof AccessError) return null; throw error; }
   }
   async function payloadFor(token: string, secret: string, portal?: PortalId) {

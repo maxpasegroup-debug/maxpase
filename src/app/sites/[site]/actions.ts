@@ -13,12 +13,9 @@ import { jobsEmailAuth } from "@/server/auth/jobs-email-auth";
 import { EmailAuthUnavailable } from "@/server/auth/resend-otp";
 import { labsPin } from "@/server/labs/pin";
 import { jobsPhoneInput } from "@/server/auth/jobs-phone";
-import { jobsPinInput } from "@/server/auth/jobs-phone";
-import { hashJobsPin } from "@/server/auth/jobs-pin";
 import { getPortalSession } from "@/server/portals/session";
 import { prisma } from "@/server/db";
-import { buildAuditEventData } from "@/server/audit/audit-service";
-import { accountPortalRealm } from "@/server/auth/account-realm";
+import { jobsPinActivation } from "@/server/auth/jobs-pin-activation";
 
 export type PortalLoginState = { error?: string; challengeId?: string; message?: string; complete?: boolean };
 export async function jobsPhoneSignupAction(_state: PortalLoginState, form: FormData): Promise<PortalLoginState> {
@@ -76,23 +73,13 @@ export async function jobsActivatePinAction(_state: PortalLoginState, form: Form
   const session = await getPortalSession(site, true);
   if (!session) return { error: "Sign in with your existing account and email code first." };
   try {
-    const phone = jobsPhoneInput.parse({ country: form.get("country"), nationalNumber: form.get("nationalNumber") });
-    const pin = jobsPinInput.parse(form.get("pin")), confirmPin = jobsPinInput.parse(form.get("confirmPin"));
-    if (pin !== confirmPin) return { error: "PINs do not match." };
-    const jobsPinHash = await hashJobsPin(pin);
-    await prisma.$transaction(async db => {
-      const current = await db.session.findUnique({ where: { id: session.sessionId }, include: { user: { include: { person: true } } } });
-      if (!current || current.userId !== session.userId || current.createdAt.getTime() < Date.now() - 600000 || current.user.jobsPinHash || current.user.jobsPhone || !current.user.passwordHash || !current.user.emailVerifiedAt || current.user.status !== "ACTIVE" || current.user.person?.status !== "ACTIVE" || accountPortalRealm(current.user.person?.metadata) !== "jobs" || JSON.parse(current.user.person?.metadata ?? "{}").identitySource !== "SELF_REGISTRATION") throw new Error("Activation session expired");
-      if (await db.user.findUnique({ where: { jobsPhone: phone } })) throw new Error("Phone unavailable");
-      await db.user.update({ where: { id: current.userId }, data: { jobsPhone: phone, jobsPinHash, person: current.user.personId ? { update: { phone } } : undefined } });
-      await db.session.deleteMany({ where: { userId: current.userId, id: { not: current.id } } });
-      await db.auditEvent.create({ data: buildAuditEventData({ actorUserId: current.userId, actorPersonId: current.user.personId, action: "auth.jobs_pin_activated", entityType: "User", entityId: current.userId, result: "SUCCESS", metadata: { portal: "jobs", phoneVerified: false } }) });
-    });
+    await jobsPinActivation(session.userId, session.sessionId, { country: form.get("country"), nationalNumber: form.get("nationalNumber"), pin: form.get("pin"), confirmPin: form.get("confirmPin") });
   } catch (error) {
     if (!(error instanceof ZodError)) safeDiagnostic("operation_failed");
     return { error: "Could not activate your PIN. Check the phone number and use a fresh sign-in code." };
   }
-  redirect(paths.gateway);
+  await revokePortalSession(site);
+  redirect(paths.login);
 }
 export async function jobsPinResetAction(_state: PortalLoginState, form: FormData): Promise<PortalLoginState> {
   await requestPortal("jobs", true);

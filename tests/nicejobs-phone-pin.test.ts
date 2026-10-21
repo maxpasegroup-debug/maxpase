@@ -11,6 +11,8 @@ import { createAuthenticationService } from "@/server/auth/service";
 import { createJobsEmailAuth } from "@/server/auth/jobs-email-auth";
 import { jobsPhoneInput } from "@/server/auth/jobs-phone";
 import { hashJobsPin, verifyJobsPin } from "@/server/auth/jobs-pin";
+import { createJobsPinActivation } from "@/server/auth/jobs-pin-activation";
+import { hashPassword } from "@/server/auth/password";
 import type { OtpDelivery } from "@/server/auth/resend-otp";
 
 const directory = mkdtempSync(join(tmpdir(), "nicejobs-phone-pin-")), file = join(directory, "test.db");
@@ -32,7 +34,7 @@ beforeAll(async () => {
   for (const key of applicantPermissionKeys) await db.permission.upsert({ where: { key }, update: {}, create: { key, name: key, scope: "GROUP" } });
   userId = (await createApplicantAccess(db).register(raw)).userId;
 }, 30000);
-beforeEach(async () => { now = new Date("2026-10-20T09:00:00Z"); messages.length = 0; notices.length = 0; await db.securityRateBucket.deleteMany(); await db.emailAuthChallenge.deleteMany(); await db.session.deleteMany(); await db.user.update({ where: { id: userId }, data: { jobsPinHash: await hashJobsPin(raw.pin), emailVerifiedAt: null, status: "ACTIVE" } }); });
+beforeEach(async () => { now = new Date("2026-10-20T09:00:00Z"); messages.length = 0; notices.length = 0; await db.securityRateBucket.deleteMany(); await db.emailAuthChallenge.deleteMany(); await db.session.deleteMany(); await db.user.update({ where: { id: userId }, data: { jobsPhone: "+919876543210", jobsPinHash: await hashJobsPin(raw.pin), passwordHash: null, emailVerifiedAt: null, status: "ACTIVE" } }); });
 afterAll(async () => { await db.$disconnect(); rmSync(directory, { recursive: true, force: true }); });
 
 describe("Nice Jobs phone and PIN candidate authentication", () => {
@@ -110,5 +112,43 @@ describe("Nice Jobs phone and PIN candidate authentication", () => {
     const results = await Promise.allSettled([service.completePinReset(input), service.completePinReset(input)]);
     expect(results.filter(result => result.status === "fulfilled")).toHaveLength(1);
     expect(await db.auditEvent.count({ where: { actorUserId: userId, action: "auth.pin_reset" } })).toBeGreaterThan(0);
+  });
+  it("transitions a legacy candidate without changing identity and retires old credentials and sessions", async () => {
+    const oldPassword = "legacy-test-password-123";
+    await db.user.update({ where: { id: userId }, data: { jobsPhone: null, jobsPinHash: null, passwordHash: await hashPassword(oldPassword), emailVerifiedAt: now } });
+    const oldSession = await db.session.create({ data: { userId, createdAt: now, expiresAt: new Date(now.getTime() + 3600000) } });
+    const activate = createJobsPinActivation(db, () => now);
+    await expect(activate("forged-user", oldSession.id, { country: "US", nationalNumber: "2025550123", pin: "654321", confirmPin: "654321" })).rejects.toThrow();
+    await activate(userId, oldSession.id, { country: "US", nationalNumber: "2025550123", pin: "654321", confirmPin: "654321" });
+    const current = await db.user.findUniqueOrThrow({ where: { id: userId }, include: { person: true } });
+    expect(current.jobsPhone).toBe("+12025550123"); expect(current.person?.phone).toBe("+12025550123");
+    expect(current.passwordHash).toBeNull(); expect(current.jobsPinHash).toMatch(/^\$argon2id\$/);
+    expect(await db.session.count({ where: { userId } })).toBe(0);
+    await expect(activate(userId, oldSession.id, { country: "US", nationalNumber: "2025550123", pin: "654321", confirmPin: "654321" })).rejects.toThrow();
+    expect(await auth.loginJobsPin({ country: "US", nationalNumber: "2025550123", pin: "654321" }, secret)).not.toBeNull();
+  });
+  it("rolls back legacy activation if the audit write fails", async () => {
+    await db.user.update({ where: { id: userId }, data: { jobsPhone: null, jobsPinHash: null, passwordHash: await hashPassword("legacy-test-password-123"), emailVerifiedAt: now } });
+    const oldSession = await db.session.create({ data: { userId, createdAt: now, expiresAt: new Date(now.getTime() + 3600000) } });
+    const sql = new DatabaseSync(file);
+    sql.exec("CREATE TRIGGER ActivationAuditFailure BEFORE INSERT ON AuditEvent WHEN NEW.action = 'auth.jobs_pin_activated' BEGIN SELECT RAISE(ABORT, 'audit unavailable'); END;");
+    try {
+      await expect(createJobsPinActivation(db, () => now)(userId, oldSession.id, { country: "US", nationalNumber: "2025550123", pin: "654321", confirmPin: "654321" })).rejects.toThrow();
+      const current = await db.user.findUniqueOrThrow({ where: { id: userId } });
+      expect(current.jobsPhone).toBeNull(); expect(current.jobsPinHash).toBeNull(); expect(current.passwordHash).not.toBeNull();
+      expect(await db.session.count({ where: { userId } })).toBe(1);
+    } finally { sql.exec("DROP TRIGGER ActivationAuditFailure"); sql.close(); }
+  });
+  it("does not issue a session if the PIN hash changes after credential verification", async () => {
+    await db.user.update({ where: { id: userId }, data: { emailVerifiedAt: now } });
+    const replacement = await hashJobsPin("654321");
+    const racing = db.$extends({ query: { user: { async findUnique({ args, query }) {
+      const result = await query(args);
+      if (args.where.jobsPhone === "+919876543210") await db.user.update({ where: { id: userId }, data: { jobsPinHash: replacement } });
+      return result;
+    } } } });
+    const result = await createAuthenticationService(racing as unknown as PrismaClient, () => now).loginJobsPin({ country: "IN", nationalNumber: raw.nationalNumber, pin: raw.pin }, secret);
+    expect(result).toBeNull();
+    expect(await db.session.count({ where: { userId } })).toBe(0);
   });
 });
