@@ -8,7 +8,7 @@ const companies = [
   { number: "03", name: "Top Rank AI", legal: "TOP RANK AI PRIVATE LIMITED", description: "A platform for intelligent possibilities.", icon: Cpu, brands: [] }
 ];
 export default function Home() {
-  return <main className="group-landing">
+  return <main className="group-landing" data-motion="">
     <header className="group-header"><Link className="group-wordmark" href="/" aria-label="MAXPASE GROUP home"><Grid2X2 size={28} /><span>MAXPASE<span className="wordmark-sub">GROUP</span></span></Link><nav aria-label="Public navigation"><a className="group-about-link" href="#companies">Our companies</a><Link className="group-cta" href="/login">Login<ArrowUpRight size={17} /></Link></nav></header>
     <section className="group-hero" aria-labelledby="group-title">
       <div className="group-hero-content"><p className="group-kicker"><Sparkles size={14} /> EDUCATION. ENTERPRISE. INNOVATION.</p><h1 id="group-title">Innovate.<br />Transform.<br /><span>Thrive.</span></h1><p className="group-hero-description">Connecting talent, ideas and technology.<br />Building what comes next, together.</p><a className="group-cta hero-cta" href="#companies">Discover our group<ArrowRight size={19} /></a></div>

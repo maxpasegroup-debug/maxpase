@@ -26,16 +26,22 @@ const copy = {
     { title: "Know the work", description: "Clear responsibilities and terms help you decide whether an opportunity fits.", icon: BookOpenCheck },
     { title: "Grow through practice", description: "Orientation, useful resources and feedback help turn learning into action.", icon: Sparkles },
     { title: "Get human support", description: "Managers make formal decisions. Guidance helps you prepare your next step.", icon: Handshake }
+  ],
+  faqs: [
+    { q: "What is Nice Jobs?", a: "Nice Jobs is the public site for AIRA Career Hub. You can look at approved opportunities, learn through practice, and read the terms for work that may lead to earning." },
+    { q: "Does creating an account give me a job?", a: "No. Signing up does not create a job, an application or guaranteed income. Every published opportunity has its own eligibility, terms and earning rules." },
+    { q: "Which roles can I apply for?", a: "Only approved, published opportunities can accept applications. If the catalogue is empty or temporarily unavailable, there is no open role to apply for." },
+    { q: "Who decides what happens next?", a: "People do. Managers make formal decisions. Learning and guidance can help you prepare, and they do not replace that review." }
   ]
 } as const;
 
 export function JobsLanding({ paths, opportunities, availability }: { paths: Paths; opportunities: LandingOpportunity[]; availability: "ready" | "unavailable" }) {
   const preview = opportunityPreview(availability, opportunities);
-  return <main className={styles.page}>
+  return <main className={styles.page} data-motion="">
     <header className={styles.header}>
       <div className={styles.headerInner}>
         <Link className={styles.brand} href={paths.home} aria-label="Nice Jobs home"><span className={styles.brandMark}><BriefcaseBusiness size={22} strokeWidth={2.2}/></span><span>Nice Jobs<small>AIRA Career Hub</small></span></Link>
-        <nav className={styles.nav} aria-label="Main navigation"><Link className={styles.navHow} href="#how-it-works">How it works</Link><Link className={styles.navOpportunities} href={paths.opportunities}>Opportunities</Link><Link className={styles.signIn} href={paths.login}>Sign in</Link><Link className={styles.headerCta} href={paths.signup}>Get started <ArrowRight size={17}/></Link></nav>
+        <nav className={styles.nav} aria-label="Main navigation"><Link className={styles.navHow} href="#how-it-works">How it works</Link><Link className={styles.navOpportunities} href={paths.opportunities}>Opportunities</Link><Link className={styles.navFaq} href="#faq">FAQ</Link><Link className={styles.signIn} href={paths.login}>Sign in</Link><Link className={styles.headerCta} href={paths.signup}>Get started <ArrowRight size={17}/></Link></nav>
       </div>
     </header>
 
@@ -61,7 +67,7 @@ export function JobsLanding({ paths, opportunities, availability }: { paths: Pat
 
     <section className={styles.opportunities} id="opportunities" aria-labelledby="opportunities-title"><div className={styles.container}>
       <div className={styles.opportunitiesHeading}><div><p className={styles.eyebrow}>OPPORTUNITIES</p><h2 id="opportunities-title">Find a path that fits.</h2><p>Only approved, published opportunities can accept applications.</p></div><Link className={styles.textLink} href={paths.opportunities}>Browse all opportunities <ArrowRight size={18}/></Link></div>
-      {preview.state === "unavailable" ? <div className={styles.empty} role="status"><h3>Opportunities are temporarily unavailable.</h3><p>Please check the Opportunities page again later.</p></div> : preview.state === "published" ? <div className={styles.opportunityList}>{preview.opportunities.map(opportunity => <article key={opportunity.id}><div><p className={styles.listLabel}>PUBLISHED OPPORTUNITY</p><h3>{opportunity.title}</h3><p>{opportunity.employer}{opportunity.areas.length ? ` / ${opportunity.areas.join(", ")}` : ""}</p></div><Link href={paths.opportunities} aria-label={`Browse ${opportunity.title} in Opportunities`}>View opportunity <ArrowRight size={18}/></Link></article>)}</div> : <div className={styles.empty} role="status"><h3>No opportunities are open for applications right now.</h3><p>Approved opportunities will appear here when applications open.</p></div>}
+      {preview.state === "unavailable" ? <div className={styles.empty} data-card="" role="status"><h3>Opportunities are temporarily unavailable.</h3><p>Please check the Opportunities page again later.</p></div> : preview.state === "published" ? <div className={styles.opportunityList}>{preview.opportunities.map(opportunity => <article key={opportunity.id}><div><p className={styles.listLabel}>PUBLISHED OPPORTUNITY</p><h3>{opportunity.title}</h3><p>{opportunity.employer}{opportunity.areas.length ? ` / ${opportunity.areas.join(", ")}` : ""}</p></div><Link href={paths.opportunities} aria-label={`Browse ${opportunity.title} in Opportunities`}>View opportunity <ArrowRight size={18}/></Link></article>)}</div> : <div className={styles.empty} data-card="" role="status"><h3>No opportunities are open for applications right now.</h3><p>Approved opportunities will appear here when applications open.</p></div>}
       <p className={styles.exampleNote}>Advisory, automation and mentoring are examples of the kinds of work people may explore. They are not current vacancies unless published above.</p>
     </div></section>
 
@@ -72,7 +78,11 @@ export function JobsLanding({ paths, opportunities, availability }: { paths: Pat
 
     <section className={styles.trust} aria-label="Nice Jobs transparency"><div className={styles.container}><span className={styles.trustSymbol}><BookOpenCheck size={24}/></span><p>Clear terms before commitment. Applications, training and earnings depend on the specific approved opportunity; signing up alone does not create a job or guaranteed income.</p></div></section>
 
-    <section className={styles.finalCta} aria-labelledby="final-title"><div className={styles.container}><div><p className={styles.eyebrow}>YOUR NEXT STEP</p><h2 id="final-title">Start with what is open.</h2><p>Take a look, understand the terms, and choose your next step.</p></div><Link className={styles.finalButton} href={paths.opportunities}>Explore Opportunities <ArrowRight size={19}/></Link></div></section>
-    <footer className={styles.footer}><div className={styles.container}><Link className={styles.footerBrand} href={paths.home}>Nice Jobs</Link><span>AIRA Career Hub / AIRA Skill City Private Limited</span><Link href={paths.login}>Sign in</Link></div></footer>
+    <section className={styles.faq} id="faq" aria-labelledby="jobs-faq-title"><div className={styles.container}>
+      <div className={styles.sectionHeading}><p className={styles.eyebrow}>BEFORE YOU APPLY</p><h2 id="jobs-faq-title">Questions about Nice Jobs.</h2></div>
+      <div className={styles.faqList}>{copy.faqs.map(item => <details key={item.q}><summary>{item.q}</summary><p>{item.a}</p></details>)}</div>
+    </div></section>
+    <section className={styles.finalCta} data-card="" aria-labelledby="final-title"><div className={styles.container}><div><p className={styles.eyebrow}>YOUR NEXT STEP</p><h2 id="final-title">Start with what is open.</h2><p>Take a look, understand the terms, and choose your next step.</p></div><Link className={styles.finalButton} href={paths.opportunities}>Explore Opportunities <ArrowRight size={19}/></Link></div></section>
+    <footer className={styles.footer}><div className={styles.container}><div className={styles.footerBrandBlock}><Link className={styles.footerBrand} href={paths.home}>Nice Jobs</Link><p>AIRA Career Hub. Approved opportunities, practical learning and clear terms.</p></div><nav className={styles.footerNav} aria-label="Nice Jobs footer"><Link href="#how-it-works">How it works</Link><Link href={paths.opportunities}>Opportunities</Link><Link href="#faq">FAQ</Link><Link href={paths.signup}>Get started</Link><Link href={paths.login}>Sign in</Link></nav><p className={styles.footerLegal}>AIRA Skill City Private Limited. Signing up does not guarantee a job or income.</p></div></footer>
   </main>;
 }
