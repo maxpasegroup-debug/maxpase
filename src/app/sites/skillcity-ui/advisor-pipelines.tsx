@@ -11,8 +11,9 @@ export function AdvisorPipelines({ pipelines }: { pipelines: Pipeline[] }) {
   return <>{pipelines.map(pipeline => <section className="sc-section" key={pipeline.slug}>
     <h2>{labels[pipeline.slug] ?? pipeline.slug}</h2>
     <p>{pipeline.product ? `${pipeline.rows.length} assigned records on this page. Product: ${pipeline.product.lifecycle} / ${pipeline.product.status}.` : "Product pipeline not configured."}</p>
+    {pipeline.unavailableRecords > 0 && <p>{pipeline.unavailableRecords} record(s) need data review before they can be shown in this pipeline.</p>}
     {pipeline.product && !pipeline.rows.length && <p>No assigned open records.</p>}
-    {pipeline.product && !!pipeline.rows.length && <div className="sc-list">{pipeline.rows.map(lead => <article key={lead.id}>
+    {pipeline.product && !!pipeline.rows.length && <div className="sc-list">{pipeline.rows.map(lead => <article id={`${pipeline.slug}-lead-${lead.id}`} key={lead.id}>
       <header><h3>{lead.title}</h3><span>{lead.status.replaceAll("_", " ")}</span></header>
       <p>Next follow-up: {date(lead.nextFollowUp ?? lead.dueAt)}</p><p>Last outcome: {lead.outcome || "Not recorded"}</p>
       {pipeline.canUpdate && next[lead.status] && <details><summary>Record outcome and next action</summary>

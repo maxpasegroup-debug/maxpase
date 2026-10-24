@@ -39,14 +39,22 @@ describe("Nice Jobs My Workspace", () => {
     expect(applicationStage("CLOSED")).toBe("Closed");
   });
 
-  it("shows the eight compact destinations and candidate activation boundaries", async () => {
+  it("shows candidate destinations without worker-only shortcuts", async () => {
     const html = await renderSpace(empty, empty);
-    for (const label of ["My Workspace", "Explore Opportunities", "My Applications", "My Work", "Training", "Daily Reports", "Marketplace", "My Wallet"]) expect(html).toContain(label);
-    expect(html).toContain("After activation");
+    for (const label of ["My Workspace", "Explore Opportunities", "My Applications", "Training", "Help"]) expect(html).toContain(label);
+    expect(html).not.toContain("Daily Reports");
+    expect(html).not.toContain("My Wallet");
+    expect(html).not.toContain("Marketplace");
     expect(html).toContain("No jobs in your workspace yet");
     expect(html).toContain("does not grant work access");
+    expect(html).not.toContain('href="/sites/jobs/gateway?view=my-work"');
+    expect(html).not.toContain('href="/sites/jobs/gateway?view=worker-reports"');
+  });
+
+  it("adds work, reports and wallet only for a verified worker", async () => {
+    const html = await renderSpace(empty, empty, true);
+    for (const label of ["My Work", "Daily Reports", "My Wallet"]) expect(html).toContain(label);
     expect(html).toContain('href="/sites/jobs/gateway?view=my-work"');
-    expect(html).toContain('href="/sites/jobs/gateway?view=worker-reports"');
   });
 
   it("renders a real application in its own job space without claiming work activation", async () => {

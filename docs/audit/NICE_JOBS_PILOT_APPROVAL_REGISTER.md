@@ -8,6 +8,44 @@ Programme Phase 7 technical validation (2026-10-14) is tracked separately in [Ph
 
 Scope updated by the owner on 2026-10-11: only the three jobs below are in the current catalogue and pilot scope. First Oppo and internships are removed from the current scope. Historical phase evidence is retained; this scope change does not approve publication.
 
+## JOB-001 Reconciliation (2026-10-21)
+
+The owner's current **launch** scope is Academic Advisor and Defence Career Mentor only. This narrows the earlier three-job pilot plan; `JOB-BAM` remains a historical unpublished draft identity, not a launch authorization. Neither of the two launch roles is approved for publication by this scope decision. `JOB-001` is the existing Junior Academic Advisor identity and must not be duplicated. The separate in-house Senior Academic Advisor draft in `src/server/group/product-drafts.ts` has a different employment model and is not silently merged into `JOB-001`.
+
+The default `.env` identifies a local SQLite target but has no isolated-purpose evidence, so it was **not queried**. The read-only target `.private/content-preview/isolated-FAkkgN/preview.db` was checked against its `NICEJOBS_CONTENT_PREVIEW_ONLY` runtime manifest. It has one synthetic `ISOLATED-CURRICULUM` draft, one unattached unpublished synthetic image resource, and **no `JOB-001` row**. Therefore the real draft's persisted status, version, manager, areas, terms, reviewers and resources are **not verified**. No draft was changed; before and after the task, its real persisted state is unknown and publication remains blocked.
+
+Source configuration maps `JOB-001` to `aira-startup-school` and `aira-skill-studio`. Existing product drafts map PBA to the former and GenZ Builder to the latter; no Full Stack Branding Expert product draft was found in that registry. These are intended source mappings, **not** proof of persisted job/program links, current program facts or publication approval. The source/display name "AIRA Startup School" conflicts with the owner's requested "AIRA Startup Skool" spelling; the division slug and `airastartupskool.com` domain are unchanged. Obtain a canonical naming decision before renaming records. Likewise, confirm whether the candidate-facing title should change from "Junior Academic Advisor" to "Academic Advisor"; do not conflate it with the distinct Senior employee position.
+
+| Required evidence | Status | Current evidence and next action |
+| --- | --- | --- |
+| 1. Legal employer and recruitment authority | Requires owner approval | AIRA Skill City Private Limited is owner-supplied in the draft definition, not independently verified legal/recruitment evidence. Verify the employing entity and authority for this exact role. |
+| 2. Named manager and authorized reviewer | Missing | Definition has a role-label placeholder and null manager ID; no verified account, appointment or independent reviewer evidence. Nominate and verify scoped accounts. |
+| 3. Engagement terms and compensation | Conflicting | `JOB-001` proposes performance-based/no fixed salary, while the separate Senior employee draft states an in-house monthly salary. Confirm the intended Junior engagement and obtain legally reviewed versioned terms; do not merge these roles. |
+| 4. Location and work arrangement | Missing | Both are pending in the definition. Supply and approve exact disclosures. |
+| 5. Startup Skool / PBA | Conflicting | `JOB-001` and PBA use the `aira-startup-school` slug, but display spelling differs and no persisted program attachment was verified. Confirm canonical display name and the role-to-program link. |
+| 6. Skill Studio / GenZ Builder | Requires owner approval | Source slugs align (`aira-skill-studio`, `genz-builder`); persisted link, owner and program facts are unverified. Review and approve the exact mapping/version. |
+| 7. Skill Studio / Full Stack Branding Expert | Missing | Named in the owner's scope, but absent from the controlled product-draft registry and no persisted link was verified. Establish its canonical program record and authorized owner before attaching content. |
+| 8. Current program facts and fees | Requires owner approval | Previously discussed duration/price figures are not current approved disclosures. Obtain versioned program records and legal/commercial review. |
+| 9. Referral incentive and qualification policy | Missing | No approved rate, qualifying admission evidence, verification or payment timing. Keep financial policy inactive. |
+| 10. Four scripts and final media | Missing | Owner supplied four named PDF scripts in conversation; no matching PDF or final audio/video was accessible in the repository or current attachment directory. Preview library has no corresponding resource. Import supplied PDFs through authorized private content intake, then review and produce/approve media separately. |
+| 11. Brochures, FAQs and promotional resources | Missing | No approved role/program materials were established in the verified preview. Supply versioned, independently reviewed customer-facing assets. |
+| 12. Orientation, assessment and readiness | Requires owner approval | The builder and gates exist, but real `JOB-001` video, comprehension, policies, daily evidence, reviewer and readiness decisions are unverified. Configure and review the complete role programme. |
+| 13. Candidate next step and manager support | Requires owner approval | My Workspace reads actual application next steps; it cannot display a `JOB-001` journey until a lawfully published eligible version exists. Assign manager/support ownership and verify the eventual candidate path. |
+| 14. Resource approval and content versions | Verified from authoritative evidence | Existing secure library requires private upload, versioning, scoped access and independent publication review. No `JOB-001` resource approval/version is thereby established. |
+
+The four PDFs are **owner-supplied in conversation but not accessible** in the repository or current attachment directory. "No preview resource" refers only to the verified isolated database; the actual draft/content database was not queried. No final video was accessible here, which is not proof that none exists in owner-controlled storage.
+
+| Owner-supplied script | Intended attachment | Accessible here / preview resource | Actual attachment / approval / version | Final video / exact next action |
+| --- | --- | --- | --- | --- |
+| `VIDEO 1_ ACADEMIC ADVISOR ROLE ORIENTATION.pdf` | `JOB-001` role orientation | No / no | Not verified | Not accessible; import the PDF privately, review/version it, then separately attach and approve the final role video. |
+| `VIDEO 2_ AIRA STARTUP SKOOL - PBA.pdf` | `JOB-001` / Startup Skool / PBA | No / no | Not verified | Not accessible; import, confirm canonical PBA mapping and facts, review/version, then attach approved final video. |
+| `VIDEO 3_ AIRA SKILL STUDIO - GENZ BUILDER .pdf` | `JOB-001` / Skill Studio / GenZ Builder | No / no | Not verified | Not accessible; import, confirm the product mapping, review/version, then attach approved final video. |
+| `VIDEO 4_ AIRA SKILL STUDIO - FULL STACK BRANDING EXPERT.pdf` | `JOB-001` / Skill Studio / Full Stack Branding Expert | No / no | Not verified | Not accessible; first establish the canonical program/owner, then import, review/version and attach approved final video. |
+
+Never substitute a script for a completed video or mark either approved without an authorized review.
+
+The next bounded step is an authorized read-only inspection of the actual `JOB-001` draft in an explicitly identified isolated clone, followed by exact version-aware draft reconciliation only after the title, brand spelling, programme owner/link, manager, terms and content decisions above are supplied. No publication, offer, enrollment, activation, incentive or payment is authorized by this register.
+
 Documentation-only register for the existing Career Hub experience roadmap, not the original Nice Jobs phase numbering. No production database, account directory, secrets or provider accounts were inspected. Persisted draft existence, account identity and live permissions are NOT VERIFIED by this review.
 
 ## Status And Restrictions

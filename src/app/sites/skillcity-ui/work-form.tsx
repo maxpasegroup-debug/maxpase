@@ -2,7 +2,7 @@
 import { useActionState, type ReactNode } from "react";
 import { skillCityWorkAction, type SkillCityActionState } from "./actions";
 
-export function WorkForm({ children, actionName, reference, label, confirm }: { children: ReactNode; actionName: "LEAD" | "CRM_LEAD" | "CRM_CREATE" | "TASK" | "DECISION" | "DIRECTIVE_PREPARE" | "DIRECTIVE_DECIDE" | "DIRECTIVE_TASK"; reference: string; label: string; confirm?: string }) {
+export function WorkForm({ children, actionName, reference, label, confirm }: { children: ReactNode; actionName: "LEAD" | "CRM_LEAD" | "CRM_CREATE" | "TASK" | "DEV_CONTRIBUTE" | "DEV_REVIEW" | "DEV_ASSIGN" | "DEV_DUTY" | "DEV_COMPLETE" | "DECISION" | "FOCUS" | "FOCUS_END" | "TASK_CONTROL" | "TASK_BLOCKER" | "DIRECTIVE_PREPARE" | "DIRECTIVE_DECIDE" | "DIRECTIVE_TASK"; reference: string; label: string; confirm?: string }) {
   const [state, action, pending] = useActionState(skillCityWorkAction, {} as SkillCityActionState);
   return <form className="sc-work-form" aria-busy={pending} onSubmit={event=>{if(confirm&&!window.confirm(confirm))event.preventDefault();}} action={async form => {
     for (const key of ["nextFollowUp", "dueDate"]) {

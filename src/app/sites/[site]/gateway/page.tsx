@@ -40,7 +40,12 @@ export default async function Gateway({ params, searchParams }: { params: Promis
   await consumeSecurityBudget(securityKey("authenticated", session.userId), 300, 60);
   const view = typeof query.view === "string" ? query.view : "overview";
   if (site.id === "skillcity" && (!query.view || employeeViews.includes(view as typeof employeeViews[number]))) {
-    const data = await skillCityEmployeeDashboard.dashboard(session.userId, typeof query.view === "string" ? view : undefined);
+    let data;
+    try { data = await skillCityEmployeeDashboard.dashboard(session.userId, typeof query.view === "string" ? view : undefined); }
+    catch (error) {
+      if (!(error instanceof AccessError)) throw error;
+      redirect(typeof query.view === "string" ? paths.gateway : paths.login);
+    }
     return <SkillCityWorkspace data={data} email={session.email} userId={session.userId} base={paths.gateway} home={paths.home}/>;
   }
   if (site.id === "skillcity") notFound();

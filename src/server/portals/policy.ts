@@ -3,7 +3,7 @@ import { AccessError, createAccessContext } from "@/server/authorization/engine"
 import { siteById, type PortalId } from "./sites";
 import { accountPortalRealm } from "@/server/auth/account-realm";
 
-const skillCityStaffRoles = new Set(["Director", "Division Director", "Senior Academic Advisor", "Junior Academic Advisor", "Software Developer", "Full Stack Developer", "Junior Developer"]);
+const skillCityStaffRoles = new Set(["Director", "Division Director", "Business Development & Operations Manager", "Senior Academic Advisor", "Junior Academic Advisor", "Software Developer", "Full Stack Developer", "Junior Developer"]);
 
 export async function requirePortalAccess(db: Prisma.TransactionClient, userId: string, id: PortalId, credentialSetup = false) {
   const site = siteById(id);
@@ -11,7 +11,8 @@ export async function requirePortalAccess(db: Prisma.TransactionClient, userId: 
   if (id === "skillcity") {
     const company = await db.organization.findUnique({ where: { slug: "aira-skill-city" }, select: { id: true, type: true, status: true, company: { select: { status: true } } } });
     if (!company || company.type !== "COMPANY" || company.status !== "ACTIVE" || company.company?.status !== "ACTIVE") throw new AccessError("Gateway unavailable");
-    const user = await db.user.findUnique({ where: { id: userId }, select: { person: { select: { metadata: true } } } });
+    const user = await db.user.findUnique({ where: { id: userId }, select: { emailVerifiedAt: true, person: { select: { metadata: true } } } });
+    if (!user?.emailVerifiedAt) throw new AccessError("Verified employee account required");
     const realm = accountPortalRealm(user?.person?.metadata);
     if (realm && realm !== "skillcity") throw new AccessError("Gateway unavailable");
     const ctx = await createAccessContext(userId, db, undefined, { organizationId: company.id });

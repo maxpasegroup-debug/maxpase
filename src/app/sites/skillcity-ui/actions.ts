@@ -14,6 +14,8 @@ import { staffOnboardingService } from "@/server/skillcity/staff-onboarding";
 import type { StaffDraftState } from "@/app/app/boss/command/staff-actions";
 import { advisorCrm } from "@/server/skillcity/crm";
 import { staffInvite } from "@/server/skillcity/staff-invite";
+import { skillCityManagerDesk } from "@/server/skillcity/manager-desk";
+import { skillCityDeveloperDesk } from "@/server/skillcity/developer-desk";
 
 export type SkillCityActionState = { error?: string; message?: string };
 const field = (form: FormData, name: string) => String(form.get(name) ?? "");
@@ -36,11 +38,30 @@ export async function skillCityWorkAction(_state: SkillCityActionState, form: Fo
       await advisorCrm.create(session.userId, { product: field(form, "product"), ownerUserId: field(form, "ownerUserId"), name: field(form, "name"), email: field(form, "email"), phone: field(form, "phone"), need: field(form, "need"), consent: form.get("consent") === "true", reference });
     } else if (field(form, "action") === "TASK") {
       await skillCityEmployeeDashboard.dashboard(session.userId, "developer");
-      await skillCityLabsService.saveTask(session.userId, { projectId: field(form, "projectId"), taskId: field(form, "taskId"), title: field(form, "title"), description: field(form, "description"), dueDate: field(form, "dueDate"), status: field(form, "status"), reference });
+      await skillCityDeveloperDesk.updateOwnTask(session.userId, { taskId: field(form, "taskId"), revision: Number(field(form, "revision")), description: field(form, "description"), status: field(form, "status"), reference });
+    } else if (field(form, "action") === "DEV_CONTRIBUTE") {
+      await skillCityDeveloperDesk.contribute(session.userId, { taskId: field(form, "taskId"), detail: field(form, "detail"), reference });
+    } else if (field(form, "action") === "DEV_REVIEW") {
+      await skillCityDeveloperDesk.review(session.userId, { taskId: field(form, "taskId"), duty: field(form, "duty"), verdict: field(form, "verdict"), comment: field(form, "comment"), reference });
+    } else if (field(form, "action") === "DEV_ASSIGN") {
+      await skillCityDeveloperDesk.assignTask(session.userId, { projectId: field(form, "projectId"), ...(field(form, "taskId") ? { taskId: field(form, "taskId") } : { title: field(form, "title"), dueDate: field(form, "dueDate") }), developerUserId: field(form, "developerUserId"), reference });
+    } else if (field(form, "action") === "DEV_DUTY") {
+      await skillCityDeveloperDesk.assignDuty(session.userId, { taskId: field(form, "taskId"), reviewerUserId: field(form, "reviewerUserId"), duty: field(form, "duty"), reference });
+    } else if (field(form, "action") === "DEV_COMPLETE") {
+      await skillCityDeveloperDesk.completeReviewedTask(session.userId, { taskId: field(form, "taskId"), revision: Number(field(form, "revision")), reason: field(form, "reason"), reference });
     } else if (field(form, "action") === "DECISION") {
       const desk = await skillCityEmployeeDashboard.dashboard(session.userId, "director");
       if (!desk.data || !("decisions" in desk.data) || !Array.isArray(desk.data.decisions) || !desk.data.decisions.some(item => item.id === field(form, "id"))) throw new AccessError("Decision unavailable in this company");
       await operationsService.decide(session.userId, { approvalId: field(form, "id"), decision: field(form, "decision"), comment: field(form, "comment") });
+    } else if (field(form, "action") === "FOCUS") {
+      await skillCityEmployeeDashboard.dashboard(session.userId, "manager");
+      await skillCityManagerDesk.setFocus(session.userId, { organizationId: field(form, "organizationId"), personId: field(form, "personId"), title: field(form, "title"), startsOn: field(form, "startsOn"), endsOn: field(form, "endsOn"), decisionReference: field(form, "decisionReference"), reference });
+    } else if (field(form, "action") === "FOCUS_END") {
+      await skillCityManagerDesk.endFocus(session.userId, { focusId: field(form, "focusId"), reason: field(form, "reason"), reference });
+    } else if (field(form, "action") === "TASK_CONTROL") {
+      await skillCityManagerDesk.changeTask(session.userId, { taskId: field(form, "taskId"), revision: Number(field(form, "revision")), status: field(form, "status"), deadlineMode: field(form, "deadlineMode"), dueDate: field(form, "dueDate") || null, reason: field(form, "reason"), reference });
+    } else if (field(form, "action") === "TASK_BLOCKER") {
+      await skillCityManagerDesk.setBlocker(session.userId, { taskId: field(form, "taskId"), ...(field(form, "blockerId") ? { blockerId: field(form, "blockerId") } : { description: field(form, "description"), expectedResolution: field(form, "expectedResolution") || null }), reason: field(form, "reason"), reference });
     } else if (field(form, "action") === "DIRECTIVE_PREPARE") {
       await nexaService.prepare(session.userId, field(form, "id"), field(form, "siaId"), Number(field(form, "version")));
     } else if (field(form, "action") === "DIRECTIVE_DECIDE") {
@@ -66,9 +87,10 @@ export async function skillCityStaffDraftAction(_state: StaffDraftState, form: F
     await consumeSecurityBudget(securityKey("skillcity:staff-draft", session.userId), 10, 3600);
     await skillCityEmployeeDashboard.dashboard(session.userId, "director");
     await staffOnboardingService.prepare(session.userId, {
-      organizationId: field(form, "organizationId"), displayName: field(form, "displayName"),
-      email: field(form, "email"), roleId: field(form, "roleId"),
-      ...(field(form, "managerUserId") ? { managerUserId: field(form, "managerUserId") } : {})
+      organizationId: field(form, "organizationId"),
+      ...(field(form, "existingPersonId") ? { existingPersonId: field(form, "existingPersonId") } : { displayName: field(form, "displayName"), email: field(form, "email") }),
+      roleId: field(form, "roleId"), scopeDecisionReference: field(form, "scopeDecisionReference"),
+      ...(field(form, "managerUserId") ? { managerUserId: field(form, "managerUserId"), managerDecisionReference: field(form, "managerDecisionReference") } : {})
     });
     revalidatePath(paths.gateway);
     return { message: "Onboarding draft recorded. The account remains inactive." };

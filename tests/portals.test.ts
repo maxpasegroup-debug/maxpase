@@ -49,6 +49,7 @@ describe("Separate brand domains and authenticated gateways", () => {
     const foreign = await db.organization.findUniqueOrThrow({ where: { slug: "pearn" } });
     const personId = (await db.user.findUniqueOrThrow({ where: { id: userId } })).personId!;
     const dashboard = createSkillCityEmployeeDashboard(db);
+    await db.user.update({ where: { id: userId }, data: { emailVerifiedAt: new Date() } });
     await expect(dashboard.dashboard(userId, "director")).rejects.toThrow();
     const keys = ["organization.read", "organization.manage", "executive.read", "decision.decide", "labs.sales.self", "labs.sales.perform", "labs.delivery.assignee", "project.read", "task.read", "task.manage"];
     for (const key of keys) await db.permission.upsert({ where: { key }, create: { key, name: key, scope: "GROUP" }, update: {} });
@@ -62,6 +63,7 @@ describe("Separate brand domains and authenticated gateways", () => {
     const lead = await db.executiveRecord.create({ data: { kind: "LABS_LEAD", organizationId: labsId, ownerPersonId: personId, title: "Labs assigned lead", status: "NEW", sourceKey: "phase3:labs-lead", payload: JSON.stringify(payload) } });
     const foreignLead = await db.executiveRecord.create({ data: { kind: "LABS_LEAD", organizationId: foreign.id, ownerPersonId: personId, title: "Foreign lead", status: "NEW", sourceKey: "phase3:foreign-lead", payload: JSON.stringify(payload) } });
     const project = await db.project.create({ data: { organizationId: labsId, name: "Assigned Labs project", slug: "phase3-labs-project", ownerPersonId: personId, metadata: JSON.stringify({ kind: "AIRALABS_PROJECT" }) } });
+    await db.task.create({ data: { organizationId: labsId, projectId: project.id, assigneePersonId: personId, title: "Assigned developer task" } });
     const foreignProject = await db.project.create({ data: { organizationId: foreign.id, name: "Foreign project", slug: "phase3-foreign-project", ownerPersonId: personId, metadata: JSON.stringify({ kind: "AIRALABS_PROJECT" }) } });
     try {
       const skillLabs = createLabsService(db, () => new Date(), "skillcity");
@@ -76,13 +78,21 @@ describe("Separate brand domains and authenticated gateways", () => {
       const director = await dashboard.dashboard(userId, "director");
       expect(director.view).toBe("director");
       expect(director.available).toEqual(["advisor", "director", "developer"]);
+      await db.membership.update({ where: { id: companyMember.id }, data: { status: "SUSPENDED" } });
+      expect((await dashboard.dashboard(userId)).view).toBe("advisor");
+      await expect(dashboard.dashboard(userId, "director")).rejects.toThrow();
+      await db.role.updateMany({ where: { id: { in: [advisorRole.id, developerRole.id] } }, data: { status: "SUSPENDED" } });
+      await expect(requirePortalAccess(db, userId, "skillcity")).rejects.toThrow();
+      await db.role.updateMany({ where: { id: { in: [advisorRole.id, developerRole.id] } }, data: { status: "ACTIVE" } });
+      await db.membership.update({ where: { id: companyMember.id }, data: { status: "ACTIVE" } });
       await skillLabs.updateLead(userId, { id: lead.id, version: 0, reference: randomUUID(), status: "CONTACTED", outcome: "Reached the prospect", qualification: "", nextFollowUp: null });
       expect((await db.executiveRecord.findUniqueOrThrow({ where: { id: lead.id } })).status).toBe("CONTACTED");
       await expect(skillLabs.updateLead(userId, { id: foreignLead.id, version: 0, reference: randomUUID(), status: "CONTACTED", outcome: "Invalid scope", qualification: "", nextFollowUp: null })).rejects.toThrow();
       await skillLabs.saveTask(userId, { projectId: project.id, title: "Review implementation", description: "Synthetic project notes", dueDate: new Date(Date.now() + 86400000).toISOString(), status: "TODO", reference: randomUUID() });
-      expect(await db.task.count({ where: { projectId: project.id, assigneePersonId: personId } })).toBe(1);
+      expect(await db.task.count({ where: { projectId: project.id, assigneePersonId: personId } })).toBe(2);
       await expect(skillLabs.saveTask(userId, { projectId: foreignProject.id, title: "Forbidden task", description: "", dueDate: new Date(Date.now() + 86400000).toISOString(), status: "TODO", reference: randomUUID() })).rejects.toThrow();
     } finally {
+      await db.user.update({ where: { id: userId }, data: { emailVerifiedAt: null } });
       await db.task.deleteMany({ where: { projectId: project.id } });
       await db.operationalEvent.deleteMany({ where: { entityId: { in: [lead.id, project.id] } } });
       await db.executiveHistory.deleteMany({ where: { recordId: lead.id } });
@@ -100,6 +110,7 @@ describe("Separate brand domains and authenticated gateways", () => {
     const realms = [undefined, "skillcity", "startup", "labs", "jobs"] as const;
     const tokens: string[] = [];
     try {
+      await db.user.update({ where: { id: userId }, data: { emailVerifiedAt: new Date() } });
       for (const slug of ["aira-skill-city", "aira-career-hub"]) {
         const org = await db.organization.findUniqueOrThrow({ where: { slug } });
         const role = await db.role.create({ data: { organizationId: org.id, key: "launch-realm-fixture", name: slug === "aira-skill-city" ? "Director" : "Isolated realm fixture", permissions: { create: { permissionId: permission.id } } } });
@@ -107,14 +118,11 @@ describe("Separate brand domains and authenticated gateways", () => {
         const member = await db.membership.create({ data: { personId: person.personId!, organizationId: org.id, roles: { create: { roleId: role.id } } } });
         members.push(member.id);
       }
-      for (const realm of realms) {
-        if (realm === "jobs") {
-          let code = "";
-          const emailAuth = createJobsEmailAuth(db, { env: { NICEJOBS_EMAIL_AUTH_ENABLED: "true", RESEND_API_KEY: "isolated-test-key", NICEJOBS_AUTH_FROM: "auth@test.invalid", NICEJOBS_OTP_SECRET: secret }, send: async message => { code = message.code; return "isolated-receipt"; } });
-          const proof = await emailAuth.beginLogin(credentials());
-          tokens.push((await emailAuth.completeLogin({ ...proof, code }, secret)).token);
-        } else tokens.push((await auth.create(userId, secret, undefined, 300000, realm)).token);
-      }
+      let code = "";
+      const emailAuth = createJobsEmailAuth(db, { env: { NICEJOBS_EMAIL_AUTH_ENABLED: "true", RESEND_API_KEY: "isolated-test-key", NICEJOBS_AUTH_FROM: "auth@test.invalid", NICEJOBS_OTP_SECRET: secret }, send: async message => { code = message.code; return "isolated-receipt"; } });
+      const proof = await emailAuth.beginLogin(credentials());
+      const jobsToken = (await emailAuth.completeLogin({ ...proof, code }, secret)).token;
+      for (const realm of realms) tokens.push(realm === "jobs" ? jobsToken : (await auth.create(userId, secret, undefined, 300000, realm)).token);
       for (const [i, source] of realms.entries()) {
         for (const [j, target] of realms.entries()) {
           if (i === j) expect(await auth.validate(tokens[i], secret, target)).toMatchObject({ userId });
@@ -127,6 +135,7 @@ describe("Separate brand domains and authenticated gateways", () => {
       }
     } finally {
       for (const [i, realm] of realms.entries()) if (tokens[i]) await auth.revoke(tokens[i], secret, realm);
+      await db.user.update({ where: { id: userId }, data: { emailVerifiedAt: null } });
       await db.membership.deleteMany({ where: { id: { in: members } } });
       await db.role.deleteMany({ where: { id: { in: roles } } });
     }
@@ -143,15 +152,22 @@ describe("Separate brand domains and authenticated gateways", () => {
     const role = await db.role.create({ data: { organizationId: company.id, key: "skillcity-test", name: "Director", permissions: { create: { permissionId: permission.id } } } });
     const member = await db.membership.create({ data: { personId: person.personId!, organizationId: company.id, roles: { create: { roleId: role.id } } } });
     try {
+      await expect(requirePortalAccess(db, userId, "skillcity")).rejects.toThrow();
+      await db.user.update({ where: { id: userId }, data: { emailVerifiedAt: new Date() } });
       const session = await auth.loginPortal(credentials(), secret, "skillcity"); expect(session).not.toBeNull();
       for (const realm of [undefined, "startup", "labs", "jobs"] as const) expect(await auth.validate(session!.token, secret, realm)).toBeNull();
       expect((await requirePortalAccess(db, userId, "skillcity")).companyId).toBe(company.id);
+      await db.user.update({ where: { id: userId }, data: { emailVerifiedAt: null } });
+      expect(await auth.validate(session!.token, secret, "skillcity")).toBeNull();
+      await expect(requirePortalAccess(db, userId, "skillcity")).rejects.toThrow();
+      await db.user.update({ where: { id: userId }, data: { emailVerifiedAt: new Date("2026-10-24T00:00:00.000Z") } });
+      expect(await auth.validate(session!.token, secret, "skillcity")).toBeNull();
       const programs = (await service.dashboard(userId, "skillcity", "programs")).programs;
       expect(programs).toEqual([]);
       await db.membership.update({ where: { id: member.id }, data: { status: "SUSPENDED" } });
       await expect(requirePortalAccess(db, userId, "skillcity")).rejects.toThrow();
       await auth.revoke(session!.token, secret, "skillcity");
-    } finally { await db.membership.delete({ where: { id: member.id } }); await db.role.delete({ where: { id: role.id } }); }
+    } finally { await db.user.update({ where: { id: userId }, data: { emailVerifiedAt: null } }); await db.membership.delete({ where: { id: member.id } }); await db.role.delete({ where: { id: role.id } }); }
   });
   it("maps only exact canonical/www hosts and rejects suffixes, paths and forwarded-host tricks", async () => {
     for (const site of portalSites) {

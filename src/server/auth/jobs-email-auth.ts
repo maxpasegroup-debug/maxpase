@@ -14,6 +14,7 @@ import { claimJobsOtp, jobsOtpHash } from "./jobs-otp-proof";
 import { createResendOtpSender, createResendPinNoticeSender, emailAuthSettings, EmailAuthUnavailable, type OtpDelivery } from "./resend-otp";
 import { requirePortalAccess } from "@/server/portals/policy";
 import { AccessError } from "@/server/authorization/engine";
+import { safeDiagnostic } from "@/server/security/diagnostics";
 
 const emailInput = z.string().trim().email().max(254).transform(value => value.toLowerCase());
 const proofInput = z.object({ challengeId: z.uuid(), code: z.string().regex(/^[0-9]{6}$/) }).strict();
@@ -189,7 +190,11 @@ export function createJobsEmailAuth(client: PrismaClient = prisma, options: { no
     });
     try { await notifyPinChange(input.challengeId, recipient); }
     catch {
-      await client.auditEvent.create({ data: buildAuditEventData({ action: "auth.pin_reset_notice_failed", entityType: "EmailAuthChallenge", entityId: input.challengeId, result: "FAILURE", metadata: { portal: "jobs" } }) });
+      try {
+        await client.auditEvent.create({ data: buildAuditEventData({ action: "auth.pin_reset_notice_failed", entityType: "EmailAuthChallenge", entityId: input.challengeId, result: "FAILURE", metadata: { portal: "jobs" } }) });
+      } catch {
+        safeDiagnostic("operation_failed");
+      }
     }
   }
   return { ready, beginLogin, completeLogin, beginReset, completeReset, beginRegistration, resendRegistration, changeRegistrationEmail, completeRegistration, beginPinReset, completePinReset };

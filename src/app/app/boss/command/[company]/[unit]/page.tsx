@@ -7,7 +7,7 @@ import { brandCommandService } from "@/server/group/brand-command";
 import { workspaceHref } from "@/lib/workspace-navigation";
 import { staffOnboardingService } from "@/server/skillcity/staff-onboarding";
 import { StaffDraftForm } from "@/components/staff-draft-form";
-import { bossStaffDraftAction, bossStaffInviteAction } from "../../staff-actions";
+import { bossStaffDraftAction, bossStaffInviteAction, bossStaffReviewAction } from "../../staff-actions";
 import { RoleTemplateForm } from "../../role-template-form";
 import { staffInvite } from "@/server/skillcity/staff-invite";
 import { StaffInvitePanel } from "@/components/staff-invite-panel";
@@ -44,8 +44,8 @@ export default async function BrandCommandPage({ params }: { params: Promise<{ c
     <p className="muted">Access requires a verified person, account credentials, active scoped membership and an approved role. The People &amp; Access workspace records each step and audits changes; creating a person alone grants no sign-in.</p>
     {data.canReadPeople && <nav className="boss-detail-links" aria-label="Access setup"><Link href={hr("/app/workforce/users")}>Accounts</Link><Link href={hr("/app/workforce/memberships")}>Memberships</Link><Link href={hr("/app/workforce/access")}>Roles and access</Link></nav>}
     </section>
-    {staff?.canPrepare && <section className="executive-band"><h2>Employee onboarding</h2><StaffDraftForm action={bossStaffDraftAction} organizationId={data.scopeId} roles={staff.roles} managers={staff.managers}/></section>}
-    {staff?.canPrepare && <section className="executive-band"><h2>Invitations awaiting activation</h2><StaffInvitePanel rows={drafts} action={bossStaffInviteAction} deliveryReady={staffInvite.deliveryReady()}/></section>}
+    {staff?.canPrepare && <section className="executive-band"><h2>Employee onboarding</h2><StaffDraftForm action={bossStaffDraftAction} organizationId={data.scopeId} roles={staff.roles} managers={staff.managers} existingPeople={staff.existingPeople}/></section>}
+    {staff?.canPrepare && <section className="executive-band"><h2>Invitations awaiting activation</h2><StaffInvitePanel rows={drafts} action={bossStaffInviteAction} reviewAction={bossStaffReviewAction} managers={staff.managers} deliveryReady={staffInvite.deliveryReady()}/></section>}
     {company === "aira-skill-city" && unit === "aira-skill-city" && <section className="executive-band"><h2>Access role setup</h2><RoleTemplateForm/></section>}
   </main>;
 }

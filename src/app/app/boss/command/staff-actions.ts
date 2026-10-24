@@ -14,10 +14,10 @@ export async function bossStaffDraftAction(_state: StaffDraftState, form: FormDa
   try {
     await staffOnboardingService.prepare(session.userId, {
       organizationId: String(form.get("organizationId") ?? ""),
-      displayName: String(form.get("displayName") ?? ""),
-      email: String(form.get("email") ?? ""),
+      ...(form.get("existingPersonId") ? { existingPersonId: String(form.get("existingPersonId")) } : { displayName: String(form.get("displayName") ?? ""), email: String(form.get("email") ?? "") }),
       roleId: String(form.get("roleId") ?? ""),
-      ...(form.get("managerUserId") ? { managerUserId: String(form.get("managerUserId")) } : {})
+      ...(form.get("managerUserId") ? { managerUserId: String(form.get("managerUserId")), managerDecisionReference: String(form.get("managerDecisionReference") ?? "") } : {}),
+      scopeDecisionReference: String(form.get("scopeDecisionReference") ?? "")
     });
     revalidatePath("/app/boss", "layout");
     return { message: "Draft recorded. No login or employment access has been activated." };
@@ -53,5 +53,22 @@ export async function bossStaffInviteAction(_state: StaffDraftState, form: FormD
     if (error instanceof ZodError) return { error: "Check the evidence and Skill City email configuration." };
     safeDiagnostic("operation_failed");
     return { error: "Invitation could not be sent. The account remains inactive." };
+  }
+}
+
+export async function bossStaffReviewAction(_state: StaffDraftState, form: FormData): Promise<StaffDraftState> {
+  const session = await requireSession();
+  try {
+    await staffOnboardingService.reviewDraft(session.userId, {
+      userId: String(form.get("userId") ?? ""), scopeDecisionReference: String(form.get("scopeDecisionReference") ?? ""),
+      ...(form.get("managerUserId") ? { managerUserId: String(form.get("managerUserId")), managerDecisionReference: String(form.get("managerDecisionReference") ?? "") } : {})
+    });
+    revalidatePath("/app/boss", "layout");
+    return { message: "Decisions recorded. Account remains inactive until verified invitation and activation." };
+  } catch (error) {
+    if (error instanceof AccessError) return { error: error.message };
+    if (error instanceof ZodError) return { error: "Check the decision references and manager." };
+    safeDiagnostic("operation_failed");
+    return { error: "Could not review the draft. No access was granted." };
   }
 }

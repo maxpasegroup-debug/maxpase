@@ -31,7 +31,8 @@ export const migrationManifest = [
   ["20261013090000_nicejobs_secure_content", "f2048c4912e0068a1b082e118c8b762f726d0279dda9e51013ae0e439897e682"],
   ["20261014090000_labs_customer_grants", "b028f2ee9ded01d0be125eec340ff322403e594b66ec3029e44179b1de4f69aa"],
   ["20261015090000_nexa_directives", "9bf20876b4528ebea77e7887b1b2d22bef5183eaf0097f04d95732c6aed4bd99"],
-  ["20261020090000_nicejobs_phone_pin", "f390b19816bdca48b4887cdde34b1b6ee046f46bc7ee086a118206435338ab2d"]
+  ["20261020090000_nicejobs_phone_pin", "f390b19816bdca48b4887cdde34b1b6ee046f46bc7ee086a118206435338ab2d"],
+  ["20261024120000_staff_invite_challenge", "34a8356d4030ff82703b695b2e76cff1cc4cc04dc6c5ae3ead7ef2a33e02df0b"]
 ] as const;
 
 export async function verifyDatabaseReadiness(db: Prisma.TransactionClient) {

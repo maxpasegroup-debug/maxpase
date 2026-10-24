@@ -1,0 +1,13 @@
+# Phase 5: Skill City developer desk
+
+The existing Labs `Project`, `Task`, `Membership`, `Responsibility`, `TaskEvidence` and operational audit models are reused. No new developer identity or assignment table is introduced. Two developers require two separately verified user/person records and independently authorized Labs appointments. No real accounts are provisioned by this phase.
+
+An authorized director assigns an open Labs task to one developer. The service records a project membership scoped to that developer, preserves the assignee on progress updates, and writes the assignment and audit in one transaction. Existing `Project.ownerPersonId` remains a legacy owner, not the only project member. Each developer's desk shows only their own tasks and separately assigned independent duties, with a bounded contribution/review history. Reassigning a task does not erase earlier evidence or audit. Project membership alone does not grant a role or imply access to another division.
+
+Code review and testing are distinct `Responsibility` records. An authorized manager needs `responsibility.manage` in addition to task, people and membership permissions to appoint an independent reviewer. The director role template does not currently grant that permission; the control stays unavailable until an approved grant exists. A task assignee cannot review their own task. Review/testing outcomes are evidence, **not** project acceptance, completion, release, deployment or payroll approval. Those decisions retain their existing independent gates.
+
+Progress changes are limited to the assigned open task and non-terminal states. Contribution and review submissions have actor-bound idempotency references and audit records. Audit failure rolls back the mutation. Revoked project memberships block further review and hide work. Archived/completed projects cannot be modified from this desk.
+
+The older Labs staff task endpoint remains for existing records, but a non-manager project owner can now read or change only their own assigned tasks; it cannot overwrite another developer's assignment or complete a task. Authorized Labs delivery managers retain their existing broader task authority, with existing assignees preserved on edits.
+
+The director list is limited to accessible Labs projects and verified eligible developer accounts. This phase does not manage repository access, source-control tokens, deployment secrets, employment terms or live customer delivery. Before live assignments, the owner must verify each developer's identity, manager, project scope, reviewer authority and actual task ownership.

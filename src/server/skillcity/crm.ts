@@ -15,6 +15,7 @@ const identity = z.object({ name: z.string().trim().min(2).max(160), email: z.em
 const createInput = identity.extend({ product: productKey, ownerUserId: z.string().min(1), reference: z.string().min(8).max(120) }).strict();
 const updateInput = z.object({ id: z.string().min(1), version: z.number().int().min(0), reference: z.string().min(8).max(120), status: z.enum(["NEW", "CONTACTED", "QUALIFIED", "LOST"]), outcome: z.string().trim().min(1).max(3000), qualification: z.string().trim().max(3000), nextFollowUp: z.string().datetime().nullable() }).strict();
 const payload = identity.extend({ product: productKey, ownerUserId: z.string(), outcome: z.string(), qualification: z.string(), nextFollowUp: z.string().datetime().nullable(), lastContact: z.string().datetime().nullable() });
+export const crmLeadPayload = payload;
 const transitions: Record<string, string[]> = { NEW: ["NEW", "CONTACTED", "LOST"], CONTACTED: ["CONTACTED", "QUALIFIED", "LOST"], QUALIFIED: ["QUALIFIED", "LOST"], LOST: [] };
 const digest = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
 
@@ -45,8 +46,19 @@ export function createAdvisorCrm(client: PrismaClient = prisma, now = () => new 
     if (!manager) await advisor(client, userId, division.id);
     const personId = ctx.user!.personId;
     const productRecord = await client.product.findUnique({ where: { organizationId_slug: { organizationId: companyId, slug: product.slug } }, select: { id: true, status: true, lifecycle: true, divisionId: true } });
-    const rows = await client.executiveRecord.findMany({ where: { organizationId: division.id, kind: "AIRA_CRM_LEAD", status: { not: "LOST" }, ...(!manager ? { ownerPersonId: personId! } : {}) }, select: { id: true, title: true, status: true, version: true, dueAt: true, payload: true }, orderBy: [{ dueAt: "asc" }, { id: "asc" }], take: 50 });
-    return { divisionId: division.id, product: productRecord?.divisionId === division.id ? productRecord : null, canCreate: manager, canUpdate: (await ctx.decide("aira.crm.perform", { organizationId: division.id })).allowed, rows: rows.map(row => { const parsed = payload.parse(JSON.parse(row.payload)); return { id: row.id, title: row.title, status: row.status, version: row.version, dueAt: row.dueAt, ownerUserId: parsed.ownerUserId, outcome: parsed.outcome, qualification: parsed.qualification, nextFollowUp: parsed.nextFollowUp }; }) };
+    const base = { organizationId: division.id, kind: "AIRA_CRM_LEAD", status: { not: "LOST" }, ...(!manager ? { ownerPersonId: personId! } : {}) };
+    const select = { id: true, title: true, status: true, version: true, dueAt: true, payload: true } as const;
+    const dated = await client.executiveRecord.findMany({ where: { ...base, dueAt: { not: null } }, select, orderBy: [{ dueAt: "asc" }, { id: "asc" }], take: 50 });
+    const undated = dated.length < 50 ? await client.executiveRecord.findMany({ where: { ...base, dueAt: null }, select, orderBy: [{ createdAt: "desc" }, { id: "asc" }], take: 50 - dated.length }) : [];
+    const rows = [...dated, ...undated];
+    const visible = rows.flatMap(row => {
+      try {
+        const parsed = payload.safeParse(JSON.parse(row.payload));
+        if (!parsed.success || parsed.data.product !== product.slug) return [];
+        return [{ id: row.id, title: row.title, status: row.status, version: row.version, dueAt: row.dueAt, ownerUserId: parsed.data.ownerUserId, outcome: parsed.data.outcome, qualification: parsed.data.qualification, nextFollowUp: parsed.data.nextFollowUp }];
+      } catch { return []; }
+    });
+    return { divisionId: division.id, product: productRecord?.divisionId === division.id ? productRecord : null, canCreate: manager, canUpdate: (await ctx.decide("aira.crm.perform", { organizationId: division.id })).allowed, rows: visible, unavailableRecords: rows.length - visible.length };
   }
   async function eligibleOwners(userId: string, productSlug: string) {
     const product = advisorProducts.find(item => item.slug === productSlug);

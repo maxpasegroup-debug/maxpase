@@ -24,7 +24,7 @@ export function createStaffInvite(client: PrismaClient = prisma, env: Record<str
     await ctx.requireAccess("user.read", { organizationId });
     await ctx.requireAccess("membership.read", { organizationId });
     const rows = await client.user.findMany({ where: { status: "INACTIVE", person: { memberships: { some: { organizationId, status: "INVITED" } } } }, select: { id: true, email: true, person: { select: { metadata: true, memberships: { where: { organizationId, status: "INVITED" }, select: { title: true } } } } }, orderBy: { createdAt: "desc" }, take: 50 });
-    return rows.filter(row => { try { return JSON.parse(row.person?.metadata ?? "{}").authenticationRealm === "skillcity"; } catch { return false; } }).map(row => ({ id: row.id, email: row.email, role: row.person?.memberships[0]?.title ?? "Not assigned" }));
+    return rows.filter(row => { try { return JSON.parse(row.person?.metadata ?? "{}").authenticationRealm === "skillcity"; } catch { return false; } }).map(row => { const metadata = JSON.parse(row.person?.metadata ?? "{}"); return { id: row.id, email: row.email, role: row.person?.memberships[0]?.title ?? "Not assigned", reviewable: metadata.staffOnboarding === "DRAFT", decisionsRecorded: typeof metadata.scopeDecisionReference === "string" && metadata.scopeDecisionReference.length >= 8 && (["Director", "Division Director"].includes(row.person?.memberships[0]?.title ?? "") || typeof metadata.managerDecisionReference === "string" && typeof metadata.managerUserId === "string") }; });
   }
   async function send(actorUserId: string, raw: unknown) {
     const data = sendInput.parse(raw), config = settings.parse(env);
@@ -34,7 +34,7 @@ export function createStaffInvite(client: PrismaClient = prisma, env: Record<str
       const user = await db.user.findUnique({ where: { id: data.userId }, include: { person: true } });
       if (!user?.person || user.status !== "INACTIVE" || user.passwordHash || user.emailVerifiedAt) throw new AccessError("Staff draft unavailable");
       const metadata = JSON.parse(user.person.metadata ?? "{}");
-      if (metadata.authenticationRealm !== "skillcity" || !["DRAFT", "INVITED"].includes(metadata.staffOnboarding) || user.person.email?.toLowerCase() !== user.email.toLowerCase()) throw new AccessError("Staff identity requires review");
+      if (metadata.authenticationRealm !== "skillcity" || !["DRAFT", "INVITED"].includes(metadata.staffOnboarding) || user.person.email?.toLowerCase() !== user.email.toLowerCase() || typeof metadata.scopeDecisionReference !== "string" || metadata.scopeDecisionReference.length < 8) throw new AccessError("Staff identity and scope require review");
       const memberships = await db.membership.findMany({ where: { personId: user.personId! }, include: { roles: { include: { role: { include: { permissions: { include: { permission: true } } } } } } } });
       const eligible = memberships.filter(item => item.status === "INVITED" && item.projectId === null && item.roles.some(assignment => assignment.role.status === "ACTIVE" && assignment.role.principalType === "HUMAN"));
       if (eligible.length !== 1 || eligible[0].roles.length !== 1) throw new AccessError("Invited role unavailable");
@@ -50,8 +50,13 @@ export function createStaffInvite(client: PrismaClient = prisma, env: Record<str
         await createBossService(client).authority(actorUserId, db);
         if (membership.scope !== (role.name === "Director" ? "DESCENDANTS" : "ORGANIZATION") || !role.permissions.some(item => item.permission.key === "decision.decide")) throw new AccessError("Director authority is not prepared");
       } else {
-        const manager = await db.reportingRelationship.findFirst({ where: { personId: user.personId!, organizationId: membership.organizationId, status: "ACTIVE", manager: { users: { some: { status: "ACTIVE", emailVerifiedAt: { not: null } } } } } });
-        if (!manager) throw new AccessError("Verified manager assignment required before invitation");
+        const manager = await db.reportingRelationship.findFirst({
+          where: {
+            personId: user.personId!, organizationId: membership.organizationId, status: "INACTIVE",
+            manager: { users: { some: { id: metadata.managerUserId, status: "ACTIVE", emailVerifiedAt: { not: null } } } }
+          }
+        });
+        if (!manager || typeof metadata.managerDecisionReference !== "string" || metadata.managerDecisionReference.length < 8) throw new AccessError("Verified manager decision required before invitation");
       }
       if (await db.emailAuthChallenge.findFirst({ where: { userId: user.id, purpose: "STAFF_INVITE", createdAt: { gt: new Date(now().getTime() - 60000) } } })) throw new AccessError("Wait before requesting another invitation");
       await db.emailAuthChallenge.updateMany({ where: { userId: user.id, purpose: "STAFF_INVITE", status: { in: ["PENDING", "SENT"] } }, data: { status: "CANCELLED" } });
@@ -92,7 +97,7 @@ export function createStaffInvite(client: PrismaClient = prisma, env: Record<str
       const user = await db.user.findUnique({ where: { id: challenge.userId }, include: { person: true } });
       if (!user?.person || user.person.status !== "ACTIVE" || user.email !== challenge.email || user.status !== "INACTIVE" || user.passwordHash || user.emailVerifiedAt) throw new AccessError("Invitation unavailable");
       const metadata = JSON.parse(user.person.metadata ?? "{}");
-      if (metadata.authenticationRealm !== "skillcity" || metadata.staffOnboarding !== "INVITED" || metadata.identityVerification !== "MANAGER_ATTESTED") throw new AccessError("Invitation unavailable");
+      if (metadata.authenticationRealm !== "skillcity" || metadata.staffOnboarding !== "INVITED" || metadata.identityVerification !== "MANAGER_ATTESTED" || typeof metadata.scopeDecisionReference !== "string" || metadata.scopeDecisionReference.length < 8) throw new AccessError("Invitation unavailable");
       const memberships = await db.membership.findMany({ where: { personId: user.personId! }, include: { roles: { include: { role: { include: { permissions: { include: { permission: true } } } } } } } });
       const eligible = memberships.filter(item => item.status === "INVITED" && item.projectId === null && item.roles.some(assignment => assignment.role.status === "ACTIVE" && assignment.role.principalType === "HUMAN" && assignment.role.organizationId === item.organizationId && assignment.role.permissions.some(p => p.permission.key === "organization.read")));
       if (eligible.length !== 1 || eligible[0].roles.length !== 1) throw new AccessError("Role appointment unavailable");
@@ -101,10 +106,17 @@ export function createStaffInvite(client: PrismaClient = prisma, env: Record<str
       const memberScope = await db.organization.findUnique({ where: { id: membership.organizationId }, select: { parentId: true, slug: true } });
       if (!company || !(membership.organizationId === company.id || memberScope?.parentId === company.id)) throw new AccessError("Staff scope unavailable");
       if (!memberScope || !isPreparedStaffRole(membership.roles[0].role.key, memberScope.slug) || !hasStaffWorkspaceCapabilities(membership.roles[0].role.key, membership.roles[0].role.permissions.map(item => item.permission.key))) throw new AccessError("Role appointment unavailable");
-      if (!["Director", "Division Director"].includes(membership.roles[0]?.role.name ?? "") && !(await db.reportingRelationship.findFirst({ where: { personId: user.personId!, organizationId: membership.organizationId, status: "ACTIVE", manager: { users: { some: { status: "ACTIVE", emailVerifiedAt: { not: null } } } } } }))) throw new AccessError("Manager appointment unavailable");
+      const pendingManager = !["Director", "Division Director"].includes(membership.roles[0]?.role.name ?? "") ? await db.reportingRelationship.findFirst({
+        where: {
+          personId: user.personId!, organizationId: membership.organizationId, status: "INACTIVE",
+          manager: { users: { some: { id: metadata.managerUserId, status: "ACTIVE", emailVerifiedAt: { not: null } } } }
+        }
+      }) : null;
+      if (!["Director", "Division Director"].includes(membership.roles[0]?.role.name ?? "") && (!pendingManager || typeof metadata.managerDecisionReference !== "string" || metadata.managerDecisionReference.length < 8)) throw new AccessError("Manager appointment unavailable");
       if ((await db.emailAuthChallenge.updateMany({ where: { id: challenge.id, status: "SENT", attempts: { lte: 5 } }, data: { status: "CONSUMED", consumedAt: now() } })).count !== 1) throw new AccessError("Invitation already used");
       await db.user.update({ where: { id: user.id }, data: { status: "ACTIVE", passwordHash: hash, emailVerifiedAt: now() } });
       await db.membership.update({ where: { id: membership.id }, data: { status: "ACTIVE" } });
+      if (pendingManager) await db.reportingRelationship.update({ where: { id: pendingManager.id }, data: { status: "ACTIVE" } });
       await db.person.update({ where: { id: user.personId! }, data: { metadata: JSON.stringify({ ...metadata, staffOnboarding: "ACTIVE" }) } });
       await requirePortalAccess(db, user.id, "skillcity");
       await operationalEvent(db, { actorUserId: user.id, actorPersonId: user.personId, organizationId: membership.organizationId, action: "staff.account_activated", entityType: "User", entityId: user.id, result: "SUCCESS", metadata: { challengeId: challenge.id, roleId: membership.roles[0]?.roleId } });

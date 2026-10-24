@@ -68,6 +68,29 @@ describe("MAXPASE group and Boss controls", () => {
     expect(data.system).toMatchObject({ database: "UNAVAILABLE", application: "REQUEST SERVED", backup: "NOT VERIFIED", monitoring: "NOT VERIFIED", production: "NOT VERIFIED" });
     expect(data.sia).toMatchObject({ status: "NOT CONFIGURED", canAsk: false, capabilities: [], autonomousExecution: false });
   });
+  it("reconciles company oversight to underlying records, not a bounded preview", async () => {
+    const owner = await db.person.create({ data: { displayName: "Oversight test owner" } });
+    const target = await db.task.create({ data: { organizationId: airaId, title: "Scoped overdue task", assigneePersonId: owner.id, dueDate: new Date("2020-01-01T00:00:00Z") } });
+    const foreign = await db.task.create({ data: { organizationId: pearnId, title: "Other company task", assigneePersonId: owner.id, dueDate: new Date("2020-01-01T00:00:00Z") } });
+    const blocker = await db.executionBlocker.create({ data: { organizationId: airaId, taskId: target.id, description: "Scoped blocker" } });
+    const decision = await db.executiveRecord.create({ data: { organizationId: airaId, ownerPersonId: owner.id, kind: "DECISION", title: "Scoped decision", status: "PENDING", payload: "{}", sourceKey: "oversight-test-decision" } });
+    try {
+      const company = await boss.dashboard(userId, airaId);
+      const other = await boss.dashboard(userId, pearnId);
+      expect(company.oversight.openTasks).toBeGreaterThanOrEqual(1);
+      expect(company.oversight.overdueTasks).toBeGreaterThanOrEqual(1);
+      expect(company.oversight.openBlockers).toBeGreaterThanOrEqual(1);
+      expect(company.oversight.pendingRecordedDecisions).toBeGreaterThanOrEqual(1);
+      expect(company.oversight.openTasks).toBe(await db.task.count({ where: { organizationId: airaId, status: { notIn: ["COMPLETED", "CANCELLED"] } } }));
+      expect(other.oversight.openTasks).toBe(await db.task.count({ where: { organizationId: pearnId, status: { notIn: ["COMPLETED", "CANCELLED"] } } }));
+      expect(other.oversight.pendingRecordedDecisions).toBe(0);
+    } finally {
+      await db.executionBlocker.delete({ where: { id: blocker.id } });
+      await db.executiveRecord.delete({ where: { id: decision.id } });
+      await db.task.deleteMany({ where: { id: { in: [target.id, foreign.id] } } });
+      await db.person.delete({ where: { id: owner.id } });
+    }
+  });
   it("filters authorized work by status and UTC update dates without suppressing company health evidence", async () => {
     const active = await db.project.create({ data: { organizationId: airaId, name: "Reliability active", slug: "reliability-active", status: "ACTIVE", updatedAt: new Date("2026-10-06T23:59:59.000Z") } });
     const blocked = await db.project.create({ data: { organizationId: airaId, name: "Reliability blocked", slug: "reliability-blocked", status: "BLOCKED", updatedAt: new Date("2026-10-05T12:00:00Z") } });

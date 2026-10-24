@@ -12,6 +12,7 @@ import { createJobsEmailAuth } from "@/server/auth/jobs-email-auth";
 import { jobsPhoneInput } from "@/server/auth/jobs-phone";
 import { hashJobsPin, verifyJobsPin } from "@/server/auth/jobs-pin";
 import { createJobsPinActivation } from "@/server/auth/jobs-pin-activation";
+import { claimJobsOtp } from "@/server/auth/jobs-otp-proof";
 import { hashPassword } from "@/server/auth/password";
 import type { OtpDelivery } from "@/server/auth/resend-otp";
 
@@ -59,6 +60,25 @@ describe("Nice Jobs phone and PIN candidate authentication", () => {
     await expect(service.completeRegistration({ ...proof, code: messages.at(-1)!.code }, secret)).rejects.toThrow();
     expect(await auth.loginJobsPin({ country: "IN", nationalNumber: raw.nationalNumber, pin: "654321" }, secret)).toBeNull();
     expect(await auth.loginJobsPin({ country: "IN", nationalNumber: raw.nationalNumber, pin: raw.pin }, secret)).not.toBeNull();
+  });
+  it("rejects malformed, expired and revoked Jobs sessions", async () => {
+    const proof = await service.beginRegistration(userId);
+    const session = await service.completeRegistration({ ...proof, code: messages.at(-1)!.code }, secret);
+    expect(await auth.validate("not-a-session", secret, "jobs")).toBeNull();
+    expect(await auth.validate(session.token, secret, "jobs")).toMatchObject({ userId });
+    await auth.revoke(session.token, secret, "jobs");
+    expect(await auth.validate(session.token, secret, "jobs")).toBeNull();
+    now = new Date(now.getTime() + 61000);
+    const next = await auth.loginJobsPin({ country: "IN", nationalNumber: raw.nationalNumber, pin: raw.pin }, secret);
+    expect(next).not.toBeNull();
+    now = new Date(now.getTime() + 8 * 3600000 + 1000);
+    expect(await auth.validate(next!.token, secret, "jobs")).toBeNull();
+  });
+  it("does not accept a registration code for another account identity", async () => {
+    const proof = await service.beginRegistration(userId);
+    const user = await db.user.findUniqueOrThrow({ where: { id: userId } });
+    await expect(db.$transaction(tx => claimJobsOtp(tx, { ...proof, code: messages.at(-1)!.code, pepper: secret }, { ...user, id: "another-user" }, "REGISTER", now))).rejects.toThrow("Invalid or expired code");
+    expect((await db.emailAuthChallenge.findUniqueOrThrow({ where: { id: proof.challengeId } })).status).toBe("SENT");
   });
   it("recovers by registered email only and atomically revokes old sessions", async () => {
     const proof = await service.beginRegistration(userId);
@@ -158,6 +178,21 @@ describe("Nice Jobs phone and PIN candidate authentication", () => {
     const results = await Promise.allSettled([service.completePinReset(input), service.completePinReset(input)]);
     expect(results.filter(result => result.status === "fulfilled")).toHaveLength(1);
     expect(await db.auditEvent.count({ where: { actorUserId: userId, action: "auth.pin_reset" } })).toBeGreaterThan(0);
+  });
+  it("reports a committed PIN reset as successful when notice and its audit fail", async () => {
+    const registration = await service.beginRegistration(userId);
+    const session = await service.completeRegistration({ ...registration, code: messages.at(-1)!.code }, secret);
+    now = new Date(now.getTime() + 61000);
+    const reset = await service.beginPinReset({ country: "IN", nationalNumber: raw.nationalNumber });
+    const code = messages.at(-1)!.code;
+    const failing = createJobsEmailAuth(db, { now: () => now, env, send: async () => "mock-receipt", notifyPinChange: async () => { throw new Error("mock notice failure"); } });
+    const sql = new DatabaseSync(file);
+    sql.exec("CREATE TRIGGER PinNoticeAuditFailure BEFORE INSERT ON AuditEvent WHEN NEW.action = 'auth.pin_reset_notice_failed' BEGIN SELECT RAISE(ABORT, 'audit unavailable'); END;");
+    try {
+      await expect(failing.completePinReset({ ...reset, code, pin: "654321", confirmPin: "654321" })).resolves.toBeUndefined();
+      expect(await auth.validate(session.token, secret, "jobs")).toBeNull();
+      expect(await verifyJobsPin("654321", (await db.user.findUniqueOrThrow({ where: { id: userId } })).jobsPinHash!)).toBe(true);
+    } finally { sql.exec("DROP TRIGGER PinNoticeAuditFailure"); sql.close(); }
   });
   it("transitions a legacy candidate without changing identity and retires old credentials and sessions", async () => {
     const oldPassword = "legacy-test-password-123";

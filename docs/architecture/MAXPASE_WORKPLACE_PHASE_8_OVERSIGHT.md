@@ -1,0 +1,9 @@
+# Phase 8: Scoped oversight and reporting
+
+The Skill City manager desk summarizes active direct reports from current reporting relationships and active scope-appropriate memberships. Open and overdue task counts query all matching assignments, not the first ten tasks shown per person. Open task blockers and due CRM follow-ups use the same organization/person scope and their own read permissions. Pending approvals are counted only for the signed-in manager, submitted and unexpired requests, and applicable approval and required-action permissions, including project scope. No reporting count grants mutation authority.
+
+The on-screen manager work list is limited to 50 relationships. The summary can cover up to 500 relationships; above that limit team totals are unavailable, never presented as complete. A missing source permission also yields an unavailable metric, not zero. These limits are displayed beside the counts. The direct-report number deduplicates people across scopes; task and blocker counts remain per scoped record.
+
+The Boss oversight section counts open/overdue tasks, open blockers and pending/deferred executive decision records in the selected authorized group or company scope. It does not count approval requests as executive decision records; those remain in the separately authorized approvals view. The pre-existing attention queues and drill-down lists are bounded previews, not reconciled totals, and are labeled accordingly. Missing permission is not reported as a measured zero. All figures are calculated from current persisted records at request time; no synthetic work, blocker, owner or outcome is created.
+
+This phase does not establish complete group health or source freshness for a company whose records or permissions are missing. It does not change the existing human approval boundary, deployment state, payroll, CRM ownership or MY SOLAR mapping. Production data was not read or modified during local validation.
