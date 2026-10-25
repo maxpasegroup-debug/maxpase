@@ -38,6 +38,12 @@ describe("Manager navigation and presentation", () => {
     expect(nexa.searchParams.get("view")).toBe("nexa");
     expect(nexa.searchParams.get("companyId")).toBe("company");
     expect(workspacePageLabel("/app/boss", "nexa")).toBe("NEXA Command");
+    for (const view of ["finance", "growth", "ai-office", "search"]) {
+      const destination = new URL(navigationBossHref(view, query), "https://test.invalid");
+      expect(destination.searchParams.get("view")).toBe(view);
+      expect(destination.searchParams.get("companyId")).toBe("company");
+      expect(destination.searchParams.get("status")).toBe("ACTIVE");
+    }
     expect(workspaceHref("/app/operations/requests", "company", "settings")).toContain("returnView=settings");
   });
   it("formats the same instant in the selected timezone, including DST and day boundaries", () => {

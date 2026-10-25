@@ -12,7 +12,7 @@ export default function BossLogin() {
       <p className="group-kicker">MAXPASE OS / SECURE ACCESS</p><h1 id="login-title">Welcome back.</h1>
       <p className="login-subtitle">Sign in to your command center.</p>
       <form action={action} className="form-stack" aria-busy={pending}>
-        <label>Email<input name="email" type="email" autoComplete="username" placeholder="boss@maxpase.com" required maxLength={254} /></label>
+        <label>Email<input name="email" type="email" autoComplete="username" required maxLength={254} /></label>
         <label>6-digit PIN<input className="pin-input" name="pin" type="password" inputMode="numeric" autoComplete="current-password" pattern="[0-9]{6}" minLength={6} maxLength={6} required /></label>
         {state.error && <p role="alert" className="error">{state.error}</p>}
         <button className="group-cta login-submit" disabled={pending}>{pending ? "Signing in..." : "Sign in"}<ArrowRight size={18} /></button>

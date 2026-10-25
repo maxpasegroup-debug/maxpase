@@ -28,6 +28,8 @@ const returnKey = (key: string) => "boss" + key[0].toUpperCase() + key.slice(1);
 const filterValue = (query: URLSearchParams, key: string) => query.get(query.has("returnView") ? returnKey(key) : key);
 export const workspaceReturnKeys = ["returnView", "bossCompanyId", ...filterKeys.map(returnKey)];
 export function isBossView(value: string): value is BossView { return Object.hasOwn(bossViews, value); }
+const supplementaryBossViews = ["finance", "growth", "ai-office", "search"] as const;
+export function isBossDestination(value: string) { return isBossView(value) || isPrimaryBossView(value) || supplementaryBossViews.some(view => view === value); }
 export function groupForView(view: string) { return workspaceGroups.find(g => g.views.some(v => v === view)) ?? workspaceGroups[0]; }
 export function groupForPath(path: string, view?: string) {
   if (path === "/app/boss") return groupForView(view ?? "overview");
@@ -38,7 +40,7 @@ export function groupForPath(path: string, view?: string) {
     ?? (path.startsWith("/app/executive") ? workspaceGroups[0] : workspaceGroups[2]);
 }
 export function workspacePageLabel(path: string, view?: string) {
-  if (path === "/app/boss") return isPrimaryBossView(view ?? "") ? primaryBossViews[view as PrimaryBossView] : bossViews[isBossView(view ?? "") ? view as BossView : "overview"];
+  if (path === "/app/boss") return ({ finance: "Finance", growth: "Growth", "ai-office": "AI Office", search: "Search" } as Record<string, string>)[view ?? ""] ?? (isPrimaryBossView(view ?? "") ? primaryBossViews[view as PrimaryBossView] : bossViews[isBossView(view ?? "") ? view as BossView : "overview"]);
   if (path === "/app/executive") return "Executive Command Center";
   const detail = path.split("/")[3];
   if (path.startsWith("/app/executive/") && isBossView(detail)) return bossViews[detail];
@@ -46,7 +48,7 @@ export function workspacePageLabel(path: string, view?: string) {
   return workspaceGroups.flatMap(g => g.modules).find(m => m.href === path)?.label ?? groupForPath(path).label;
 }
 export function navigationBossHref(view: string, query: URLSearchParams, companyId?: string) {
-  const params = new URLSearchParams({ view: isBossView(view) || isPrimaryBossView(view) ? view : "overview" });
+  const params = new URLSearchParams({ view: isBossDestination(view) ? view : "overview" });
   const company = companyId ?? (query.has("returnView") ? query.get("bossCompanyId") : query.get("companyId") ?? query.get("organizationId"));
   if (company) params.set("companyId", company);
   for (const key of filterKeys) { const value = filterValue(query, key); if (value) params.set(key, value); }
@@ -60,7 +62,7 @@ export function workspaceHref(href: string, companyId?: string, view?: string, q
     params.set("companyId", companyId);
     if (href.startsWith("/app/workforce/")) params.set("organization", companyId);
   }
-  if (view && (isBossView(view) || isPrimaryBossView(view))) {
+  if (view && isBossDestination(view)) {
     params.set("returnView", view);
     const originCompany = query?.has("returnView") ? query.get("bossCompanyId") : companyId;
     if (originCompany) params.set("bossCompanyId", originCompany);
