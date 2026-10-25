@@ -5,7 +5,7 @@ export function failureReason(error: unknown, stage: FailureStage, env: NodeJS.P
   if (stage === "origin") return "origin_or_host_rejected";
   if (env.NODE_ENV === "production") {
     if (!env.AUTH_SECRET || env.AUTH_SECRET.length < 32 || /dev-only|replace-with|changeme/i.test(env.AUTH_SECRET)) return "auth_secret_invalid";
-    if (!/^file:(?:\/|[A-Za-z]:[\\/])/.test(env.DATABASE_URL ?? "")) return "persistent_sqlite_url_required";
+    if (!/^(?:postgresql|postgres):\/\//.test(env.DATABASE_URL ?? "")) return "postgresql_url_required";
     if (env.AUTH_COOKIE_SECURE === "false") return "secure_cookie_required";
     try { const url = new URL(env.APP_ORIGIN ?? ""); if (url.protocol !== "https:" || url.origin !== env.APP_ORIGIN) return "https_app_origin_required"; }
     catch { return "https_app_origin_required"; }

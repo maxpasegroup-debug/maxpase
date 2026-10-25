@@ -5,7 +5,7 @@ import { AccessError, createAccessContext } from "@/server/authorization/engine"
 import { setHumanMembershipRole } from "@/server/authorization/assignments";
 import { operationalEvent } from "@/server/domain/operational-events";
 import { createBossService } from "@/server/group/boss-service";
-import { hasStaffWorkspaceCapabilities, isPreparedStaffRole, staffRoleScopes } from "./staff-roles";
+import { hasStaffWorkspaceCapabilities, isPreparedStaffRole, staffPortalForRole, staffRoleScopes } from "./staff-roles";
 
 const draftInput = z.object({
   organizationId: z.string().min(1).max(200),
@@ -66,10 +66,10 @@ export function createStaffOnboardingService(client: PrismaClient = prisma) {
         try { metadata = JSON.parse(existing?.metadata ?? "{}"); } catch { throw new AccessError("Existing person requires identity review"); }
         if (!existing || existing.status !== "ACTIVE" || !existing.email || existing.users.length || metadata.authenticationRealm || !existing.memberships.some(member => member.organizationId === company.id || member.organization.parentId === company.id) || existing.memberships.some(member => member.organizationId === scope.id || member.organizationId !== company.id && member.organization.parentId !== company.id || member.roles.length > 0)) throw new AccessError("Existing person requires identity review; no duplicate will be created");
         if (await db.user.findUnique({ where: { email: existing.email } })) throw new AccessError("Existing account requires a separate access review");
-        person = await db.person.update({ where: { id: existing.id }, data: { metadata: JSON.stringify({ ...metadata, authenticationRealm: "skillcity", staffOnboarding: "DRAFT", identityVerification: "PENDING", scopeDecisionReference: input.scopeDecisionReference, managerDecisionReference: input.managerDecisionReference ?? null, managerUserId: input.managerUserId ?? null }) } });
+        person = await db.person.update({ where: { id: existing.id }, data: { metadata: JSON.stringify({ ...metadata, authenticationRealm: staffPortalForRole(role.key), credentialKind: "STAFF_PASSWORD", staffOnboarding: "DRAFT", identityVerification: "PENDING", scopeDecisionReference: input.scopeDecisionReference, managerDecisionReference: input.managerDecisionReference ?? null, managerUserId: input.managerUserId ?? null }) } });
       } else {
         if (await db.user.findUnique({ where: { email: input.email! } }) || await db.person.findUnique({ where: { email: input.email! } })) throw new AccessError("Existing identity requires review; no duplicate will be created");
-        person = await db.person.create({ data: { displayName: input.displayName!, email: input.email!, metadata: JSON.stringify({ authenticationRealm: "skillcity", staffOnboarding: "DRAFT", identityVerification: "PENDING", scopeDecisionReference: input.scopeDecisionReference, managerDecisionReference: input.managerDecisionReference ?? null, managerUserId: input.managerUserId ?? null }) } });
+        person = await db.person.create({ data: { displayName: input.displayName!, email: input.email!, metadata: JSON.stringify({ authenticationRealm: staffPortalForRole(role.key), credentialKind: "STAFF_PASSWORD", staffOnboarding: "DRAFT", identityVerification: "PENDING", scopeDecisionReference: input.scopeDecisionReference, managerDecisionReference: input.managerDecisionReference ?? null, managerUserId: input.managerUserId ?? null }) } });
       }
       const user = await db.user.create({ data: { email: person.email!, personId: person.id, status: "INACTIVE" } });
       const membership = await db.membership.create({ data: { personId: person.id, organizationId: scope.id, scope: descendantScope ? "DESCENDANTS" : "ORGANIZATION", status: "INVITED", title: role.name } });
@@ -91,12 +91,12 @@ export function createStaffOnboardingService(client: PrismaClient = prisma) {
       if (!user?.person || user.status !== "INACTIVE" || user.passwordHash || user.emailVerifiedAt) throw new AccessError("Inactive staff draft required");
       let metadata: Record<string, unknown>;
       try { metadata = JSON.parse(user.person.metadata ?? "{}"); } catch { throw new AccessError("Staff identity requires review"); }
-      if (metadata.authenticationRealm !== "skillcity" || metadata.staffOnboarding !== "DRAFT" || user.person.email !== user.email) throw new AccessError("Staff draft unavailable");
+      if ((metadata.authenticationRealm !== "skillcity" && metadata.authenticationRealm !== "labs") || metadata.staffOnboarding !== "DRAFT" || user.person.email !== user.email) throw new AccessError("Staff draft unavailable");
       const invited = user.person.memberships.filter(item => item.status === "INVITED" && item.projectId === null);
       if (invited.length !== 1 || invited[0].roles.length !== 1) throw new AccessError("Staff scope requires review");
       const membership = invited[0], role = membership.roles[0].role;
       const scope = await db.organization.findUnique({ where: { id: membership.organizationId }, select: { slug: true, parent: { select: { slug: true } } } });
-      if (!scope || !(scope.slug === "aira-skill-city" || scope.parent?.slug === "aira-skill-city") || !isPreparedStaffRole(role.key, scope.slug) || role.organizationId !== membership.organizationId || role.status !== "ACTIVE") throw new AccessError("Staff role requires review");
+      if (!scope || !(scope.slug === "aira-skill-city" || scope.parent?.slug === "aira-skill-city") || !isPreparedStaffRole(role.key, scope.slug) || metadata.authenticationRealm !== staffPortalForRole(role.key) || role.organizationId !== membership.organizationId || role.status !== "ACTIVE") throw new AccessError("Staff role requires review");
       const ctx = await createAccessContext(actorUserId, db, undefined, { organizationId: membership.organizationId });
       for (const key of ["person.update", "user.update", "membership.manage", "reporting.manage"]) await ctx.requireAccess(key, { organizationId: membership.organizationId });
       if (!["Director", "Division Director"].includes(role.name) && !input.managerUserId) throw new AccessError("Manager decision required");

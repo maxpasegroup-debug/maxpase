@@ -1,23 +1,17 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { DatabaseSync } from "node:sqlite";
-import { mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { randomUUID } from "node:crypto";
-import { PrismaClient } from "@prisma/client";
+import { createPostgresFixture } from "./helpers/postgres-fixture";
 import { initializeGroupStructure } from "@/server/group/structure";
 import { createSkillCityManagerDesk } from "@/server/skillcity/manager-desk";
 import { createSkillCityEmployeeDashboard } from "@/server/skillcity/employee-dashboard";
 
-const directory = mkdtempSync(join(tmpdir(), "skillcity-manager-")), file = join(directory, "test.db");
-const db = new PrismaClient({ datasourceUrl: "file:" + file.replaceAll("\\", "/") });
+const postgres = createPostgresFixture();
+const db = postgres.db;
 const desk = createSkillCityManagerDesk(db, () => new Date("2026-10-24T06:00:00Z"));
 let managerId: string, staffId: string, labsId: string, foreignId: string, managerRoleId: string;
 
 beforeAll(async () => {
-  const sql = new DatabaseSync(file);
-  for (const folder of readdirSync("prisma/migrations").filter(name => /^\d/.test(name)).sort()) sql.exec(readFileSync(join("prisma/migrations", folder, "migration.sql"), "utf8"));
-  sql.close();
+  await postgres.initialize();
   await db.$transaction(initializeGroupStructure);
   const companyId = (await db.organization.findUniqueOrThrow({ where: { slug: "aira-skill-city" } })).id;
   labsId = (await db.organization.findUniqueOrThrow({ where: { slug: "aira-labs" } })).id;
@@ -36,8 +30,8 @@ beforeAll(async () => {
   await db.reportingRelationship.create({ data: { organizationId: labsId, personId: staff.id, managerPersonId: manager.id } });
   await db.task.create({ data: { organizationId: labsId, assigneePersonId: staff.id, title: "Real assigned work" } });
   await db.task.create({ data: { organizationId: foreignId, assigneePersonId: staff.id, title: "Other company work" } });
-}, 30000);
-afterAll(async () => { await db.$disconnect(); rmSync(directory, { recursive: true, force: true }); });
+}, 120000);
+afterAll(() => postgres.dispose(), 30000);
 
 describe("Skill City manager desk", () => {
   it("shows only direct, authorized work and requires responsibility authority for focus", async () => {

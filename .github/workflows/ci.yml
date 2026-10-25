@@ -9,8 +9,24 @@ jobs:
   validation:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: maxpase_test
+          POSTGRES_PASSWORD: ${{ secrets.MAXPASE_CI_POSTGRES_PASSWORD }}
+          POSTGRES_DB: maxpase_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U maxpase_test -d maxpase_ci"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     env:
-      DATABASE_URL: file:./ci.db
+      DATABASE_URL: postgresql://maxpase_test:${{ secrets.MAXPASE_CI_POSTGRES_PASSWORD }}@127.0.0.1:5432/maxpase_ci?schema=public
+      TEST_DATABASE_URL: postgresql://maxpase_test:${{ secrets.MAXPASE_CI_POSTGRES_PASSWORD }}@127.0.0.1:5432/maxpase_ci?schema=public
+      MAXPASE_CI_DATABASE_CONFIRMED: "true"
       NEXT_TELEMETRY_DISABLED: "1"
     steps:
       - uses: actions/checkout@v4
@@ -19,6 +35,8 @@ jobs:
           node-version: "22"
           cache: npm
       - run: npm ci --ignore-scripts --no-audit
+      - name: Install PostgreSQL client for isolated restore tests
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client-16
       - run: npm run prisma:generate
       - run: npm run prisma:validate
       - run: npm run validate:migrations

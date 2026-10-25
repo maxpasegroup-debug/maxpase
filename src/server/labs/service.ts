@@ -204,7 +204,7 @@ export function createLabsService(client: PrismaClient = prisma, now = () => new
       const p = leadPayload.parse(JSON.parse(row.payload));
       await change(db, userId, row, data.version, row.status, { ...p, ownerUserId: data.ownerUserId, nextFollowUp: null }, "Lead reassigned; next follow-up needs review");
       await db.executiveRecord.update({ where: { id: row.id }, data: { ownerPersonId: next.ctx.user!.personId! } });
-      const quotes=await db.$queryRaw<{id:string}[]>`SELECT id FROM ExecutiveRecord WHERE kind = 'LABS_QUOTE' AND organizationId = ${row.organizationId} AND json_extract(payload, '$.input.leadId') = ${row.id} LIMIT 1001`;
+      const quotes=await db.$queryRaw<{id:string}[]>`SELECT "id" FROM "ExecutiveRecord" WHERE "kind" = 'LABS_QUOTE' AND "organizationId" = ${row.organizationId} AND "payload"::jsonb #>> '{input,leadId}' = ${row.id} LIMIT 1001`;
       if(quotes.length>1000)throw new AccessError("Quotation ownership transfer exceeds the safe batch limit");
       await db.executiveRecord.updateMany({where:{id:{in:quotes.map(q=>q.id)},organizationId:row.organizationId,kind:"LABS_QUOTE"},data:{ownerPersonId:next.ctx.user!.personId!}});
       await event(db, userId, row, "labs.lead_assigned", token.reference, { fingerprint: token.fingerprint, previousOwnerPersonId:row.ownerPersonId, nextOwnerPersonId:next.ctx.user!.personId!,quotationIds:quotes.map(q=>q.id) });

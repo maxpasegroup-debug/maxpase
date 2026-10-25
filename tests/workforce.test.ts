@@ -1,10 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { DatabaseSync } from "node:sqlite";
-import { execFileSync } from "node:child_process";
-import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
-import { join } from "node:path";
-import { tmpdir } from "node:os";
-import { PrismaClient } from "@prisma/client";
+import { createPostgresFixture } from "./helpers/postgres-fixture";
 import { createWorkforceService } from "@/server/domain/workforce-service";
 import { createBusinessService } from "@/server/domain/business-service";
 import { createAccessContext } from "@/server/authorization/engine";
@@ -13,10 +8,8 @@ import { inspectSiaToolAccess } from "@/server/sia/access";
 import { verifyPassword } from "@/server/auth/password";
 import { airaRoleNames } from "@/server/domain/aira-roles";
 
-const directory = mkdtempSync(join(tmpdir(), "maxpase-phase03-"));
-const path = join(directory, "test.db");
-const url = "file:" + path.replaceAll("\\", "/");
-const db = new PrismaClient({ datasourceUrl: url });
+const postgres = createPostgresFixture();
+const db = postgres.db;
 const workforce = createWorkforceService(db);
 const business = createBusinessService(db);
 let adminId: string, groupId: string, aId: string, bId: string, d1: string, d2: string;
@@ -24,7 +17,7 @@ let projectA: string, projectB: string;
 let manager: { userId: string; personId: string; membershipId: string; roleId: string };
 let departmentUser: typeof manager, projectUser: typeof manager;
 let sequence = 0;
-const seed = () => execFileSync(process.execPath, ["node_modules/tsx/dist/cli.mjs", "prisma/seed.ts"], { env: { ...process.env, DATABASE_URL: url, NODE_ENV: "test" }, stdio: "pipe" });
+const seed = () => postgres.runSeed();
 async function account(organizationId: string, permissions: string[], descendants = false, projectId?: string) {
   const key = "test-" + ++sequence;
   const person = await db.person.create({ data: { displayName: key } });
@@ -34,10 +27,8 @@ async function account(organizationId: string, permissions: string[], descendant
   return { userId: user.id, personId: person.id, membershipId: membership.id, roleId: role.id };
 }
 beforeAll(async () => {
-  const sql = new DatabaseSync(path);
-  for (const folder of readdirSync("prisma/migrations").filter(f => /^\d/.test(f)).sort()) sql.exec(readFileSync(join("prisma/migrations", folder, "migration.sql"), "utf8"));
-  expect(sql.prepare("PRAGMA integrity_check").get()).toEqual({ integrity_check: "ok" });
-  expect(sql.prepare("PRAGMA foreign_key_check").all()).toEqual([]); sql.close();
+  await postgres.initialize();
+  await postgres.assertIntegrity();
   seed();
   expect(await db.user.count()).toBe(1); expect(await db.person.count()).toBe(1);
   adminId = (await db.user.findUniqueOrThrow({ where: { email: "admin@maxpase.local" } })).id;
@@ -51,8 +42,8 @@ beforeAll(async () => {
   manager = await account(aId, ["organization.read", "person.read", "person.update", "user.read", "user.create", "user.update", "membership.read", "membership.manage", "membership.assign_role", "role.read", "role.create", "permission.read", "permission.assign", "project.read", "project.manage", "reporting.read", "reporting.manage", "responsibility.read", "responsibility.manage"], true);
   departmentUser = await account(d1, ["organization.read", "person.read", "membership.read", "role.read", "project.read"]);
   projectUser = await account(aId, ["project.read", "project.manage", "membership.read", "membership.manage", "membership.assign_role", "person.read", "responsibility.read", "responsibility.manage"], false, projectA);
-}, 30000);
-afterAll(async () => { await db.$disconnect(); rmSync(directory, { recursive: true, force: true }); });
+}, 120000);
+afterAll(() => postgres.dispose(), 30000);
 
 describe("canonical designations and identities", () => {
   it("seeds all 60 locked AIRA roles without employees, role assignments or SIA human identities", async () => {

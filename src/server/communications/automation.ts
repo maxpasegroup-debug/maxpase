@@ -139,7 +139,7 @@ export function createAutomationService(client: PrismaClient = prisma, clock: ()
           if (row.version !== job.version || row.status !== "PENDING") return false;
           const attempts = row.attempts + 1;
           const legacy = (await db.automationRule.findUnique({ where: { id: row.ruleId }, select: { lifecycle: true } }))?.lifecycle === "LEGACY";
-          const retryable = legacy || !!error && typeof error === "object" && "code" in error && ["P2034", "P1008", "SQLITE_BUSY"].includes(String(error.code));
+          const retryable = legacy || !!error && typeof error === "object" && "code" in error && ["P2034", "P1008"].includes(String(error.code));
           const terminal = !retryable || attempts >= row.maxAttempts;
           await db.scheduledJob.update({ where: { id: row.id, version: row.version }, data: { attempts, status: terminal ? "FAILED" : "PENDING", enabled: !terminal, nextRunAt: legacy || !terminal ? new Date(clock().getTime() + 60000 * 2 ** attempts) : row.nextRunAt, failureCode: legacy ? "AUTOMATION_FAILED" : retryable ? "TRANSIENT_CONFLICT" : "AUTOMATION_FAILED", version: { increment: 1 } } });
           await communicationAudit(db, processor, row, "automation.failed", "ScheduledJob", row.id, true);

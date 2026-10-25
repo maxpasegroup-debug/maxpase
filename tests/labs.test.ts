@@ -1,9 +1,5 @@
 import {beforeAll,afterAll,beforeEach,describe,it,expect} from "vitest";
-import {PrismaClient} from "@prisma/client";
-import {DatabaseSync} from "node:sqlite";
-import {mkdtempSync,readdirSync,readFileSync,rmSync} from "node:fs";
-import {tmpdir} from "node:os";
-import {join} from "node:path";
+import {createPostgresFixture} from "./helpers/postgres-fixture";
 import {randomInt,randomBytes,randomUUID} from "node:crypto";
 import {initializeGroupStructure} from "@/server/group/structure";
 import {workforcePermissions} from "@/server/authorization/registry";
@@ -18,7 +14,7 @@ import {createOperationsService} from "@/server/domain/operations-service";
 import {createExecutionService} from "@/server/domain/execution-service";
 import {labsReminderGuard} from "@/server/labs/reminder";
 import {createAccessContext} from "@/server/authorization/engine";
-const dir=mkdtempSync(join(tmpdir(),"aira-labs-")),file=join(dir,"test.db"),db=new PrismaClient({datasourceUrl:"file:"+file.replaceAll("\\","/")});
+const postgres=createPostgresFixture(),db=postgres.db;
 const service=createLabsService(db),pin=createLabsPin(db),auth=createAuthenticationService(db),ops=createOperationsService(db);
 let labs:string,company:string,foreign:string,director:string,reviewer:string,advisor:string,developer:string,outsider:string;
 const all=["organization.read","person.read","person.update","user.update","notification.read","notification.generate","request.read","request.manage","approval.read","approval.decide","control.read","control.manage","reminder.read","reminder.manage","operations.process","project.read","project.manage","task.read","task.manage","milestone.read","milestone.manage",...workforcePermissions.filter(p=>p.key.startsWith("labs.")).map(p=>p.key)];
@@ -27,9 +23,9 @@ const input=(name=randomUUID())=>({company:"Synthetic "+name,name:"Prospect",ema
 const cmd=(id:string,version:number,extra={})=>({id,version,reference:randomUUID(),...extra});
 const quoteData=(leadId:string)=>({leadId,currency:"INR",items:[{description:"Synthetic automation",quantity:"1.5",rate:"100.01"}],discount:"0.02",taxBasisPoints:1800,expiresAt:new Date(Date.now()+7*86400000).toISOString()});
 async function qualify(id:string){await service.updateLead(director,cmd(id,0,{status:"CONTACTED",outcome:"Human called the prospect",qualification:"",nextFollowUp:null}));await service.updateLead(director,cmd(id,1,{status:"QUALIFIED",outcome:"Human qualification recorded",qualification:"Verified synthetic scope and requirements",nextFollowUp:null}));}
-beforeAll(async()=>{const sql=new DatabaseSync(file);for(const f of readdirSync("prisma/migrations").filter(f=>/^\d/.test(f)).sort())sql.exec(readFileSync(join("prisma/migrations",f,"migration.sql"),"utf8"));sql.close();await db.$transaction(initializeGroupStructure);for(const p of workforcePermissions)await db.permission.upsert({where:{key:p.key},create:p,update:{}});labs=(await db.organization.findUniqueOrThrow({where:{slug:"aira-labs"}})).id;company=(await db.organization.findUniqueOrThrow({where:{slug:"aira-skill-city"}})).id;foreign=(await db.organization.findUniqueOrThrow({where:{slug:"pearn"}})).id;director=await human("director",labs,all);reviewer=await human("reviewer",labs,all);advisor=await human("advisor",labs,["organization.read","labs.sales.self","labs.sales.perform","reminder.manage","notification.read"]);developer=await human("developer",labs,["organization.read","labs.delivery.assignee","project.read","task.read","task.manage"]);outsider=await human("outsider",foreign,all);},30000);
+beforeAll(async()=>{await postgres.initialize();await db.$transaction(initializeGroupStructure);for(const p of workforcePermissions)await db.permission.upsert({where:{key:p.key},create:p,update:{}});labs=(await db.organization.findUniqueOrThrow({where:{slug:"aira-labs"}})).id;company=(await db.organization.findUniqueOrThrow({where:{slug:"aira-skill-city"}})).id;foreign=(await db.organization.findUniqueOrThrow({where:{slug:"pearn"}})).id;director=await human("director",labs,all);reviewer=await human("reviewer",labs,all);advisor=await human("advisor",labs,["organization.read","labs.sales.self","labs.sales.perform","reminder.manage","notification.read"]);developer=await human("developer",labs,["organization.read","labs.delivery.assignee","project.read","task.read","task.manage"]);outsider=await human("outsider",foreign,all);},120000);
 beforeEach(async()=>{await db.securityRateBucket.deleteMany();});
-afterAll(async()=>{await db.$disconnect();rmSync(dir,{recursive:true,force:true});});
+afterAll(()=>postgres.dispose(),30000);
 describe("AIRA Labs isolated business slice",()=>{
 it("requires an explicit verified customer grant and isolates enquiry, proposal and revocation",async()=>{
   const customerService=createLabsCustomerService(db);

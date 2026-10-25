@@ -9,7 +9,8 @@ export const staffRoleScopes: Record<string, string> = {
   "startup-junior-academic-advisor": "aira-startup-school",
   "studio-junior-academic-advisor": "aira-skill-studio",
   "labs-full-stack-developer": "aira-labs",
-  "labs-junior-developer": "aira-labs"
+  "labs-junior-developer": "aira-labs",
+  "labs-business-development-manager": "aira-labs"
 };
 
 const requiredCapabilities: Record<string, string[]> = {
@@ -23,8 +24,13 @@ const requiredCapabilities: Record<string, string[]> = {
   "startup-junior-academic-advisor": ["organization.read", "aira.crm.self"],
   "studio-junior-academic-advisor": ["organization.read", "aira.crm.self"],
   "labs-full-stack-developer": ["organization.read", "labs.delivery.assignee", "project.read", "task.read"],
-  "labs-junior-developer": ["organization.read", "labs.delivery.assignee", "project.read", "task.read"]
+  "labs-junior-developer": ["organization.read", "labs.delivery.assignee", "project.read", "task.read"],
+  "labs-business-development-manager": ["organization.read", "labs.sales.self", "labs.sales.read", "labs.sales.manage"]
 };
+
+export function staffPortalForRole(key: string): "labs" | "skillcity" {
+  return ["labs-full-stack-developer", "labs-junior-developer", "labs-business-development-manager"].includes(key) ? "labs" : "skillcity";
+}
 
 export function isPreparedStaffRole(key: string, organizationSlug: string) {
   return staffRoleScopes[key] === organizationSlug;

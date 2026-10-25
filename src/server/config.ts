@@ -18,13 +18,19 @@ export function validateRuntimeEnvironment(env: NodeJS.ProcessEnv = process.env)
   validateBossConfiguration(env);
   const production = env.NODE_ENV === "production";
   if (production && (!env.DATABASE_URL || !env.AUTH_SECRET || env.AUTH_SECRET.length < 32 || /dev-only|replace-with|changeme/i.test(env.AUTH_SECRET) || env.AUTH_COOKIE_SECURE === "false")) throw new Error("Production environment is not securely configured");
+  let databaseValid = false;
+  try {
+    const database = new URL(env.DATABASE_URL ?? "");
+    databaseValid = ["postgres:", "postgresql:"].includes(database.protocol) && !!database.hostname && !!database.pathname.slice(1) && !!database.username && !!database.password;
+  } catch { /* Fail closed below without disclosing the URL. */ }
+  if (!databaseValid) throw new Error("PostgreSQL database environment is not configured");
   if (production) {
     try {
       const origin = new URL(env.APP_ORIGIN ?? "");
-      if (origin.protocol !== "https:" || origin.origin !== env.APP_ORIGIN || env.DEV_BOOTSTRAP_PASSWORD || !/^file:(?:\/|[A-Za-z]:[\\/])/.test(env.DATABASE_URL!)) throw new Error();
+      if (origin.protocol !== "https:" || origin.origin !== env.APP_ORIGIN || env.DEV_BOOTSTRAP_PASSWORD) throw new Error();
     } catch { throw new Error("Production environment is not securely configured"); }
   }
-  return envSchema.parse({ DATABASE_URL: env.DATABASE_URL ?? "file:./dev.db", AUTH_SECRET: env.AUTH_SECRET, AUTH_COOKIE_NAME: env.AUTH_COOKIE_NAME, AUTH_COOKIE_SECURE: env.AUTH_COOKIE_SECURE ?? (production ? "true" : "false") });
+  return envSchema.parse({ DATABASE_URL: env.DATABASE_URL, AUTH_SECRET: env.AUTH_SECRET, AUTH_COOKIE_NAME: env.AUTH_COOKIE_NAME, AUTH_COOKIE_SECURE: env.AUTH_COOKIE_SECURE ?? (production ? "true" : "false") });
 }
 
 // Deployments supply secrets at runtime, not while producing build artifacts.

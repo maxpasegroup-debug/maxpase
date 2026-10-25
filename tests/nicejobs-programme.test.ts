@@ -1,9 +1,5 @@
 import { beforeAll, beforeEach, afterAll, describe, it, expect } from "vitest";
-import { PrismaClient } from "@prisma/client";
-import { DatabaseSync } from "node:sqlite";
-import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { createPostgresFixture } from "./helpers/postgres-fixture";
 import { initializeGroupStructure } from "@/server/group/structure";
 import { workforcePermissions } from "@/server/authorization/registry";
 import { createNiceJobsService } from "@/server/nicejobs/service";
@@ -12,8 +8,8 @@ import { fixtureOpportunity } from "./fixtures/nicejobs-opportunity";
 import { fixtureProgramme } from "./fixtures/nicejobs-programme";
 import { createApplicationService } from "@/server/nicejobs/applications";
 
-const directory = mkdtempSync(join(tmpdir(), "nicejobs-programme-")), file = join(directory, "test.db");
-const db = new PrismaClient({ datasourceUrl: "file:" + file.replaceAll("\\", "/") }), service = createNiceJobsService(db);
+const postgres = createPostgresFixture();
+const db = postgres.db, service = createNiceJobsService(db);
 let company: string, labs: string, startup: string, admin: string, foreign: string, reader: string, reviewer: string, reviewerRole: string, limited: string, candidate: string;
 let version: Awaited<ReturnType<typeof service.create>>;
 async function human(name: string, organizationId: string, keys: string[], descendants = false) {
@@ -29,9 +25,7 @@ async function move(to: string, id = version.id, actor = admin) {
   return service.changeJob(actor, { id, revision: v.publishedAt ? v.template.revision : v.revision, to, reason: "Explicit isolated human decision" });
 }
 beforeAll(async () => {
-  const sql = new DatabaseSync(file);
-  for (const folder of readdirSync("prisma/migrations").filter(f => /^\d/.test(f)).sort()) sql.exec(readFileSync(join("prisma/migrations", folder, "migration.sql"), "utf8"));
-  sql.close(); await db.$transaction(initializeGroupStructure);
+  await postgres.initialize(); await db.$transaction(initializeGroupStructure);
   for (const p of workforcePermissions) await db.permission.upsert({ where: { key: p.key }, update: {}, create: p });
   await db.permission.upsert({ where: { key: "organization.read" }, update: {}, create: { key: "organization.read", name: "Read organization", scope: "GROUP" } });
   const org = async (slug: string) => (await db.organization.findUniqueOrThrow({ where: { slug } })).id;
@@ -43,14 +37,14 @@ beforeAll(async () => {
   const r = await human("training-reviewer", company, ["nicejobs.ojt.review", "nicejobs.readiness.review"], true); reviewer = r.id; reviewerRole = r.roleId;
   limited = (await human("single-area-reviewer", labs, ["nicejobs.ojt.review", "nicejobs.readiness.review"])).id;
   candidate = (await human("programme-candidate", await org("aira-career-hub"), ["organization.read", "nicejobs.application.self"])).id;
-}, 30000);
+}, 120000);
 beforeEach(async () => {
   await db.niceJobsApplicationHistory.deleteMany(); await db.niceJobsApplication.deleteMany(); await db.niceJobsApplicationSequence.deleteMany();
   await db.niceJobsTemplate.updateMany({ data: { publishedVersionId: null } });
   await db.niceJobsVersionArea.deleteMany(); await db.niceJobsVersion.deleteMany(); await db.niceJobsTemplate.deleteMany();
   version = await service.create(admin, { code: "JOB-BAM", visibility: "PUBLIC", ...await data() });
 });
-afterAll(async () => { await db.$disconnect(); rmSync(directory, { recursive: true, force: true }); });
+afterAll(() => postgres.dispose(), 30000);
 
 describe("Job and programme setup", () => {
   it("keeps incomplete 100-day schedules in draft and blocks duration-only or missing-day readiness", async()=>{
@@ -155,12 +149,11 @@ describe("Job and programme setup", () => {
     const raw = await data(); await service.edit(admin, version.id, 3, { ...raw, configuration: { ...raw.configuration, programmeSetup: { ...raw.configuration.programmeSetup, trainingOutcomes: "" } } });
     await expect(move("PUBLISHED")).rejects.toThrow();
     await service.edit(admin, version.id, 4, raw); await move("PENDING_VERIFICATION");
-    const sql = new DatabaseSync(file);
-    sql.exec("CREATE TRIGGER ProgrammeAuditFailure BEFORE INSERT ON AuditEvent WHEN NEW.action = 'nicejobs.job.approved' BEGIN SELECT RAISE(ABORT, 'audit unavailable'); END;");
+    const restore = await postgres.rejectInsert("AuditEvent", "nicejobs.job.approved");
     try {
       await expect(move("APPROVED")).rejects.toThrow();
       expect((await service.detail(admin, version.id)).version.status).toBe("PENDING_VERIFICATION");
-    } finally { sql.exec("DROP TRIGGER ProgrammeAuditFailure"); sql.close(); }
+    } finally { await restore(); }
     await move("APPROVED"); await move("PUBLISHED");
     const published = (await service.detail(admin, version.id)).version;
     await expect(service.edit(admin, version.id, published.revision, raw)).rejects.toThrow();

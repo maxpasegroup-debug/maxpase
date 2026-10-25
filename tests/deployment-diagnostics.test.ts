@@ -2,11 +2,11 @@ import { describe, it, expect, vi } from "vitest";
 import { randomBytes } from "node:crypto";
 import { failureReason, safeDiagnostic } from "@/server/security/diagnostics";
 
-const env: NodeJS.ProcessEnv = { NODE_ENV: "production", AUTH_SECRET: randomBytes(32).toString("hex"), DATABASE_URL: "file:/data/maxpase.db", APP_ORIGIN: "https://maxpase.com", AUTH_COOKIE_SECURE: "true" };
+const env: NodeJS.ProcessEnv = { NODE_ENV: "production", AUTH_SECRET: randomBytes(32).toString("hex"), DATABASE_URL: "postgresql://app:private-password@db.internal:5432/maxpase", APP_ORIGIN: "https://maxpase.com", AUTH_COOKIE_SECURE: "true" };
 describe("Secret-safe deployment diagnostics", () => {
   it("identifies missing production requirements without relaxing authentication", () => {
     expect(failureReason(null, "authentication", { ...env, AUTH_SECRET: "" })).toBe("auth_secret_invalid");
-    expect(failureReason(null, "readiness", { ...env, DATABASE_URL: "postgresql://private-value" })).toBe("persistent_sqlite_url_required");
+    expect(failureReason(null, "readiness", { ...env, DATABASE_URL: "file:/data/maxpase.db" })).toBe("postgresql_url_required");
     expect(failureReason(null, "readiness", { ...env, APP_ORIGIN: "http://maxpase.com" })).toBe("https_app_origin_required");
     expect(failureReason(null, "authentication", { ...env, AUTH_COOKIE_SECURE: "false" })).toBe("secure_cookie_required");
     expect(failureReason(null, "origin", env)).toBe("origin_or_host_rejected");

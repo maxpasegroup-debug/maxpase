@@ -1,15 +1,10 @@
 import { beforeAll, afterAll, describe, it, expect } from "vitest";
-import { DatabaseSync } from "node:sqlite";
-import { mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { PrismaClient } from "@prisma/client";
+import { createPostgresFixture } from "./helpers/postgres-fixture";
 import { createOperationsService, recurrenceDate } from "@/server/domain/operations-service";
 import { createExecutionService } from "@/server/domain/execution-service";
 import { workforcePermissions } from "@/server/authorization/registry";
-const dir = mkdtempSync(join(tmpdir(), "maxpase-phase05-"));
-const file = join(dir, "test.db");
-const db = new PrismaClient({ datasourceUrl: "file:" + file.replaceAll("\\", "/") });
+const postgres = createPostgresFixture();
+const db = postgres.db;
 const ops = createOperationsService(db), execution = createExecutionService(db);
 let a: string, b: string, admin: string, requester: string, first: string, parallel: string, last: string, outsider: string, viewer: string;
 let sequence = 0;
@@ -24,10 +19,8 @@ async function actor(org: string, permissions = keys, descendants = false) {
   return user.id;
 }
 beforeAll(async () => {
-  const sql = new DatabaseSync(file);
-  for (const folder of readdirSync("prisma/migrations").filter(f => /^\d/.test(f)).sort()) sql.exec(readFileSync(`prisma/migrations/${folder}/migration.sql`, "utf8"));
-  expect(sql.prepare("PRAGMA foreign_key_check").all()).toEqual([]);
-  sql.close();
+  await postgres.initialize();
+  await postgres.assertIntegrity();
   const root = await db.organization.create({ data: { name: "Operations group", slug: unique(), type: "GROUP" } });
   a = (await db.organization.create({ data: { name: "Company A", slug: unique(), type: "COMPANY", parentId: root.id } })).id;
   b = (await db.organization.create({ data: { name: "Company B", slug: unique(), type: "COMPANY", parentId: root.id } })).id;
@@ -35,8 +28,8 @@ beforeAll(async () => {
   admin = await actor(root.id, keys, true);
   requester = await actor(a); first = await actor(a); parallel = await actor(a); last = await actor(a); outsider = await actor(b);
   viewer = await actor(a, ["organization.read", "workflow.read", "request.read", "approval.read", "notification.read", "event.read", "activity.read"]);
-}, 30000);
-afterAll(async () => { await db.$disconnect(); rmSync(dir, { recursive: true, force: true }); });
+}, 120000);
+afterAll(() => postgres.dispose(), 30000);
 async function policy(stages = [[first]], kind = "APPROVAL") {
   return ops.saveControl(admin, { organizationId: a, name: unique(), kind, requiredPermission: kind === "APPROVAL" ? "approval.decide" : "control.evaluate", stages: kind === "APPROVAL" ? stages.map(stage => stage.map(approverUserId => ({ approverUserId }))) : [] });
 }
@@ -297,8 +290,7 @@ describe("Phase 05 operational controls and security", () => {
   });
   it("rolls back workflow transition, approval decision and notification when audit fails", async () => {
     const w = await workflow(), r = await request(), approval = (await approvals(r.id))[0];
-    const sql = new DatabaseSync(file);
-    sql.exec('CREATE TRIGGER deny_operation_audit BEFORE INSERT ON AuditEvent BEGIN SELECT RAISE(ABORT, "audit unavailable"); END;');
+    const restore = await postgres.rejectInsert("AuditEvent");
     try {
       await expect(ops.transition(requester, w.command)).rejects.toThrow();
       await expect(decide(first, approval.id)).rejects.toThrow();
@@ -306,7 +298,7 @@ describe("Phase 05 operational controls and security", () => {
       expect(await db.workflowInstance.findUnique({ where: { id: w.instance.id } })).toMatchObject({ version: 0 });
       expect(await db.siaApproval.findUnique({ where: { id: approval.id } })).toMatchObject({ status: "PENDING", decidedAt: null });
       expect(await db.notification.count({ where: { reference: a + ":manual:rollback-notice" } })).toBe(0);
-    } finally { sql.exec("DROP TRIGGER deny_operation_audit"); sql.close(); }
+    } finally { await restore(); }
   });
   it("keeps SIA execution disabled even after independent human approval", async () => {
     const sia = await db.siaIdentity.create({ data: { name: "Test SIA" } });
@@ -338,9 +330,7 @@ describe("Phase 05 operational controls and security", () => {
     expect(overdue.some(r => r.id === t.id)).toBe(true);
     expect(overdue.some(r => r.id === completed.id)).toBe(false);
     expect((await ops.workspace(viewer)).scopes["approval.decide"].organizations).toEqual([]);
-    const sql = new DatabaseSync(file);
-    expect(sql.prepare("PRAGMA foreign_key_check").all()).toEqual([]);
-    expect(sql.prepare("PRAGMA integrity_check").get()).toEqual({ integrity_check: "ok" }); sql.close();
+    await postgres.assertIntegrity();
   });
   it("keeps project-only and department control authority inside the actual resource scope", async () => {
     const p = await execution.save(admin, "projects", { organizationId: a, name: unique(), slug: unique() });
@@ -381,14 +371,13 @@ describe("Phase 05 operational controls and security", () => {
   it("rolls back recurring outputs and surfaces audit-storage failure instead of claiming success", async () => {
     const r = await ops.saveRecurring(requester, { ...scope(), title: unique(), kind: "TASK", template: { title: unique() }, frequency: "DAILY", startAt: "2000-01-01", maxOccurrences: 1 });
     const before = await db.task.count();
-    const sql = new DatabaseSync(file);
-    sql.exec('CREATE TRIGGER deny_recurring_audit BEFORE INSERT ON AuditEvent BEGIN SELECT RAISE(ABORT, "audit unavailable"); END;');
+    const restore = await postgres.rejectInsert("AuditEvent");
     try {
       await expect(ops.processDue(admin, 100)).rejects.toThrow();
       expect(await db.task.count()).toBe(before);
       expect(await db.recurringOccurrence.count({ where: { recurringWorkId: r.id } })).toBe(0);
       expect(await db.recurringWork.findUnique({ where: { id: r.id } })).toMatchObject({ status: "ACTIVE", occurrences: 0 });
-    } finally { sql.exec("DROP TRIGGER deny_recurring_audit"); sql.close(); }
+    } finally { await restore(); }
     await ops.changeStatus(requester, "recurrence", r.id, "CANCELLED");
   });
 });

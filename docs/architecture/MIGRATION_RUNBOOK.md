@@ -1,5 +1,20 @@
 # Migration Runbook
 
+## PostgreSQL launch procedure (supersedes the historical SQLite steps below)
+
+Status: **NOT AUTHORIZED FOR PRODUCTION EXECUTION**. The PostgreSQL baseline has not been applied to an isolated PostgreSQL target or proven against real concurrent finance writes. Do not use Railway production as a test database.
+
+1. Verify the intended PostgreSQL service, database name, ownership and connection reference privately. Back up both the Railway PostgreSQL service and any existing `maxpase-volume` contents; the volume may hold uploaded files. Do not delete either service or volume.
+2. Configure an independent, ephemeral `maxpase_ci` PostgreSQL target. CI requires a URL-safe `MAXPASE_CI_POSTGRES_PASSWORD` repository secret. `npm run prisma:validate`, `npm run prisma:generate` and `npm run validate:migrations` use the active PostgreSQL schema and one baseline migration. The validator only accepts a confirmed local `maxpase_ci` target through `TEST_DATABASE_URL` and `MAXPASE_CI_DATABASE_CONFIRMED=true`; it refuses populated databases and never resets them.
+3. Before a production release, require the full PostgreSQL integration suite, all 13 safeguard and concurrency checks, repeated migration deploy, readiness, authorized workflow tests, a backup restore drill and release-owner approval. The legacy SQLite test suite is not PostgreSQL evidence.
+4. Only in a separately authorized release window, supply the existing Railway PostgreSQL `DATABASE_URL` privately to the application service, with stable `AUTH_SECRET`, canonical `APP_ORIGIN`, secure cookies and other required provider settings. Do not embed credentials in source or logs. Stop writers and run `npx prisma migrate deploy` explicitly against the verified target. Never use `migrate reset`, `db push`, `migrate dev`, or a manual "mark applied" shortcut against production.
+5. Require `npx prisma migrate status`, `/api/ready` success, migration checksum/trigger checks, scoped sign-in, permissions, finance denial and audit smoke tests before traffic. `/api/health` proves process liveness only. Keep the previous release artifact and verified backup for rollback.
+6. On failure, hold traffic, preserve the failed database for investigation, and restore into a **new** database target before a reviewed connection switch. Reconcile effects after the backup time, including external sends and financial intents; never replay blindly.
+
+The remainder of this file records the former SQLite runbook for historical audit only. **Do not execute those SQLite commands for the PostgreSQL release.**
+
+## Historical SQLite procedure (retired)
+
 Responsibility: reviewed deployment operator executes; release owner approves; security/data owner controls backup access. No production DATABASE_URL was supplied or accessed during Phase 10.
 
 1. Verify the intended environment and absolute database path privately. Record release ID and current `prisma migrate status`; compare _prisma_migrations with reviewed source ordering/checksums and inspect unfinished migrations. Do not log the connection configuration or secrets.

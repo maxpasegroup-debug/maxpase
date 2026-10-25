@@ -1,6 +1,6 @@
 # Skill City staff and CRM rollout
 
-Status: implemented locally, **not activated for real staff**. The Boss remains on `maxpase.com`. AIRA company and brand staff sign in on `airaskillcity.com`; Labs customers, Startup School students and Nice Jobs part-time participants retain their own portals. TEARN and TopRank staff domains are not specified here.
+Status: implemented locally, **not activated for real staff**. The Boss remains on `maxpase.com`. AIRA directors and advisors sign in on `airaskillcity.com`. Newly invited AIRA Labs Full Stack Developers, Junior Developers and Business Development Managers sign in on `airalabs.online` with the password they create during invitation activation; existing Labs PIN accounts retain their PIN flow. Startup School students and Nice Jobs part-time participants retain their own portals. TEARN and TopRank staff domains are not specified here.
 
 ## Five delivery phases
 
@@ -12,9 +12,11 @@ Status: implemented locally, **not activated for real staff**. The Boss remains 
 
 ## Activation sequence
 
+For a fresh PostgreSQL deployment, first apply the reviewed baseline with `npx prisma migrate deploy` using the MAXPASE service's private `DATABASE_URL`, then require `/api/ready` to return `ready`. Set the Boss PIN privately and run `npx tsx scripts/provision-boss.ts` once from that same service environment. The script creates or refreshes `boss@maxpase.com` and revokes prior Boss sessions; it does not print the PIN. Do not use the development seed against production. These steps have **not** been run on Railway from this workspace.
+
 1. Verify the AIRA company/division records, existing Director assignments and Boss authority. Run the explicit role-template action from the Boss AIRA command centre only after review.
 2. Nominate and verify Directors and managers, then prepare draft accounts in the correct AIRA scope. Use the approved HR process for identity checks and record the evidence when sending an invitation.
-3. Verify the Resend sender domain and configure the Skill City environment variables securely. Send one invitation to a verified account, then have that person activate it on Skill City and confirm the intended scope and revocation behavior.
+3. Verify the Resend sender domain and configure the Skill City invitation environment variables securely. Send one invitation to a verified account; the invitation chooses Skill City or Labs from the approved role key. Activate it on the matching domain and confirm scope, cross-domain rejection and revocation behavior.
 4. Confirm the BGOS, PBA and GenZ Builder product owners, sales rules and publication approvals. Pilot assigned records without treating qualification as a sale.
 5. Conduct live domain, mobile/accessibility, session-isolation, authorization and end-to-end pilot checks with consenting users before moving staff traffic. No live checks are claimed in this document.
 

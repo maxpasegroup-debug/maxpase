@@ -7,6 +7,7 @@ import { operationalEvent } from "@/server/domain/operational-events";
 import { createExecutionService } from "@/server/domain/execution-service";
 import { requireSkillCityTaskReviews } from "@/server/domain/task-review";
 import { requirePortalAccess } from "@/server/portals/policy";
+import { accountPortalRealm } from "@/server/auth/account-realm";
 
 type DB = Prisma.TransactionClient;
 const developerNames = ["Software Developer", "Full Stack Developer", "Junior Developer"];
@@ -21,7 +22,8 @@ const completionInput = z.object({ taskId: z.string().min(1), revision: z.number
 export function createSkillCityDeveloperDesk(client: PrismaClient = prisma, now = () => new Date()) {
   const execution = createExecutionService(client);
   async function labs(db: DB, userId: string) {
-    const gateway = await requirePortalAccess(db, userId, "skillcity");
+    const user = await db.user.findUnique({ where: { id: userId }, select: { person: { select: { metadata: true } } } });
+    const gateway = await requirePortalAccess(db, userId, accountPortalRealm(user?.person?.metadata) === "labs" ? "labs" : "skillcity");
     const division = await db.organization.findUnique({ where: { slug: "aira-labs" }, select: { id: true, parentId: true, status: true } });
     if (!division || division.parentId !== gateway.companyId || division.status !== "ACTIVE") throw new AccessError("Labs workspace unavailable");
     const ctx = await createAccessContext(userId, db, undefined, { organizationId: division.id });

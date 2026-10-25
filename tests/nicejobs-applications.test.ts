@@ -1,9 +1,5 @@
 import { beforeAll, beforeEach, afterAll, describe, it, expect } from "vitest";
-import { PrismaClient } from "@prisma/client";
-import { DatabaseSync } from "node:sqlite";
-import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { createPostgresFixture } from "./helpers/postgres-fixture";
 import { initializeGroupStructure } from "@/server/group/structure";
 import { workforcePermissions } from "@/server/authorization/registry";
 import { createNiceJobsService } from "@/server/nicejobs/service";
@@ -23,8 +19,8 @@ import { applicantContext } from "@/server/sia/applicant-context";
 import { createSiaService } from "@/server/sia/service";
 import { deterministicProvider } from "@/server/sia/provider";
 
-const directory = mkdtempSync(join(tmpdir(), "nicejobs-phase02-")), file = join(directory, "test.db");
-const db = new PrismaClient({ datasourceUrl: "file:" + file.replaceAll("\\", "/") }), jobs = createNiceJobsService(db), applications = createApplicationService(db);
+const postgres = createPostgresFixture();
+const db = postgres.db, jobs = createNiceJobsService(db), applications = createApplicationService(db);
 let company: string, labs: string, startup: string, career: string, foreign: string;
 let manager: string, reader: string, candidate: string, other: string, outsider: string, roleId: string;
 let versionId: string;
@@ -49,9 +45,7 @@ async function decision(a: Awaited<ReturnType<typeof submitted>>, action: string
   return applications.mutate(manager, { reference: a.reference, revision: a.revision, action, reason: "Human test review", ...extra });
 }
 beforeAll(async () => {
-  const sql = new DatabaseSync(file);
-  for (const folder of readdirSync("prisma/migrations").filter(f => /^\d/.test(f)).sort()) sql.exec(readFileSync(join("prisma/migrations", folder, "migration.sql"), "utf8"));
-  sql.close(); await db.$transaction(initializeGroupStructure);
+  await postgres.initialize(); await db.$transaction(initializeGroupStructure);
   for (const p of workforcePermissions) await db.permission.upsert({ where: { key: p.key }, update: {}, create: p });
   await db.permission.upsert({ where: { key: "organization.read" }, update: {}, create: { key: "organization.read", name: "Read organization", scope: "GROUP" } });
   const org = async (slug: string) => (await db.organization.findUniqueOrThrow({ where: { slug } })).id;
@@ -63,14 +57,14 @@ beforeAll(async () => {
   candidate = (await human("candidate@test.invalid", career, candidateKeys)).id;
   other = (await human("other@test.invalid", career, candidateKeys)).id;
   outsider = (await human("outsider@test.invalid", foreign, [...managedKeys, ...candidateKeys], true)).id;
-}, 30000);
+}, 120000);
 beforeEach(async () => {
   await db.securityRateBucket.deleteMany();
   await db.niceJobsApplicationHistory.deleteMany(); await db.niceJobsApplication.deleteMany(); await db.niceJobsApplicationSequence.deleteMany(); await db.notification.deleteMany(); await db.notificationPreference.deleteMany();
   await db.niceJobsTemplate.updateMany({ data: { publishedVersionId: null } }); await db.niceJobsVersionArea.deleteMany(); await db.niceJobsVersion.deleteMany(); await db.niceJobsTemplate.deleteMany();
   versionId = await publish();
 });
-afterAll(async () => { await db.$disconnect(); rmSync(directory, { recursive: true, force: true }); });
+afterAll(() => postgres.dispose(), 30000);
 describe("Nice Jobs applications and screening", () => {
   it("creates three owner-supplied drafts without inventing employer or compensation details", async () => {
     const seeded = await jobs.seedInitialOpportunities(manager);
@@ -161,14 +155,13 @@ describe("Nice Jobs applications and screening", () => {
   });
   it("rolls back applicant enrollment when audit insertion fails", async () => {
     for (const key of ["notification.read", "sia.access.read"]) await db.permission.upsert({ where: { key }, update: {}, create: { key, name: key, scope: "GROUP" } });
-    const sql = new DatabaseSync(file);
-    sql.exec("CREATE TRIGGER fail_signup_audit BEFORE INSERT ON AuditEvent WHEN NEW.action = 'nicejobs.applicant.registered' BEGIN SELECT RAISE(ABORT, 'Isolated signup audit failure'); END;"); sql.close();
+    const restore = await postgres.rejectInsert("AuditEvent", "nicejobs.applicant.registered");
     try {
       const email = "rollback-signup@test.invalid";
       await expect(createApplicantAccess(db).register({ displayName: "Rollback fixture", email, country: "IN", nationalNumber: "9876543212", pin: "123456", confirmPin: "123456", acknowledge: true })).rejects.toThrow();
       expect(await db.user.findUnique({ where: { email } })).toBeNull();
       expect(await db.person.findUnique({ where: { email } })).toBeNull();
-    } finally { const cleanup = new DatabaseSync(file); cleanup.exec("DROP TRIGGER fail_signup_audit"); cleanup.close(); }
+    } finally { await restore(); }
   });
   it("exposes only current published public jobs and internships without requiring a portal account", async () => {
     expect((await applications.publicOpportunities({ kind: "jobs" })).records.map(v => v.id)).toEqual([versionId]);

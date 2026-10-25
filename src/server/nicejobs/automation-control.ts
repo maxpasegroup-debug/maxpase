@@ -119,17 +119,17 @@ export function createNiceJobsAutomationControl(client: PrismaClient = prisma, n
       if (!ids.length) throw new AccessError("Automation processing unavailable");
       const results = await automation.processDue(userId, c.limit, ids);
       const failed = await client.$queryRaw<{ id: string }[]>`
-        SELECT job.id FROM ScheduledJob AS job
-        JOIN AutomationRule AS rule ON rule.id = job.ruleId
-        WHERE job.organizationId IN (${Prisma.join(ids)})
-          AND job.status = 'FAILED' AND rule.lifecycle != 'LEGACY'
-          AND rule.divisionId = job.organizationId
+        SELECT job."id" FROM "ScheduledJob" AS job
+        JOIN "AutomationRule" AS rule ON rule."id" = job."ruleId"
+        WHERE job."organizationId" IN (${Prisma.join(ids)})
+          AND job."status" = 'FAILED' AND rule."lifecycle" != 'LEGACY'
+          AND rule."divisionId" = job."organizationId"
           AND NOT EXISTS (
-            SELECT 1 FROM NiceJobsOperationalException AS exception
-            WHERE exception.companyId = ${b.company.id}
-              AND exception.sourceKey = 'automation-job:' || job.id
+            SELECT 1 FROM "NiceJobsOperationalException" AS exception
+            WHERE exception."companyId" = ${b.company.id}
+              AND exception."sourceKey" = 'automation-job:' || job."id"
           )
-        ORDER BY job.id ASC LIMIT ${c.limit}`;
+        ORDER BY job."id" ASC LIMIT ${c.limit}`;
       for (const job of failed) await client.$transaction(db => exceptions.recordFailedJob(db, userId, job.id));
       return results;
     }

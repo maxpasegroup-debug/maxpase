@@ -1,23 +1,16 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { DatabaseSync } from "node:sqlite";
-import { mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { PrismaClient } from "@prisma/client";
+import { createPostgresFixture } from "./helpers/postgres-fixture";
 import { initializeGroupStructure } from "@/server/group/structure";
 import { createCrossBrandQueue } from "@/server/skillcity/cross-brand-queue";
 import { createAdvisorCrm } from "@/server/skillcity/crm";
 
-const directory = mkdtempSync(join(tmpdir(), "skillcity-crm-"));
-const file = join(directory, "test.db");
-const db = new PrismaClient({ datasourceUrl: "file:" + file.replaceAll("\\", "/") });
+const fixture = createPostgresFixture();
+const db = fixture.db;
 const queue = createCrossBrandQueue(db, () => new Date("2026-10-24T06:00:00Z"));
 let directorId: string, advisorId: string, outsiderId: string, advisorPersonId: string, labsId: string, startupId: string, studioId: string, managerRoleId: string;
 
 beforeAll(async () => {
-  const sql = new DatabaseSync(file);
-  for (const folder of readdirSync("prisma/migrations").filter(name => /^\d/.test(name)).sort()) sql.exec(readFileSync(join("prisma/migrations", folder, "migration.sql"), "utf8"));
-  sql.close();
+  await fixture.initialize();
   await db.$transaction(initializeGroupStructure);
   const companyId = (await db.organization.findUniqueOrThrow({ where: { slug: "aira-skill-city" } })).id;
   labsId = (await db.organization.findUniqueOrThrow({ where: { slug: "aira-labs" } })).id;
@@ -52,8 +45,8 @@ beforeAll(async () => {
     { organizationId: studioId, kind: "AIRA_CRM_LEAD", ownerPersonId: advisor.personId, title: "Unreadable details", status: "NEW", sourceKey: "queue:genz:invalid", payload: "{}" },
     { organizationId: foreignId, kind: "LABS_LEAD", ownerPersonId: advisor.personId, title: "Other company private enquiry", status: "NEW", sourceKey: "queue:foreign", payload: labsPayload(advisorId) }
   ] });
-}, 30000);
-afterAll(async () => { await db.$disconnect(); rmSync(directory, { recursive: true, force: true }); });
+}, 120000);
+afterAll(() => fixture.dispose(), 30000);
 
 describe("Skill City cross-brand CRM queue", () => {
   it("shows only real, open, assigned records in the correct source pipeline", async () => {

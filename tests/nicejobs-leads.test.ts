@@ -1,9 +1,6 @@
 import { beforeAll, beforeEach, afterAll, describe, it, expect } from "vitest";
-import { PrismaClient } from "@prisma/client";
-import { DatabaseSync } from "node:sqlite";
-import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import type { PrismaClient } from "@prisma/client";
+import { createPostgresFixture } from "./helpers/postgres-fixture";
 import { initializeGroupStructure } from "@/server/group/structure";
 import { workforcePermissions } from "@/server/authorization/registry";
 import { createNiceJobsService } from "@/server/nicejobs/service";
@@ -22,10 +19,10 @@ import { followupState } from "@/server/nicejobs/lead-sources";
 import { workerQuestion } from "@/server/sia/worker-context";
 import { createSiaService } from "@/server/sia/service";
 
-const directory = mkdtempSync(join(tmpdir(), "nicejobs-phase06-")), file = join(directory, "test.db");
-const db = new PrismaClient({ datasourceUrl: "file:" + file.replaceAll("\\", "/"), log: [{ level: "query", emit: "event" }] });
+const postgres = createPostgresFixture({ log: [{ level: "query", emit: "event" }] });
+const db = postgres.db;
 let capturedQueries: string[] | null = null;
-db.$on("query", e => { capturedQueries?.push(e.query); });
+(db as PrismaClient<{ log: [{ emit: "event"; level: "query" }] }>).$on("query", e => { capturedQueries?.push(e.query); });
 const leads = createLeadService(db, () => clock);
 const workforceCommand = createWorkforceCommandCenter(db, () => clock);
 const performanceService = createPerformanceService(db, () => clock), finance = createFinanceService(db, () => clock);
@@ -74,7 +71,7 @@ async function reviewed(ref: string, key: string, outcome: string, feedback = "R
   return act(ref, "REVIEW", { submissionId: s.id, outcome, feedback }, mentor, false);
 }
 beforeAll(async () => {
-  const sql = new DatabaseSync(file); for (const folder of readdirSync("prisma/migrations").filter(f => /^\d/.test(f)).sort()) sql.exec(readFileSync(join("prisma/migrations", folder, "migration.sql"), "utf8")); sql.close();
+  await postgres.initialize();
   await db.$transaction(initializeGroupStructure);
   for (const p of workforcePermissions) await db.permission.upsert({ where: { key: p.key }, update: {}, create: p });
   await db.permission.upsert({ where: { key: "organization.read" }, update: {}, create: { key: "organization.read", name: "Read", scope: "GROUP" } });
@@ -91,7 +88,7 @@ beforeAll(async () => {
     await db.membership.create({ data: { personId: user.personId!, organizationId: labs, roles: { create: { roleId: role.id } } } });
   }
   controlId = (await operations.saveControl(manager, { organizationId: labs, name: "Fixture independent approval", kind: "HUMAN_DECISION", requiredPermission: "nicejobs.management.approve", stages: [[{ approverUserId: approver, requiredPermission: "nicejobs.management.approve" }]] })).id;
-}, 30000);
+}, 120000);
 beforeEach(async () => {
   await db.siaApproval.deleteMany({ where: { request: { resourceType: "NICE_JOBS_LEAD" } } });
   await db.operationalRequest.deleteMany({ where: { resourceType: "NICE_JOBS_LEAD" } });
@@ -105,7 +102,7 @@ beforeEach(async () => {
   await db.niceJobsTemplate.updateMany({ data: { publishedVersionId: null } }); await db.niceJobsVersionArea.deleteMany(); await db.niceJobsVersion.deleteMany(); await db.niceJobsTemplate.deleteMany();
   clock = new Date(); versionId = await publish();
 });
-afterAll(async () => { await db.$disconnect(); rmSync(directory, { recursive: true, force: true }); });
+afterAll(() => postgres.dispose(), 30000);
 async function completeReadiness(ref: string, user = candidate) {
   await act(ref, "ENROLL", {}, user, true);
   const run = async (operation: string, extra = {}) => act(ref, operation, extra, user, true);
@@ -329,8 +326,8 @@ describe("Nice Jobs daily lead work and follow-ups", () => {
     await expect(leads.mutate(candidate, input("NOTE", { leadId: f.id, revision: 2, notes: "Private", visibility: "MANAGEMENT" }))).rejects.toThrow();
   });
   it("rolls back all lead, workflow, ownership and notification writes when audit persistence fails", async () => {
-    const a = await activate(), p = await leadPolicy(), sql = new DatabaseSync(file); sql.exec("CREATE TRIGGER fail_lead_audit BEFORE INSERT ON AuditEvent WHEN NEW.action = 'nicejobs.lead.create' BEGIN SELECT RAISE(ABORT, 'Fixture failure'); END;"); sql.close();
-    try { await expect(leads.mutate(manager, input("CREATE", { policyId: p.id, name: "Rollback", phone: "+919000000005", source: "MANUAL", workerAssignmentId: a.assignmentId }))).rejects.toThrow(); expect(await db.niceJobsLead.count()).toBe(0); expect(await db.niceJobsLeadAssignment.count()).toBe(0); expect(await db.workflowInstance.count()).toBe(0); } finally { const clean = new DatabaseSync(file); clean.exec("DROP TRIGGER fail_lead_audit"); clean.close(); }
+    const a = await activate(), p = await leadPolicy(), restore = await postgres.rejectInsert("AuditEvent", "nicejobs.lead.create");
+    try { await expect(leads.mutate(manager, input("CREATE", { policyId: p.id, name: "Rollback", phone: "+919000000005", source: "MANUAL", workerAssignmentId: a.assignmentId }))).rejects.toThrow(); expect(await db.niceJobsLead.count()).toBe(0); expect(await db.niceJobsLeadAssignment.count()).toBe(0); expect(await db.workflowInstance.count()).toBe(0); } finally { await restore(); }
   });
   it("provides a bounded no-write import preview with in-batch and stored duplicates", async () => {
     const f = await leadFixture(), r = await leads.previewImport(manager, { policyId: f.policyId, records: [{ name: "Import one", phone: "+919000000001", source: "IMPORT" }, { name: "Import two", phone: "+919000000001", source: "IMPORT" }] });
@@ -338,9 +335,9 @@ describe("Nice Jobs daily lead work and follow-ups", () => {
     await expect(leads.previewImport(outsider, { policyId: f.policyId, records: [] })).rejects.toThrow(); expect((await leads.communicationIntent(candidate, f.id)).providerExecution).toBe(false);
   });
   it("rolls back lead creation and assignment when recipient notification persistence fails", async () => {
-    const a = await activate(), p = await leadPolicy(), sql = new DatabaseSync(file); sql.exec("CREATE TRIGGER fail_lead_notice BEFORE INSERT ON Notification WHEN NEW.type = 'NICE_JOBS_LEAD' BEGIN SELECT RAISE(ABORT, 'Fixture failure'); END;"); sql.close();
+    const a = await activate(), p = await leadPolicy(), restore = await postgres.rejectInsert("Notification", "NICE_JOBS_LEAD");
     try { await expect(leads.mutate(manager, input("CREATE", { policyId: p.id, name: "Notification rollback", phone: "+919000000006", source: "MANUAL", workerAssignmentId: a.assignmentId }))).rejects.toThrow(); expect(await db.niceJobsLead.count()).toBe(0); expect(await db.niceJobsLeadAssignment.count()).toBe(0); expect(await db.workflowInstance.count()).toBe(0); }
-    finally { const clean = new DatabaseSync(file); clean.exec("DROP TRIGGER fail_lead_notice"); clean.close(); }
+    finally { await restore(); }
   });
   it("filters and paginates an isolated 2000-lead fixture without N+1 queries or unbounded histories", async () => {
     const f = await leadFixture(), base = await db.niceJobsLead.findUniqueOrThrow({ where: { id: f.id } });

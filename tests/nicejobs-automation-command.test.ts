@@ -1,9 +1,5 @@
 import { beforeAll, afterAll, describe, it, expect } from "vitest";
-import { PrismaClient } from "@prisma/client";
-import { DatabaseSync } from "node:sqlite";
-import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { createPostgresFixture } from "./helpers/postgres-fixture";
 import { initializeGroupStructure } from "@/server/group/structure";
 import { workforcePermissions } from "@/server/authorization/registry";
 import { createNiceJobsAutomationControl } from "@/server/nicejobs/automation-control";
@@ -15,9 +11,8 @@ import { createNiceJobsControlPanel } from "@/server/nicejobs/control-panel";
 import { createSiaService } from "@/server/sia/service";
 import { deterministicProvider } from "@/server/sia/provider";
 
-const directory = mkdtempSync(join(tmpdir(), "nicejobs-phase10-"));
-const file = join(directory, "test.db");
-const db = new PrismaClient({ datasourceUrl: "file:" + file.replaceAll("\\", "/") });
+const postgres = createPostgresFixture();
+const db = postgres.db;
 const now = new Date("2026-10-09T12:00:00Z");
 const automation = createNiceJobsAutomationControl(db, () => now);
 const command = createWorkforceCommandCenter(db, () => now);
@@ -32,9 +27,7 @@ async function human(org: string, keys: string[], descendants = false) {
   return user.id;
 }
 beforeAll(async () => {
-  const sql = new DatabaseSync(file);
-  for (const folder of readdirSync("prisma/migrations").filter(f => /^\d/.test(f)).sort()) sql.exec(readFileSync(join("prisma/migrations", folder, "migration.sql"), "utf8"));
-  sql.close();
+  await postgres.initialize();
   await db.$transaction(initializeGroupStructure);
   for (const p of workforcePermissions) await db.permission.upsert({ where: { key: p.key }, update: {}, create: p });
   await db.permission.upsert({ where: { key: "organization.read" }, update: {}, create: { key: "organization.read", name: "Read organization", scope: "GROUP" } });
@@ -44,8 +37,8 @@ beforeAll(async () => {
   manager = await human(company, all, true);
   reviewer = await human(division, all);
   outsider = await human((await db.organization.findUniqueOrThrow({ where: { slug: "pearn" } })).id, all, true);
-}, 30000);
-afterAll(async () => { await db.$disconnect(); rmSync(directory, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 }); });
+}, 120000);
+afterAll(() => postgres.dispose(), 30000);
 
 async function draft() {
   const input = { operation: "DRAFT", idempotencyKey: crypto.randomUUID(), reason: "Isolated workflow fixture", definition: { organizationId: division, name: "Overdue work review", description: "Internal notification only", enabled: false, trigger: "TASK_OVERDUE", action: "NOTIFY_OWNER", condition: { minimumAgeMinutes: 0, recipientUserId: reviewer } } };
@@ -95,29 +88,14 @@ describe("Nice Jobs Phase 10 automation and command control", () => {
     expect((await panel.assistance(boss, { divisionId: division })).state).toBe("NOT_AUTHORIZED");
     await db.siaTool.update({ where: { siaId_key: { siaId: identity.id, key: "get_workforce_command" } }, data: { enabled: false } });
   });
-  it("upgrades populated legacy rule/run rows without rebuilding their tables", async () => {
-    const upgradeFile = join(directory, "upgrade.db");
-    const folders = readdirSync("prisma/migrations").filter(f => /^\d/.test(f)).sort();
-    const phase10 = folders.indexOf("20261009122905_nicejobs_automation_command");
-    expect(phase10).toBeGreaterThan(0);
-    const sql = new DatabaseSync(upgradeFile);
-    for (const folder of folders.slice(0, phase10)) sql.exec(readFileSync(join("prisma/migrations", folder, "migration.sql"), "utf8"));
-    sql.close();
-    const legacy = new PrismaClient({ datasourceUrl: "file:" + upgradeFile.replaceAll("\\", "/") });
-    await legacy.$transaction(initializeGroupStructure);
-    const org = await legacy.organization.findUniqueOrThrow({ where: { slug: "aira-skill-city" } });
-    const person = await legacy.person.create({ data: { displayName: "Upgrade fixture actor" } });
-    const user = await legacy.user.create({ data: { email: "upgrade@phase10.invalid", personId: person.id }, select: { id: true } });
-    await legacy.$disconnect();
-    const upgraded = new DatabaseSync(upgradeFile);
-    upgraded.exec(`INSERT INTO AutomationRule (id,organizationId,ownerUserId,ownerPersonId,name,trigger,action,condition,updatedAt) VALUES ('legacy-rule','${org.id}','${user.id}','${person.id}','Legacy rule','TASK_OVERDUE','NOTIFY_OWNER','{}',CURRENT_TIMESTAMP)`);
-    upgraded.exec("INSERT INTO AutomationRun (id,ruleId,reference,fingerprint,status) VALUES ('legacy-run','legacy-rule','legacy-reference','legacy-fingerprint','SUCCEEDED')");
-    for (const folder of folders.slice(phase10)) upgraded.exec(readFileSync(join("prisma/migrations", folder, "migration.sql"), "utf8"));
-    expect(upgraded.prepare("SELECT name,lifecycle FROM AutomationRule WHERE id='legacy-rule'").get()).toMatchObject({ name: "Legacy rule", lifecycle: "LEGACY" });
-    expect(upgraded.prepare("SELECT reference,fingerprint FROM AutomationRun WHERE id='legacy-run'").get()).toMatchObject({ reference: "legacy-reference", fingerprint: "legacy-fingerprint" });
-    expect(upgraded.prepare("PRAGMA integrity_check").get()?.integrity_check).toBe("ok");
-    expect(upgraded.prepare("PRAGMA foreign_key_check").all()).toEqual([]);
-    upgraded.close();
+  it("represents legacy automation rows in the PostgreSQL baseline without losing references", async () => {
+    const person = await db.person.create({ data: { displayName: "Legacy fixture actor" } });
+    const user = await db.user.create({ data: { email: "legacy@phase10.invalid", personId: person.id } });
+    const rule = await db.automationRule.create({ data: { id: "legacy-rule", organizationId: company, ownerUserId: user.id, ownerPersonId: person.id, name: "Legacy rule", trigger: "TASK_OVERDUE", action: "NOTIFY_OWNER", condition: "{}" } });
+    const run = await db.automationRun.create({ data: { id: "legacy-run", ruleId: rule.id, reference: "legacy-reference", fingerprint: "legacy-fingerprint", status: "SUCCEEDED" } });
+    expect(await db.automationRule.findUniqueOrThrow({ where: { id: rule.id }, select: { name: true, lifecycle: true } })).toMatchObject({ name: "Legacy rule", lifecycle: "LEGACY" });
+    expect(await db.automationRun.findUniqueOrThrow({ where: { id: run.id }, select: { reference: true, fingerprint: true } })).toMatchObject({ reference: "legacy-reference", fingerprint: "legacy-fingerprint" });
+    await postgres.assertIntegrity();
   });
   it("deduplicates drafts, validates the trigger/action pair, and rejects another company", async () => {
     const { row, input } = await draft();

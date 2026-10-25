@@ -4,11 +4,8 @@ import { performanceCommand, metricDefinition, type MetricDefinition } from "@/s
 import { createPerformanceService } from "@/server/nicejobs/performance";
 import { calculateMetric, metricTrend } from "@/server/nicejobs/performance-evidence";
 import { createAccessContext } from "@/server/authorization/engine";
-import { PrismaClient } from "@prisma/client";
-import { DatabaseSync } from "node:sqlite";
-import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import type { PrismaClient } from "@prisma/client";
+import { createPostgresFixture } from "./helpers/postgres-fixture";
 import { initializeGroupStructure } from "@/server/group/structure";
 import { workforcePermissions } from "@/server/authorization/registry";
 import { createNiceJobsService } from "@/server/nicejobs/service";
@@ -22,10 +19,10 @@ import { createLeadService } from "@/server/nicejobs/leads";
 import { workerQuestion } from "@/server/sia/worker-context";
 import { createSiaService } from "@/server/sia/service";
 
-const directory = mkdtempSync(join(tmpdir(), "nicejobs-phase08-")), file = join(directory, "test.db");
-const db = new PrismaClient({ datasourceUrl: "file:" + file.replaceAll("\\", "/"), log: [{ level: "query", emit: "event" }] });
+const postgres = createPostgresFixture({ log: [{ level: "query", emit: "event" }] });
+const db = postgres.db;
 let capturedQueries: string[] | null = null;
-db.$on("query", e => { capturedQueries?.push(e.query); });
+(db as PrismaClient<{ log: [{ emit: "event"; level: "query" }] }>).$on("query", e => { capturedQueries?.push(e.query); });
 const leads = createLeadService(db, () => clock);
 const performance = createPerformanceService(db, () => clock);
 const knowledge = createKnowledgeService(db, () => clock);
@@ -75,7 +72,7 @@ async function reviewed(ref: string, key: string, outcome: string, feedback = "R
   return act(ref, "REVIEW", { submissionId: s.id, outcome, feedback }, mentor, false);
 }
 beforeAll(async () => {
-  const sql = new DatabaseSync(file); for (const folder of readdirSync("prisma/migrations").filter(f => /^\d/.test(f)).sort()) sql.exec(readFileSync(join("prisma/migrations", folder, "migration.sql"), "utf8")); sql.close();
+  await postgres.initialize();
   await db.$transaction(initializeGroupStructure);
   for (const p of workforcePermissions) await db.permission.upsert({ where: { key: p.key }, update: {}, create: p });
   await db.permission.upsert({ where: { key: "notification.manage" }, update: {}, create: { key: "notification.manage", name: "Explicit notification management", scope: "GROUP" } });
@@ -93,7 +90,7 @@ beforeAll(async () => {
     await db.membership.create({ data: { personId: user.personId!, organizationId: labs, roles: { create: { roleId: role.id } } } });
   }
   controlId = (await operations.saveControl(manager, { organizationId: labs, name: "Fixture independent approval", kind: "HUMAN_DECISION", requiredPermission: "nicejobs.management.approve", stages: [[{ approverUserId: approver, requiredPermission: "nicejobs.management.approve" }]] })).id;
-}, 30000);
+}, 120000);
 beforeEach(async () => {
   await db.niceJobsPipReview.deleteMany(); await db.niceJobsPip.deleteMany(); await db.niceJobsPerformanceAttention.deleteMany(); await db.niceJobsPerformanceReview.deleteMany(); await db.niceJobsPerformanceSnapshot.updateMany({data:{supersedesId:null}}); await db.niceJobsPerformanceSnapshot.deleteMany(); await db.niceJobsPerformanceVersion.deleteMany(); await db.niceJobsPerformanceFramework.deleteMany();
   await db.niceJobsKnowledgeReceipt.deleteMany(); await db.niceJobsKnowledgeWorkLink.deleteMany(); await db.niceJobsSopStep.deleteMany(); await db.niceJobsKnowledgeVersion.updateMany({data:{relatedVersionId:null}}); await db.niceJobsKnowledgeVersion.deleteMany(); await db.niceJobsKnowledge.deleteMany(); await db.communicationTemplate.deleteMany();
@@ -109,7 +106,7 @@ beforeEach(async () => {
   await db.niceJobsTemplate.updateMany({ data: { publishedVersionId: null } }); await db.niceJobsVersionArea.deleteMany(); await db.niceJobsVersion.deleteMany(); await db.niceJobsTemplate.deleteMany();
   clock = new Date(); versionId = await publish();
 });
-afterAll(async () => { await db.$disconnect(); rmSync(directory, { recursive: true, force: true }); });
+afterAll(() => postgres.dispose(), 30000);
 async function ready(user = candidate) {
   const ref = await accepted(user);
   await act(ref, "ENROLL", {}, user, true);

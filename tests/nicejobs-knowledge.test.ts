@@ -2,9 +2,9 @@ import { beforeAll, beforeEach, afterAll, describe, it, expect } from "vitest";
 import { createKnowledgeService } from "@/server/nicejobs/knowledge";
 import { knowledgeCommand } from "@/server/nicejobs/knowledge-input";
 import { createAccessContext } from "@/server/authorization/engine";
-import { PrismaClient } from "@prisma/client";
-import { DatabaseSync } from "node:sqlite";
-import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import type { PrismaClient } from "@prisma/client";
+import { createPostgresFixture } from "./helpers/postgres-fixture";
+import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { initializeGroupStructure } from "@/server/group/structure";
@@ -23,10 +23,11 @@ import { createContentFiles } from "@/server/nicejobs/content-files";
 import { privateContentStorage } from "@/server/nicejobs/content-storage";
 import { unavailableAttachments } from "@/server/communications/providers";
 
-const directory = mkdtempSync(join(tmpdir(), "nicejobs-phase07-")), file = join(directory, "test.db");
-const db = new PrismaClient({ datasourceUrl: "file:" + file.replaceAll("\\", "/"), log: [{ level: "query", emit: "event" }] });
+const directory = mkdtempSync(join(tmpdir(), "nicejobs-phase07-"));
+const postgres = createPostgresFixture({ log: [{ level: "query", emit: "event" }] });
+const db = postgres.db;
 let capturedQueries: string[] | null = null;
-db.$on("query", e => { capturedQueries?.push(e.query); });
+(db as PrismaClient<{ log: [{ emit: "event"; level: "query" }] }>).$on("query", e => { capturedQueries?.push(e.query); });
 const leads = createLeadService(db, () => clock);
 const knowledge = createKnowledgeService(db, () => clock);
 const employee = createEmployeeService(db, () => clock), sia = createSiaService(db);
@@ -75,7 +76,7 @@ async function reviewed(ref: string, key: string, outcome: string, feedback = "R
   return act(ref, "REVIEW", { submissionId: s.id, outcome, feedback }, mentor, false);
 }
 beforeAll(async () => {
-  const sql = new DatabaseSync(file); for (const folder of readdirSync("prisma/migrations").filter(f => /^\d/.test(f)).sort()) sql.exec(readFileSync(join("prisma/migrations", folder, "migration.sql"), "utf8")); sql.close();
+  await postgres.initialize();
   await db.$transaction(initializeGroupStructure);
   for (const p of workforcePermissions) await db.permission.upsert({ where: { key: p.key }, update: {}, create: p });
   await db.permission.upsert({ where: { key: "notification.manage" }, update: {}, create: { key: "notification.manage", name: "Explicit notification management", scope: "GROUP" } });
@@ -93,7 +94,7 @@ beforeAll(async () => {
     await db.membership.create({ data: { personId: user.personId!, organizationId: labs, roles: { create: { roleId: role.id } } } });
   }
   controlId = (await operations.saveControl(manager, { organizationId: labs, name: "Fixture independent approval", kind: "HUMAN_DECISION", requiredPermission: "nicejobs.management.approve", stages: [[{ approverUserId: approver, requiredPermission: "nicejobs.management.approve" }]] })).id;
-}, 30000);
+}, 120000);
 beforeEach(async () => {
   await db.niceJobsKnowledgeReceipt.deleteMany(); await db.niceJobsKnowledgeWorkLink.deleteMany(); await db.niceJobsSopStep.deleteMany(); await db.niceJobsKnowledgeVersion.updateMany({data:{relatedVersionId:null}}); await db.niceJobsKnowledgeVersion.deleteMany(); await db.niceJobsKnowledge.deleteMany(); await db.communicationTemplate.deleteMany();
   await db.siaApproval.deleteMany({ where: { request: { resourceType: "NICE_JOBS_LEAD" } } });
@@ -108,7 +109,7 @@ beforeEach(async () => {
   await db.niceJobsTemplate.updateMany({ data: { publishedVersionId: null } }); await db.niceJobsVersionArea.deleteMany(); await db.niceJobsVersion.deleteMany(); await db.niceJobsTemplate.deleteMany();
   clock = new Date(); versionId = await publish();
 });
-afterAll(async () => { await db.$disconnect(); rmSync(directory, { recursive: true, force: true }); });
+afterAll(async () => { await postgres.dispose(); rmSync(directory, { recursive: true, force: true }); }, 30000);
 async function ready(user = candidate) {
   const ref = await accepted(user);
   await act(ref, "ENROLL", {}, user, true);

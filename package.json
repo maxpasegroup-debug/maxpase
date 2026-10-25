@@ -13,9 +13,7 @@
     "prisma:generate": "prisma generate",
     "prisma:validate": "prisma validate",
     "prisma:migrate": "prisma migrate dev",
-    "validate:migrations": "tsx scripts/validate-migrations.ts",
-    "backup:sqlite": "tsx scripts/backup-sqlite.ts",
-    "benchmark:local": "tsx scripts/benchmark-local.ts",
+    "validate:migrations": "tsx scripts/validate-postgres-migrations.ts",
     "seed": "tsx prisma/seed.ts"
   },
   "dependencies": {

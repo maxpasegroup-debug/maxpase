@@ -1,9 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { DatabaseSync } from "node:sqlite";
-import { mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { PrismaClient } from "@prisma/client";
+import { createPostgresFixture } from "./helpers/postgres-fixture";
 import { businessService, createBusinessService } from "@/server/domain/business-service";
 import { createWorkforceService } from "@/server/domain/workforce-service";
 import { createExecutionService } from "@/server/domain/execution-service";
@@ -15,9 +11,8 @@ import { saveBusinessAction } from "@/app/app/business/actions";
 const session = vi.hoisted(() => ({ userId: "" }));
 vi.mock("@/server/auth/guards", () => ({ requireSession: async () => session }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
-const directory = mkdtempSync(join(tmpdir(), "maxpase-remediation-01-"));
-const file = join(directory, "test.db");
-const db = new PrismaClient({ datasourceUrl: "file:" + file.replaceAll("\\", "/") });
+const postgres = createPostgresFixture();
+const db = postgres.db;
 const business = createBusinessService(db), workforce = createWorkforceService(db);
 const execution = createExecutionService(db), executive = createExecutiveService(db), aira = createAiraService(db);
 let company: string, other: string, division: string, sibling: string;
@@ -46,10 +41,8 @@ async function program(organizationId: string, companyOrganizationId = company) 
   return { p, b };
 }
 beforeAll(async () => {
-  const sql = new DatabaseSync(file);
-  for (const migration of readdirSync("prisma/migrations").filter(f => /^\d/.test(f)).sort()) sql.exec(readFileSync(`prisma/migrations/${migration}/migration.sql`, "utf8"));
-  expect(sql.prepare("PRAGMA foreign_key_check").all()).toEqual([]);
-  sql.close();
+  await postgres.initialize();
+  await postgres.assertIntegrity();
   const root = await db.organization.create({ data: { name: "MAXPASE GROUP", slug: "maxpase-group", type: "GROUP", group: { create: { name: "MAXPASE GROUP" } } }, include: { group: true } });
   company = (await db.organization.create({ data: { name: "AIRA Skill City", slug: "aira-skill-city", type: "COMPANY", parentId: root.id, company: { create: { displayName: "AIRA Skill City", groupId: root.group!.id } } } })).id;
   other = (await db.organization.create({ data: { name: "Other company", slug: unique(), type: "COMPANY", parentId: root.id, company: { create: { displayName: "Other company", groupId: root.group!.id } } } })).id;
@@ -60,8 +53,7 @@ beforeAll(async () => {
 });
 afterAll(async () => {
   vi.restoreAllMocks();
-  await db.$disconnect();
-  rmSync(directory, { recursive: true, force: true });
+  await postgres.dispose();
 });
 
 describe("Wave 01 Person mutation boundary", () => {

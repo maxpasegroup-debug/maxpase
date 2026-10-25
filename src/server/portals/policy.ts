@@ -34,6 +34,14 @@ export async function requirePortalAccess(db: Prisma.TransactionClient, userId: 
   const scope = { organizationId: division.id };
   const ctx = await createAccessContext(userId, db, undefined, scope);
   await ctx.requireAccess("organization.read", scope);
+  if (id === "labs") {
+    const user = await db.user.findUnique({ where: { id: userId }, select: { personId: true, emailVerifiedAt: true, person: { select: { metadata: true } } } });
+    const metadata = JSON.parse(user?.person?.metadata ?? "{}");
+    if (metadata.credentialKind === "STAFF_PASSWORD") {
+      if (accountPortalRealm(user?.person?.metadata) !== "labs" || !user?.emailVerifiedAt || !user.personId ||
+        !(await db.membership.findFirst({ where: { personId: user.personId, organizationId: division.id, status: "ACTIVE", roles: { some: { role: { status: "ACTIVE", principalType: "HUMAN", key: { in: ["labs-full-stack-developer", "labs-junior-developer", "labs-business-development-manager"] } } } } } }))) throw new AccessError("Verified Labs employee appointment required");
+    }
+  }
   if (id === "labs" && !credentialSetup) {
     const user = await db.user.findUnique({ where: { id: userId }, select: { person: { select: { metadata: true } } } });
     if (JSON.parse(user?.person?.metadata ?? "{}").labsPinChangeRequired === true) throw new AccessError("Change the initial PIN before entering the workspace");

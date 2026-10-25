@@ -1,10 +1,9 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { DatabaseSync } from "node:sqlite";
-import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { PrismaClient } from "@prisma/client";
+import { createPostgresFixture } from "./helpers/postgres-fixture";
 import { decodeJwt, SignJWT } from "jose";
 import { createAuthenticationService } from "@/server/auth/service";
 import { hashPassword, verifyPassword } from "@/server/auth/password";
@@ -12,35 +11,35 @@ import { validateRuntimeEnvironment } from "@/server/config";
 import { createSecurityLimiter, securityKey } from "@/server/security/rate-limit";
 import { validateActionOrigin } from "@/server/security/origin";
 
-const directory = mkdtempSync(join(tmpdir(), "maxpase-hardening-")), path = join(directory, "test.db");
-const db = new PrismaClient({ datasourceUrl: "file:" + path.replaceAll("\\", "/") });
+const directory = mkdtempSync(join(tmpdir(), "maxpase-hardening-"));
+const postgres = createPostgresFixture();
+const db = postgres.db;
 const secret = "test-only-signing-secret-for-regression-32", password = "Test-auth-password-123!";
 let time = new Date(), userId: string, personId: string;
 const auth = createAuthenticationService(db, () => time);
 beforeAll(async () => {
-  const sql = new DatabaseSync(path);
-  for (const folder of readdirSync("prisma/migrations").filter(f => /^\d/.test(f)).sort()) sql.exec(readFileSync(join("prisma/migrations", folder, "migration.sql"), "utf8"));
-  expect(sql.prepare("PRAGMA integrity_check").get()).toEqual({ integrity_check: "ok" });
-  expect(sql.prepare("PRAGMA foreign_key_check").all()).toEqual([]); sql.close();
+  await postgres.initialize();
   const person = await db.person.create({ data: { displayName: "Auth regression" } }); personId = person.id;
   userId = (await db.user.create({ data: { personId, email: "auth@test.invalid", passwordHash: await hashPassword(password) } })).id;
-});
+}, 120000);
 beforeEach(async () => {
   time = new Date();
   await db.securityRateBucket.deleteMany(); await db.session.deleteMany();
   await db.user.update({ where: { id: userId }, data: { status: "ACTIVE" } });
   await db.person.update({ where: { id: personId }, data: { status: "ACTIVE" } });
 });
-afterAll(async () => { await db.$disconnect(); rmSync(directory, { recursive: true, force: true }); });
+afterAll(async () => { try { await postgres.dispose(); } finally { rmSync(directory, { recursive: true, force: true }); } }, 30000);
 
 describe("production configuration and origin boundaries", () => {
   it("rejects missing, example and insecure production configuration without revealing values", () => {
+    const databaseUrl = "postgresql://synthetic:synthetic@127.0.0.1:5432/synthetic?schema=public";
     for (const env of [{}, { DATABASE_URL: "file:/persistent/db", AUTH_SECRET: "dev-only-maxpase-phase-01-secret-key" }, { DATABASE_URL: "file:/persistent/db", AUTH_SECRET: secret, AUTH_COOKIE_SECURE: "false" }]) {
       expect(() => validateRuntimeEnvironment({ ...env, NODE_ENV: "production" })).toThrow("not securely configured");
     }
-    expect(validateRuntimeEnvironment({ NODE_ENV: "production", DATABASE_URL: "file:/persistent/db", AUTH_SECRET: secret, APP_ORIGIN: "https://maxpase.test" }).AUTH_COOKIE_SECURE).toBe(true);
-    for (const patch of [{ APP_ORIGIN: "http://maxpase.test" }, { DATABASE_URL: "file:./dev.db" }, { DEV_BOOTSTRAP_PASSWORD: "must-not-deploy" }]) expect(() => validateRuntimeEnvironment({ NODE_ENV: "production", DATABASE_URL: "file:/persistent/db", AUTH_SECRET: secret, APP_ORIGIN: "https://maxpase.test", ...patch })).toThrow("not securely configured");
-    expect(validateRuntimeEnvironment({ NODE_ENV: "test" }).AUTH_COOKIE_SECURE).toBe(false);
+    expect(validateRuntimeEnvironment({ NODE_ENV: "production", DATABASE_URL: databaseUrl, AUTH_SECRET: secret, APP_ORIGIN: "https://maxpase.test" }).AUTH_COOKIE_SECURE).toBe(true);
+    for (const patch of [{ APP_ORIGIN: "http://maxpase.test" }, { DEV_BOOTSTRAP_PASSWORD: "must-not-deploy" }]) expect(() => validateRuntimeEnvironment({ NODE_ENV: "production", DATABASE_URL: databaseUrl, AUTH_SECRET: secret, APP_ORIGIN: "https://maxpase.test", ...patch })).toThrow("not securely configured");
+    expect(() => validateRuntimeEnvironment({ NODE_ENV: "production", DATABASE_URL: "file:./dev.db", AUTH_SECRET: secret, APP_ORIGIN: "https://maxpase.test" })).toThrow("PostgreSQL database environment is not configured");
+    expect(validateRuntimeEnvironment({ NODE_ENV: "test", DATABASE_URL: databaseUrl }).AUTH_COOKIE_SECURE).toBe(false);
   });
   it("enforces exact canonical origin and does not borrow spoofed host authority", () => {
     expect(() => validateActionOrigin("https://maxpase.test", "maxpase.test", "https://maxpase.test")).not.toThrow();

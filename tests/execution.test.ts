@@ -1,17 +1,12 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { DatabaseSync } from "node:sqlite";
-import { mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
-import { join } from "node:path";
-import { tmpdir } from "node:os";
-import { PrismaClient } from "@prisma/client";
+import { createPostgresFixture } from "./helpers/postgres-fixture";
 import { createExecutionService, completionProgress } from "@/server/domain/execution-service";
 import { createWorkforceService } from "@/server/domain/workforce-service";
 import { createBusinessService } from "@/server/domain/business-service";
 import { workforcePermissions } from "@/server/authorization/registry";
 
-const dir = mkdtempSync(join(tmpdir(), "maxpase-phase04-"));
-const path = join(dir, "test.db");
-const db = new PrismaClient({ datasourceUrl: "file:" + path.replaceAll("\\", "/") });
+const postgres = createPostgresFixture();
+const db = postgres.db;
 const execution = createExecutionService(db);
 const workforce = createWorkforceService(db);
 const business = createBusinessService(db);
@@ -21,11 +16,8 @@ const name = () => "Execution " + ++count;
 const project = (organizationId = a, status = "ACTIVE") => execution.save(admin, "projects", { organizationId, name: name(), slug: "test-" + count, status });
 const task = (projectId?: string, extra: Record<string, unknown> = {}) => execution.save(admin, "tasks", { organizationId: a, projectId, title: name(), ...extra });
 beforeAll(async () => {
-  const sql = new DatabaseSync(path);
-  for (const migration of readdirSync("prisma/migrations").filter(f => /^\d/.test(f)).sort()) sql.exec(readFileSync(`prisma/migrations/${migration}/migration.sql`, "utf8"));
-  expect(sql.prepare("PRAGMA foreign_key_check").all()).toEqual([]);
-  expect(sql.prepare("PRAGMA integrity_check").get()).toEqual({ integrity_check: "ok" });
-  sql.close();
+  await postgres.initialize();
+  await postgres.assertIntegrity();
   const root = await db.organization.create({ data: { name: "Test group", slug: "execution-group", type: "GROUP" } });
   a = (await db.organization.create({ data: { name: "Test A", slug: "execution-a", type: "COMPANY", parentId: root.id } })).id;
   b = (await db.organization.create({ data: { name: "Test B", slug: "execution-b", type: "COMPANY", parentId: root.id } })).id;
@@ -45,8 +37,8 @@ beforeAll(async () => {
   projectOnly = (await project()).id;
   projectUser = await actor(a, "execution-project@test.invalid", ["project.read", "task.read", "task.manage", "milestone.read", "milestone.manage", "goal.read", "goal.manage", "goal.progress", "dependency.read", "dependency.manage", "blocker.read", "blocker.manage", "responsibility.read", "responsibility.manage", "person.read", "membership.read"], projectOnly);
   human = (await db.person.create({ data: { displayName: "Execution human without login", memberships: { create: { organizationId: a } } } })).id;
-}, 30000);
-afterAll(async () => { await db.$disconnect(); rmSync(dir, { recursive: true, force: true }); });
+}, 120000);
+afterAll(() => postgres.dispose(), 30000);
 
 describe("Phase 04 execution domain", () => {
   it("creates, reads, updates and archives projects without granting owner permissions", async () => {
@@ -248,17 +240,13 @@ describe("Phase 04 execution domain", () => {
     await expect(execution.save(projectUser, "tasks", { organizationId: a, projectId: p.id, title: "Closed write" })).rejects.toThrow("reopened");
     await expect(execution.save(projectUser, "projects", { organizationId: a, name: "Reopen denied", slug: "closed-access", status: "ACTIVE", reopen: true }, p.id)).rejects.toThrow("Access denied");
   });
-  it("normalizes historical execution states without losing row IDs or foreign keys", () => {
-    const legacy = new DatabaseSync(join(dir, "legacy.db"));
-    try {
-      const migrations = readdirSync("prisma/migrations").filter(f => /^\d/.test(f) && f <= "20261002160000_phase_04_execution").sort();
-      for (const migration of migrations.slice(0, -1)) legacy.exec(readFileSync(`prisma/migrations/${migration}/migration.sql`, "utf8"));
-      legacy.exec("INSERT INTO Organization(id,type,name,slug,updatedAt) VALUES('legacy-org','COMPANY','Legacy','legacy',CURRENT_TIMESTAMP); INSERT INTO Project(id,organizationId,name,slug,status,updatedAt) VALUES('legacy-project','legacy-org','Legacy project','legacy-project','INACTIVE',CURRENT_TIMESTAMP); INSERT INTO Goal(id,organizationId,projectId,title,status,progress,updatedAt) VALUES('legacy-goal','legacy-org','legacy-project','Legacy goal','CANCELED',25,CURRENT_TIMESTAMP); INSERT INTO Task(id,organizationId,projectId,goalId,title,status,updatedAt) VALUES('legacy-task','legacy-org','legacy-project','legacy-goal','Legacy task','DONE',CURRENT_TIMESTAMP);");
-      legacy.exec(readFileSync(`prisma/migrations/${migrations.at(-1)}/migration.sql`, "utf8"));
-      expect(legacy.prepare("SELECT id,status FROM Project").get()).toEqual({ id: "legacy-project", status: "PAUSED" });
-      expect(legacy.prepare("SELECT id,status,progress FROM Goal").get()).toEqual({ id: "legacy-goal", status: "CANCELLED", progress: 25 });
-      expect(legacy.prepare("SELECT id,status,goalId,completionDate IS NOT NULL AS completed FROM Task").get()).toEqual({ id: "legacy-task", status: "COMPLETED", goalId: "legacy-goal", completed: 1 });
-      expect(legacy.prepare("PRAGMA foreign_key_check").all()).toEqual([]);
-    } finally { legacy.close(); }
+  it("stores canonical execution states with stable IDs and foreign keys in PostgreSQL", async () => {
+    const p = await db.project.create({ data: { id: "canonical-project", organizationId: a, name: "Canonical project", slug: "canonical-project", status: "PAUSED" } });
+    const g = await db.goal.create({ data: { id: "canonical-goal", organizationId: a, projectId: p.id, title: "Canonical goal", status: "CANCELLED", progress: 25 } });
+    const t = await db.task.create({ data: { id: "canonical-task", organizationId: a, projectId: p.id, goalId: g.id, title: "Canonical task", status: "COMPLETED", completionDate: new Date() } });
+    expect(await db.project.findUniqueOrThrow({ where: { id: p.id }, select: { id: true, status: true } })).toEqual({ id: "canonical-project", status: "PAUSED" });
+    expect(await db.goal.findUniqueOrThrow({ where: { id: g.id }, select: { id: true, status: true, progress: true } })).toEqual({ id: "canonical-goal", status: "CANCELLED", progress: 25 });
+    expect(await db.task.findUniqueOrThrow({ where: { id: t.id }, select: { id: true, status: true, goalId: true, completionDate: true } })).toMatchObject({ id: "canonical-task", status: "COMPLETED", goalId: "canonical-goal", completionDate: expect.any(Date) });
+    await postgres.assertIntegrity();
   });
 });

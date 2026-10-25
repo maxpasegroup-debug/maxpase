@@ -43,9 +43,9 @@ Seed data adds only the known AIRA SKILL CITY PRIVATE LIMITED company under MAXP
 
 ## Validation
 
-Run `npm test`, `npm run lint`, `npm run typecheck`, `npm run build`, `npx prisma validate` and `npx prisma migrate status`. Integration tests need Node 22.14 or newer for node:sqlite and use a temporary database.
+The active Prisma datasource is PostgreSQL. Set a private `DATABASE_URL` for application commands. Run `npm test`, `npm run lint`, `npm run typecheck`, `npm run build`, `npm run prisma:validate` and `npm run prisma:generate`. `npm run validate:migrations` requires a separately verified local `maxpase_ci` PostgreSQL database via `TEST_DATABASE_URL` and `MAXPASE_CI_DATABASE_CONFIRMED=true`; it refuses a populated or non-local target. The 31 former SQLite migrations are archived in `prisma/sqlite-migrations-archive` and must never be deployed to PostgreSQL. See [the migration runbook](docs/architecture/MIGRATION_RUNBOOK.md) before release. All database test files have PostgreSQL fixtures, but PostgreSQL integration and backup/restore remain unverified; auxiliary scripts still have SQLite dependencies, so launch remains blocked.
 
-The existing Phase 01 SQL database was verified before recording its migration baseline. See [migration and validation evidence](docs/architecture/PHASE_02_VALIDATION.md) before repairing any other untracked installation. Never reset a database to hide drift. If Prisma cannot create a fresh SQLite file on Windows, initialize an empty file using SQLite and retry deploy; do not mark an unapplied migration as applied.
+Historical SQLite evidence remains in [Phase 02 validation](docs/architecture/PHASE_02_VALIDATION.md). It does not validate the PostgreSQL baseline. Never reset a database or mark a migration applied to hide drift.
 
 See [business graph](docs/architecture/BUSINESS_GRAPH.md) for relationship, authorization and audit semantics. Production rollout and visual browser validation require their own environment.
 

@@ -283,15 +283,15 @@ export function createFinanceService(client: PrismaClient = prisma, now: () => D
     const missingCredits = await db.niceJobsIncentiveEarning.count({ where: { assignmentId: w.assignmentId, currency: w.currency, status: "POSTED", ledger: null } });
     const missingAdjustments = await db.niceJobsWalletAdjustment.count({ where: { walletId, status: "POSTED", ledger: null } });
     const missingDebits = await db.niceJobsSettlementStatement.count({ where: { walletId, status: "APPROVED", debit: null } });
-    const mismatch = await db.$queryRaw<{ n: bigint }[]>`SELECT COUNT(*) AS n FROM NiceJobsWalletLedger l
-      LEFT JOIN NiceJobsIncentiveEarning e ON e.id = l.earningId LEFT JOIN NiceJobsWalletAdjustment a ON a.id = l.adjustmentId
-      LEFT JOIN NiceJobsSettlementStatement s ON s.id = l.statementId LEFT JOIN NiceJobsWalletLedger original ON original.id = l.reversesId
-      WHERE l.walletId = ${walletId} AND ((l.type = 'CREDIT' AND (e.id IS NULL OR e.status <> 'POSTED' OR e.amountMinor <> l.amountMinor OR e.assignmentId <> ${w.assignmentId} OR e.currency <> l.currency))
-      OR (l.type IN ('ADJUSTMENT','REVERSAL') AND (a.id IS NULL OR a.status <> 'POSTED' OR a.walletId <> l.walletId OR (CASE WHEN a.direction = 'CREDIT' THEN a.amountMinor ELSE -a.amountMinor END) <> l.amountMinor))
-      OR (l.type = 'REVERSAL' AND (original.id IS NULL OR original.walletId <> l.walletId OR -original.amountMinor <> l.amountMinor))
-      OR (l.type = 'SETTLEMENT' AND (s.id IS NULL OR s.status <> 'APPROVED' OR s.walletId <> l.walletId OR -s.amountMinor <> l.amountMinor OR s.currency <> l.currency)))`;
-    const statementMismatch = await db.$queryRaw<{ n: bigint }[]>`SELECT COUNT(*) AS n FROM NiceJobsSettlementStatement s WHERE s.walletId = ${walletId} AND s.status <> 'VOIDED' AND (s.currency <> ${w.currency} OR s.amountMinor <> COALESCE((SELECT SUM(line.amountMinor) FROM NiceJobsSettlementLine line WHERE line.statementId = s.id), 0))`;
-    const payoutMismatch = await db.$queryRaw<{ n: bigint }[]>`SELECT COUNT(*) AS n FROM NiceJobsPayoutIntent p JOIN NiceJobsSettlementStatement s ON s.id = p.statementId WHERE s.walletId = ${walletId} AND (p.status <> 'PROVIDER_NOT_CONFIGURED' OR p.providerReference IS NOT NULL OR p.amountMinor <> s.amountMinor OR p.currency <> s.currency OR s.status <> 'APPROVED')`;
+    const mismatch = await db.$queryRaw<{ n: bigint }[]>`SELECT COUNT(*) AS n FROM "NiceJobsWalletLedger" l
+      LEFT JOIN "NiceJobsIncentiveEarning" e ON e."id" = l."earningId" LEFT JOIN "NiceJobsWalletAdjustment" a ON a."id" = l."adjustmentId"
+      LEFT JOIN "NiceJobsSettlementStatement" s ON s."id" = l."statementId" LEFT JOIN "NiceJobsWalletLedger" original ON original."id" = l."reversesId"
+      WHERE l."walletId" = ${walletId} AND ((l."type" = 'CREDIT' AND (e."id" IS NULL OR e."status" <> 'POSTED' OR e."amountMinor" <> l."amountMinor" OR e."assignmentId" <> ${w.assignmentId} OR e."currency" <> l."currency"))
+      OR (l."type" IN ('ADJUSTMENT','REVERSAL') AND (a."id" IS NULL OR a."status" <> 'POSTED' OR a."walletId" <> l."walletId" OR (CASE WHEN a."direction" = 'CREDIT' THEN a."amountMinor" ELSE -a."amountMinor" END) <> l."amountMinor"))
+      OR (l."type" = 'REVERSAL' AND (original."id" IS NULL OR original."walletId" <> l."walletId" OR -original."amountMinor" <> l."amountMinor"))
+      OR (l."type" = 'SETTLEMENT' AND (s."id" IS NULL OR s."status" <> 'APPROVED' OR s."walletId" <> l."walletId" OR -s."amountMinor" <> l."amountMinor" OR s."currency" <> l."currency")))`;
+    const statementMismatch = await db.$queryRaw<{ n: bigint }[]>`SELECT COUNT(*) AS n FROM "NiceJobsSettlementStatement" s WHERE s."walletId" = ${walletId} AND s."status" <> 'VOIDED' AND (s."currency" <> ${w.currency} OR s."amountMinor" <> COALESCE((SELECT SUM(line."amountMinor") FROM "NiceJobsSettlementLine" line WHERE line."statementId" = s."id"), 0))`;
+    const payoutMismatch = await db.$queryRaw<{ n: bigint }[]>`SELECT COUNT(*) AS n FROM "NiceJobsPayoutIntent" p JOIN "NiceJobsSettlementStatement" s ON s."id" = p."statementId" WHERE s."walletId" = ${walletId} AND (p."status" <> 'PROVIDER_NOT_CONFIGURED' OR p."providerReference" IS NOT NULL OR p."amountMinor" <> s."amountMinor" OR p."currency" <> s."currency" OR s."status" <> 'APPROVED')`;
     if (currencyMismatch) exceptions.push("Invalid posted entries"); if (missingCredits) exceptions.push("Posted earning without credit"); if (missingAdjustments) exceptions.push("Posted adjustment without entry"); if (missingDebits) exceptions.push("Approved statement without debit");
     if (BigInt(mismatch[0].n)) exceptions.push("Ledger source amount or state mismatch"); if (BigInt(statementMismatch[0].n)) exceptions.push("Settlement line reconciliation mismatch"); if (BigInt(payoutMismatch[0].n)) exceptions.push("Payout boundary mismatch");
     const totals = await balance(db, walletId); if (BigInt(totals.availableMinor) < 0n) exceptions.push("Negative available funds");

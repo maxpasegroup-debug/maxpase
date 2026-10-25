@@ -1,10 +1,8 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { DatabaseSync } from "node:sqlite";
-import { mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { createPostgresFixture } from "./helpers/postgres-fixture";
+import { readFileSync } from "node:fs";
 import ts from "typescript";
-import { PrismaClient } from "@prisma/client";
+import type { PrismaClient } from "@prisma/client";
 import { workforcePermissions } from "@/server/authorization/registry";
 import { createAccessContext } from "@/server/authorization/engine";
 import { createAutomationService, automationService, automationActions } from "@/server/communications/automation";
@@ -23,10 +21,10 @@ import { communicationAction } from "@/app/app/communications/actions";
 const session = vi.hoisted(() => ({ userId: "" }));
 vi.mock("@/server/auth/guards", () => ({ requireSession: async () => session }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
-const directory = mkdtempSync(join(tmpdir(), "maxpase-wave02-")), file = join(directory, "test.db");
-const db = new PrismaClient({ datasourceUrl: "file:" + file.replaceAll("\\", "/"), log: [{ emit: "event", level: "query" }] });
+const postgres = createPostgresFixture({ log: [{ emit: "event", level: "query" }] });
+const db = postgres.db;
 const queries: { query: string; params: string }[] = [];
-db.$on("query", event => queries.push({ query: event.query, params: event.params }));
+(db as PrismaClient<{ log: [{ emit: "event"; level: "query" }] }>).$on("query", event => queries.push({ query: event.query, params: event.params }));
 let sequence = 0, time = new Date(), groupId: string, rootId: string;
 const unique = () => "wave02-" + ++sequence;
 const clock = () => time;
@@ -80,9 +78,8 @@ async function queue(f: Awaited<ReturnType<typeof foundation>>, raw: Awaited<Ret
   return message;
 }
 beforeAll(async () => {
-  const sql = new DatabaseSync(file);
-  for (const migration of readdirSync("prisma/migrations").filter(f => /^\d/.test(f)).sort()) sql.exec(readFileSync(`prisma/migrations/${migration}/migration.sql`, "utf8"));
-  expect(sql.prepare("PRAGMA foreign_key_check").all()).toEqual([]); sql.close();
+  await postgres.initialize();
+  await postgres.assertIntegrity();
   const root = await db.organization.create({ data: { name: "MAXPASE GROUP", slug: "maxpase-group", type: "GROUP", group: { create: { name: "MAXPASE GROUP" } } }, include: { group: true } }); groupId = root.group!.id; rootId = root.id;
   for (const key of keys) await db.permission.create({ data: { key, name: key, scope: "GROUP" } });
   vi.spyOn(communicationsService, "saveIntegration").mockImplementation((...args) => wiredCommunication.saveIntegration(...args));
@@ -92,7 +89,7 @@ beforeAll(async () => {
   vi.spyOn(communicationsService, "processDue").mockImplementation((...args) => wiredCommunication.processDue(...args));
   vi.spyOn(automationService, "processDue").mockImplementation((...args) => wiredAutomation.processDue(...args));
 });
-afterAll(async () => { vi.restoreAllMocks(); await db.$disconnect(); rmSync(directory, { recursive: true, force: true }); });
+afterAll(async () => { vi.restoreAllMocks(); await postgres.dispose(); }, 30000);
 
 describe("Wave 02 persisted automation continuation", () => {
   it("reaches all 60 overdue tasks across bounded scans, service restarts and one recurrence", async () => {

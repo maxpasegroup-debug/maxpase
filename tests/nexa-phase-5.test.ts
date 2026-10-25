@@ -1,10 +1,6 @@
 import { beforeAll, afterAll, describe, expect, it } from "vitest";
-import { DatabaseSync } from "node:sqlite";
-import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { createPostgresFixture } from "./helpers/postgres-fixture";
 import { randomInt, randomUUID } from "node:crypto";
-import { PrismaClient } from "@prisma/client";
 import { provisionBoss } from "@/server/group/provision";
 import { createNexaService } from "@/server/group/nexa-service";
 import { createSiaService } from "@/server/sia/service";
@@ -12,9 +8,8 @@ import { registeredTool } from "@/server/sia/registry";
 import { createOperationsService } from "@/server/domain/operations-service";
 import { createBrandCommandService } from "@/server/group/brand-command";
 
-const dir = mkdtempSync(join(tmpdir(), "maxpase-nexa-"));
-const file = join(dir, "test.db");
-const db = new PrismaClient({ datasourceUrl: "file:" + file.replaceAll("\\", "/") });
+const postgres = createPostgresFixture();
+const db = postgres.db;
 const service = createNexaService(db);
 let bossId: string, airaId: string, pearnId: string, directorId: string, foreignId: string;
 
@@ -27,17 +22,15 @@ async function makeDirector(companyId: string) {
 }
 
 beforeAll(async () => {
-  const sql = new DatabaseSync(file);
-  for (const folder of readdirSync("prisma/migrations").filter(f => /^\d/.test(f)).sort()) sql.exec(readFileSync(join("prisma/migrations", folder, "migration.sql"), "utf8"));
-  expect(sql.prepare("PRAGMA foreign_key_check").all()).toEqual([]);
-  sql.close();
+  await postgres.initialize();
+  await postgres.assertIntegrity();
   bossId = (await provisionBoss(db, { BOSS_PIN: String(randomInt(100000, 1000000)) })).userId;
   airaId = (await db.organization.findUniqueOrThrow({ where: { slug: "aira-skill-city" } })).id;
   pearnId = (await db.organization.findUniqueOrThrow({ where: { slug: "pearn" } })).id;
   directorId = await makeDirector(airaId);
   foreignId = await makeDirector(pearnId);
-}, 30000);
-afterAll(async () => { await db.$disconnect(); rmSync(dir, { recursive: true, force: true }); });
+}, 120000);
+afterAll(() => postgres.dispose(), 30000);
 
 describe("private group directives", () => {
   const instruction = "Review the AIRA operating priorities and prepare a scoped director action.";
@@ -119,16 +112,12 @@ describe("private group directives", () => {
   });
   it("rolls back directive creation when audit persistence fails", async () => {
     const before = await db.nexaDirective.count();
-    const sql = new DatabaseSync(file);
-    sql.exec("CREATE TRIGGER nexa_audit_failure BEFORE INSERT ON AuditEvent WHEN NEW.action = 'group.directive_created' BEGIN SELECT RAISE(ABORT, 'synthetic audit failure'); END");
-    sql.close();
+    const restore = await postgres.rejectInsert("AuditEvent", "group.directive_created");
     try {
       await expect(service.create(bossId, { organizationId: airaId, directorUserId: directorId, instruction, directorBrief, idempotencyKey: randomUUID() })).rejects.toThrow();
       expect(await db.nexaDirective.count()).toBe(before);
     } finally {
-      const cleanup = new DatabaseSync(file);
-      cleanup.exec("DROP TRIGGER nexa_audit_failure");
-      cleanup.close();
+      await restore();
     }
   });
   it("submits a director-approved task proposal to an independent human without executing it", async () => {

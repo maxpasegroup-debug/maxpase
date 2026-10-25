@@ -1,32 +1,27 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { DatabaseSync } from "node:sqlite";
-import { mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { randomBytes, randomUUID } from "node:crypto";
-import { PrismaClient } from "@prisma/client";
+import { createPostgresFixture } from "./helpers/postgres-fixture";
 import { provisionBoss } from "@/server/group/provision";
 import { createSkillCityRoleTemplates } from "@/server/skillcity/role-templates";
 import { createStaffOnboardingService } from "@/server/skillcity/staff-onboarding";
 import { createStaffInvite } from "@/server/skillcity/staff-invite";
 import { createAuthenticationService } from "@/server/auth/service";
 
-const directory = mkdtempSync(join(tmpdir(), "skillcity-staff-life-")), file = join(directory, "test.db");
-const db = new PrismaClient({ datasourceUrl: "file:" + file.replaceAll("\\", "/") });
+const postgres = createPostgresFixture();
+const db = postgres.db;
 const staff = createStaffOnboardingService(db);
 const secret = randomBytes(32).toString("hex");
 const env = { SKILLCITY_EMAIL_AUTH_ENABLED: "true", RESEND_API_KEY: "isolated-not-live", SKILLCITY_AUTH_FROM: "staff@test.invalid", SKILLCITY_OTP_SECRET: secret };
-let code = "", bossId: string, companyId: string, labsId: string, foreignId: string, roleId: string, managerId: string;
+let code = "", invitationText = "", bossId: string, companyId: string, labsId: string, foreignId: string, roleId: string, managerId: string;
 const invite = createStaffInvite(db, env, () => new Date(), async (_url, init) => {
-  code = /code is ([0-9]{6})/.exec(JSON.parse(String(init?.body)).text)?.[1] ?? "";
+  invitationText = JSON.parse(String(init?.body)).text;
+  code = /code is ([0-9]{6})/.exec(invitationText)?.[1] ?? "";
   return new Response(JSON.stringify({ id: "mock-receipt" }), { status: 200 });
 });
 const email = () => `staff-${randomUUID()}@test.invalid`;
 
 beforeAll(async () => {
-  const sql = new DatabaseSync(file);
-  for (const folder of readdirSync("prisma/migrations").filter(name => /^\d/.test(name)).sort()) sql.exec(readFileSync(join("prisma/migrations", folder, "migration.sql"), "utf8"));
-  sql.close();
+  await postgres.initialize();
   bossId = (await provisionBoss(db, { BOSS_PIN: String(Math.floor(100000 + Math.random() * 900000)) })).userId;
   companyId = (await db.organization.findUniqueOrThrow({ where: { slug: "aira-skill-city" } })).id;
   labsId = (await db.organization.findUniqueOrThrow({ where: { slug: "aira-labs" } })).id;
@@ -36,8 +31,8 @@ beforeAll(async () => {
   const manager = await db.person.create({ data: { displayName: "Synthetic manager", email: email() } });
   managerId = (await db.user.create({ data: { email: manager.email!, personId: manager.id, emailVerifiedAt: new Date() } })).id;
   await db.membership.create({ data: { personId: manager.id, organizationId: labsId } });
-}, 30000);
-afterAll(async () => { await db.$disconnect(); rmSync(directory, { recursive: true, force: true }); });
+}, 120000);
+afterAll(() => postgres.dispose(), 30000);
 
 describe("Skill City Boss employee lifecycle", () => {
   it("keeps the draft and reporting link inactive, then activates both with a single-use email proof", async () => {
@@ -50,13 +45,16 @@ describe("Skill City Boss employee lifecycle", () => {
     expect((await db.reportingRelationship.findFirstOrThrow({ where: { personId: user.personId!, organizationId: labsId } })).status).toBe("INACTIVE");
     expect(await db.auditEvent.count({ where: { entityId: user.id, action: "staff.onboarding_draft_created" } })).toBe(1);
     await invite.send(bossId, { userId: user.id, verificationEvidence: "synthetic identity checked" });
+    expect(invitationText).toContain("https://airalabs.online/activate");
     const challenge = await db.emailAuthChallenge.findFirstOrThrow({ where: { userId: user.id, purpose: "STAFF_INVITE" } });
     expect(challenge.status).toBe("SENT");
-    await invite.activate({ challengeId: challenge.id, code, password: "synthetic-password-123", confirmPassword: "synthetic-password-123" });
+    await expect(invite.activate({ challengeId: challenge.id, code, password: "synthetic-password-123", confirmPassword: "synthetic-password-123", portal: "skillcity" })).rejects.toThrow();
+    await invite.activate({ challengeId: challenge.id, code, password: "synthetic-password-123", confirmPassword: "synthetic-password-123", portal: "labs" });
     expect((await db.user.findUniqueOrThrow({ where: { id: user.id } })).status).toBe("ACTIVE");
     expect((await db.reportingRelationship.findFirstOrThrow({ where: { personId: user.personId!, organizationId: labsId } })).status).toBe("ACTIVE");
-    expect(await createAuthenticationService(db).loginPortal({ email: address, password: "synthetic-password-123" }, secret, "skillcity")).not.toBeNull();
-    await expect(invite.activate({ challengeId: challenge.id, code, password: "synthetic-password-123", confirmPassword: "synthetic-password-123" })).rejects.toThrow();
+    expect(await createAuthenticationService(db).loginPortal({ email: address, password: "synthetic-password-123" }, secret, "labs")).not.toBeNull();
+    expect(await createAuthenticationService(db).loginPortal({ email: address, password: "synthetic-password-123" }, secret, "skillcity")).toBeNull();
+    await expect(invite.activate({ challengeId: challenge.id, code, password: "synthetic-password-123", confirmPassword: "synthetic-password-123", portal: "labs" })).rejects.toThrow();
   });
   it("reuses an eligible unclaimed AIRA Person but refuses duplicate and foreign identities", async () => {
     const address = email();

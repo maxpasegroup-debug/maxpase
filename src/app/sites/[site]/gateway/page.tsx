@@ -31,6 +31,8 @@ import { labsCustomerService } from "@/server/labs/customer";
 import { StartupStudentWorkspace } from "../../startup-ui/student-workspace";
 import { skillCityEmployeeDashboard, employeeViews } from "@/server/skillcity/employee-dashboard";
 import { SkillCityWorkspace } from "../../skillcity-ui/workspace";
+import { skillCityDeveloperDesk } from "@/server/skillcity/developer-desk";
+import { DeveloperWorkspace } from "../../skillcity-ui/developer-workspace";
 const views = ["overview", "programs", "projects", "tasks", "goals"];
 export default async function Gateway({ params, searchParams }: { params: Promise<{ site: string }>; searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const { site, paths } = await requestPortal((await params).site), query = await searchParams;
@@ -49,6 +51,14 @@ export default async function Gateway({ params, searchParams }: { params: Promis
     return <SkillCityWorkspace data={data} email={session.email} userId={session.userId} base={paths.gateway} home={paths.home}/>;
   }
   if (site.id === "skillcity") notFound();
+  if (site.id === "labs") {
+    const developer = await prisma.membership.findFirst({ where: { person: { users: { some: { id: session.userId, status: "ACTIVE", emailVerifiedAt: { not: null } } } }, organization: { slug: "aira-labs" }, status: "ACTIVE", roles: { some: { role: { status: "ACTIVE", principalType: "HUMAN", key: { in: ["labs-full-stack-developer", "labs-junior-developer"] } } } } }, select: { id: true } });
+    if (developer) {
+      if (query.view && view !== "developer") notFound();
+      const desk = await skillCityDeveloperDesk.workspace(session.userId);
+      return <main className="sc-workspace portal-labs"><header className="portal-header"><Link href={paths.home}>AIRA Labs</Link><span>{session.email}</span><form action={portalLogoutAction}><input type="hidden" name="site" value="labs"/><button>Sign out</button></form></header><DeveloperWorkspace desk={desk} portal="labs"/></main>;
+    }
+  }
   if (site.id === "labs" && await labsCustomerService.isCustomer(session.userId)) {
     if (view !== "overview") notFound();
     return <LabsCustomerWorkspace userId={session.userId} email={session.email} home={paths.home}/>;

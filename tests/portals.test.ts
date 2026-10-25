@@ -1,10 +1,6 @@
 import { beforeAll, beforeEach, afterAll, describe, it, expect } from "vitest";
-import { DatabaseSync } from "node:sqlite";
-import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { randomBytes, randomUUID } from "node:crypto";
-import { PrismaClient } from "@prisma/client";
+import { createPostgresFixture } from "./helpers/postgres-fixture";
 import { NextRequest } from "next/server";
 import { middleware } from "../src/middleware";
 import { initializeGroupStructure } from "@/server/group/structure";
@@ -18,8 +14,8 @@ import { signPortalContext, verifyPortalContext } from "@/server/portals/context
 import { createSkillCityEmployeeDashboard } from "@/server/skillcity/employee-dashboard";
 import { createLabsService } from "@/server/labs/service";
 
-const directory = mkdtempSync(join(tmpdir(), "maxpase-portals-")), file = join(directory, "test.db");
-const db = new PrismaClient({ datasourceUrl: "file:" + file.replaceAll("\\", "/") });
+const postgres = createPostgresFixture();
+const db = postgres.db;
 const password = randomBytes(24).toString("base64url"), secret = randomBytes(32).toString("base64url");
 const auth = createAuthenticationService(db), service = createPortalService(db);
 const priorSecret = process.env.AUTH_SECRET;
@@ -27,9 +23,7 @@ let userId: string, startupId: string, labsId: string, membershipId: string, lab
 const credentials = () => ({ email: "portal-member@test.invalid", password });
 beforeAll(async () => {
   process.env.AUTH_SECRET = secret;
-  const sql = new DatabaseSync(file);
-  for (const folder of readdirSync("prisma/migrations").filter(f => /^\d/.test(f)).sort()) sql.exec(readFileSync(join("prisma/migrations", folder, "migration.sql"), "utf8"));
-  sql.close(); await db.$transaction(initializeGroupStructure);
+  await postgres.initialize(); await db.$transaction(initializeGroupStructure);
   startupId = (await db.organization.findUniqueOrThrow({ where: { slug: "aira-startup-school" } })).id;
   labsId = (await db.organization.findUniqueOrThrow({ where: { slug: "aira-labs" } })).id;
   const person = await db.person.create({ data: { displayName: "Portal test member" } });
@@ -39,9 +33,9 @@ beforeAll(async () => {
     const member = await db.membership.create({ data: { personId: person.id, organizationId: division, roles: { create: { roleId: role.id } } } });
     if (division === startupId) { membershipId = member.id; roleId = role.id; } else labsMembershipId = member.id;
   }
-}, 30000);
+}, 120000);
 beforeEach(async () => { await db.securityRateBucket.deleteMany(); });
-afterAll(async () => { if (priorSecret === undefined) delete process.env.AUTH_SECRET; else process.env.AUTH_SECRET = priorSecret; await db.$disconnect(); rmSync(directory, { recursive: true, force: true }); });
+afterAll(async () => { if (priorSecret === undefined) delete process.env.AUTH_SECRET; else process.env.AUTH_SECRET = priorSecret; await postgres.dispose(); }, 30000);
 
 describe("Separate brand domains and authenticated gateways", () => {
   it("gates employee views by active role and permission, and isolates advisor and developer work", async () => {
@@ -271,9 +265,9 @@ describe("Separate brand domains and authenticated gateways", () => {
     expect((await db.membership.findUniqueOrThrow({ where: { id: labsMembershipId } })).status).toBe("ACTIVE");
   });
   it("rolls back brand session issuance if mandatory audit insertion fails", async () => {
-    const sql = new DatabaseSync(file); sql.exec("CREATE TRIGGER PortalAuditFailure BEFORE INSERT ON AuditEvent WHEN NEW.action = 'auth.login' BEGIN SELECT RAISE(ABORT, 'audit unavailable'); END;");
+    const restore = await postgres.rejectInsert("AuditEvent", "auth.login");
     const count = await db.session.count();
     try { await expect(auth.loginPortal(credentials(), secret, "startup")).rejects.toThrow(); expect(await db.session.count()).toBe(count); }
-    finally { sql.exec("DROP TRIGGER PortalAuditFailure"); sql.close(); }
+    finally { await restore(); }
   });
 });

@@ -73,7 +73,7 @@ export function createAuthenticationService(client: PrismaClient = prisma, now =
     }
     const candidate = await client.user.findUnique({ where: { email: parsed.data.email }, include: { person: { select: { status: true, metadata: true } } } });
     const valid = await verifyPassword(parsed.data.password, candidate?.passwordHash ?? await dummyHash);
-    if (!candidate?.passwordHash || !valid || candidate.status !== "ACTIVE" || candidate.person && candidate.person.status !== "ACTIVE" || accountPortalRealm(candidate.person?.metadata) && portal !== accountPortalRealm(candidate.person?.metadata) || boss && JSON.parse(candidate.person?.metadata ?? "{}").credentialKind !== "BOSS_PIN") {
+    if (!candidate?.passwordHash || !valid || candidate.status !== "ACTIVE" || candidate.person && candidate.person.status !== "ACTIVE" || accountPortalRealm(candidate.person?.metadata) && portal !== accountPortalRealm(candidate.person?.metadata) || boss && JSON.parse(candidate.person?.metadata ?? "{}").credentialKind !== "BOSS_PIN" || portal === "labs" && (!candidate.emailVerifiedAt || JSON.parse(candidate.person?.metadata ?? "{}").credentialKind !== "STAFF_PASSWORD")) {
       await client.auditEvent.create({ data: buildAuditEventData({ action: "auth.login", entityType: "User", result: "DENIED", metadata: { accountReference: securityKey("account", parsed.data.email) } }) });
       return null;
     }

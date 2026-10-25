@@ -1,10 +1,6 @@
 import { beforeAll, beforeEach, afterAll, describe, it, expect } from "vitest";
-import { DatabaseSync } from "node:sqlite";
-import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { randomInt, randomBytes } from "node:crypto";
-import { PrismaClient } from "@prisma/client";
+import { createPostgresFixture } from "./helpers/postgres-fixture";
 import { initializeGroupStructure } from "@/server/group/structure";
 import { provisionBoss } from "@/server/group/provision";
 import { BOSS_EMAIL, validateBossConfiguration } from "@/server/group/identity";
@@ -19,24 +15,22 @@ import { airaProductDrafts, assertControlledProductDraft, seniorAcademicAdvisorD
 import { createBusinessService } from "@/server/domain/business-service";
 import { createNiceJobsControlPanel } from "@/server/nicejobs/control-panel";
 
-const directory = mkdtempSync(join(tmpdir(), "maxspace-boss-")), file = join(directory, "test.db");
-const db = new PrismaClient({ datasourceUrl: "file:" + file.replaceAll("\\", "/") });
+const postgres = createPostgresFixture();
+const db = postgres.db;
 let pin = String(randomInt(100000, 1000000));
 const secret = randomBytes(32).toString("base64url");
 let now = new Date(), userId: string, groupId: string, airaId: string, pearnId: string;
 const auth = createAuthenticationService(db, () => now), boss = createBossService(db);
 const credentials = () => ({ email: BOSS_EMAIL, password: pin });
 beforeAll(async () => {
-  const sql = new DatabaseSync(file);
-  for (const folder of readdirSync("prisma/migrations").filter(f => /^\d/.test(f)).sort()) sql.exec(readFileSync(join("prisma/migrations", folder, "migration.sql"), "utf8"));
-  sql.close();
+  await postgres.initialize();
   const provision = await provisionBoss(db, { BOSS_PIN: pin }); userId = provision.userId; groupId = provision.groupId;
   airaId = (await db.organization.findUniqueOrThrow({ where: { slug: "aira-skill-city" } })).id;
   pearnId = (await db.organization.findUniqueOrThrow({ where: { slug: "pearn" } })).id;
   for (const role of canonicalAiraRoles) await db.role.create({ data: { ...role, organizationId: airaId } });
-}, 30000);
+}, 120000);
 beforeEach(async () => { now = new Date(); await db.securityRateBucket.deleteMany(); });
-afterAll(async () => { await db.$disconnect(); rmSync(directory, { recursive: true, force: true }); });
+afterAll(() => postgres.dispose(), 30000);
 
 describe("MAXPASE group and Boss controls", () => {
   it("gives the provisioned Boss scoped Nice Jobs control without accepting a foreign company", async () => {
@@ -312,11 +306,10 @@ describe("MAXPASE group and Boss controls", () => {
     expect(await db.integration.count()).toBe(0);
   });
   it("rolls session issuance back when mandatory authentication audit fails", async () => {
-    const sql = new DatabaseSync(file);
-    sql.exec("CREATE TRIGGER BossAuditFailure BEFORE INSERT ON AuditEvent WHEN NEW.action = 'auth.login' BEGIN SELECT RAISE(ABORT, 'audit unavailable'); END;");
+    const restore = await postgres.rejectInsert("AuditEvent", "auth.login");
     const before = await db.session.count();
     try { await expect(auth.loginBoss(credentials(), secret)).rejects.toThrow(); expect(await db.session.count()).toBe(before); }
-    finally { sql.exec("DROP TRIGGER BossAuditFailure"); sql.close(); }
+    finally { await restore(); }
   });
   it("shows a standalone task blocker as real company risk with its resolution deadline", async () => {
     const task = await db.task.create({ data: { organizationId: pearnId, title: "Blocked company work" } });

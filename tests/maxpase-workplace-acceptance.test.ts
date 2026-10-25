@@ -1,10 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { DatabaseSync } from "node:sqlite";
-import { mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { randomBytes, randomInt, randomUUID } from "node:crypto";
-import { PrismaClient } from "@prisma/client";
+import { createPostgresFixture } from "./helpers/postgres-fixture";
 import { provisionBoss } from "@/server/group/provision";
 import { BOSS_EMAIL } from "@/server/group/identity";
 import { createAuthenticationService } from "@/server/auth/service";
@@ -13,9 +9,8 @@ import { createBossService } from "@/server/group/boss-service";
 import { createSkillCityManagerDesk } from "@/server/skillcity/manager-desk";
 import { createSkillCityDeveloperDesk } from "@/server/skillcity/developer-desk";
 
-const directory = mkdtempSync(join(tmpdir(), "maxpase-workplace-acceptance-"));
-const file = join(directory, "test.db");
-const db = new PrismaClient({ datasourceUrl: "file:" + file.replaceAll("\\", "/") });
+const postgres = createPostgresFixture();
+const db = postgres.db;
 const now = () => new Date("2026-10-24T06:00:00Z");
 const pin = String(randomInt(100000, 1000000));
 const password = "synthetic-acceptance-password";
@@ -28,9 +23,7 @@ let bossId: string, managerId: string, firstId: string, secondId: string;
 let firstPersonId: string, secondPersonId: string, labsId: string, airaId: string, foreignId: string, projectId: string;
 
 beforeAll(async () => {
-  const sql = new DatabaseSync(file);
-  for (const folder of readdirSync("prisma/migrations").filter(name => /^\d/.test(name)).sort()) sql.exec(readFileSync(join("prisma/migrations", folder, "migration.sql"), "utf8"));
-  sql.close();
+  await postgres.initialize();
   bossId = (await provisionBoss(db, { BOSS_PIN: pin })).userId;
   airaId = (await db.organization.findUniqueOrThrow({ where: { slug: "aira-skill-city" } })).id;
   labsId = (await db.organization.findUniqueOrThrow({ where: { slug: "aira-labs" } })).id;
@@ -53,9 +46,9 @@ beforeAll(async () => {
   firstPersonId = first.personId; secondPersonId = second.personId;
   for (const personId of [firstPersonId, secondPersonId]) await db.reportingRelationship.create({ data: { organizationId: labsId, managerPersonId: manager.personId, personId } });
   projectId = (await db.project.create({ data: { organizationId: labsId, name: "Acceptance Labs project", slug: "acceptance-labs-project", status: "ACTIVE", metadata: JSON.stringify({ kind: "AIRALABS_PROJECT" }) } })).id;
-}, 30000);
+}, 120000);
 
-afterAll(async () => { await db.$disconnect(); rmSync(directory, { recursive: true, force: true }); });
+afterAll(() => postgres.dispose(), 30000);
 
 describe("MAXPASE workplace four-account acceptance", () => {
   it("carries scoped work from Boss and manager to two distinct developers and independent review", async () => {

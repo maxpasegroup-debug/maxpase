@@ -1,9 +1,6 @@
 import { beforeAll, beforeEach, afterAll, describe, it, expect } from "vitest";
-import { PrismaClient } from "@prisma/client";
-import { DatabaseSync } from "node:sqlite";
-import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import type { PrismaClient } from "@prisma/client";
+import { createPostgresFixture } from "./helpers/postgres-fixture";
 import { randomBytes } from "node:crypto";
 import { initializeGroupStructure } from "@/server/group/structure";
 import { createApplicantAccess, applicantPermissionKeys } from "@/server/nicejobs/applicant-access";
@@ -16,8 +13,8 @@ import { claimJobsOtp } from "@/server/auth/jobs-otp-proof";
 import { hashPassword } from "@/server/auth/password";
 import type { OtpDelivery } from "@/server/auth/resend-otp";
 
-const directory = mkdtempSync(join(tmpdir(), "nicejobs-phone-pin-")), file = join(directory, "test.db");
-const db = new PrismaClient({ datasourceUrl: "file:" + file.replaceAll("\\", "/") });
+const postgres = createPostgresFixture();
+const db = postgres.db;
 const secret = randomBytes(32).toString("hex");
 process.env.NICEJOBS_PIN_PEPPER = randomBytes(32).toString("hex");
 const env = { NICEJOBS_EMAIL_AUTH_ENABLED: "true", RESEND_API_KEY: "isolated-not-live", NICEJOBS_AUTH_FROM: "auth@test.invalid", NICEJOBS_OTP_SECRET: secret };
@@ -28,15 +25,13 @@ const auth = createAuthenticationService(db, () => now);
 const raw = { displayName: "Phone applicant", email: "phone@test.invalid", country: "IN", nationalNumber: "9876543210", pin: "123456", confirmPin: "123456", acknowledge: true };
 
 beforeAll(async () => {
-  const sql = new DatabaseSync(file);
-  for (const folder of readdirSync("prisma/migrations").filter(name => /^\d/.test(name)).sort()) sql.exec(readFileSync(join("prisma/migrations", folder, "migration.sql"), "utf8"));
-  sql.close();
+  await postgres.initialize();
   await db.$transaction(initializeGroupStructure);
   for (const key of applicantPermissionKeys) await db.permission.upsert({ where: { key }, update: {}, create: { key, name: key, scope: "GROUP" } });
   userId = (await createApplicantAccess(db).register(raw)).userId;
-}, 30000);
+}, 120000);
 beforeEach(async () => { now = new Date("2026-10-20T09:00:00Z"); messages.length = 0; notices.length = 0; await db.securityRateBucket.deleteMany(); await db.emailAuthChallenge.deleteMany(); await db.session.deleteMany(); await db.user.update({ where: { id: userId }, data: { email: raw.email, jobsPhone: "+919876543210", jobsPinHash: await hashJobsPin(raw.pin), passwordHash: null, emailVerifiedAt: null, status: "ACTIVE", person: { update: { email: raw.email } } } }); });
-afterAll(async () => { await db.$disconnect(); rmSync(directory, { recursive: true, force: true }); });
+afterAll(() => postgres.dispose(), 30000);
 
 describe("Nice Jobs phone and PIN candidate authentication", () => {
   it("normalizes international numbers and rejects invalid or duplicate phones", async () => {
@@ -159,15 +154,14 @@ describe("Nice Jobs phone and PIN candidate authentication", () => {
     expect(await service.completeRegistration({ ...retry, code: messages.at(-1)!.code }, secret)).toBeTruthy();
   });
   it("rolls back an unverified email correction when audit persistence fails", async () => {
-    const sql = new DatabaseSync(file);
-    sql.exec("CREATE TRIGGER EmailChangeAuditFailure BEFORE INSERT ON AuditEvent WHEN NEW.action = 'auth.registration_email_changed' BEGIN SELECT RAISE(ABORT, 'audit unavailable'); END;");
+    const restore = await postgres.rejectInsert("AuditEvent", "auth.registration_email_changed");
     try {
       await expect(service.changeRegistrationEmail({ country: "IN", nationalNumber: raw.nationalNumber, pin: raw.pin, email: "rollback@test.invalid" })).rejects.toThrow();
       const user = await db.user.findUniqueOrThrow({ where: { id: userId }, include: { person: true } });
       expect(user.email).toBe(raw.email);
       expect(user.person?.email).toBe(raw.email);
       expect(messages).toHaveLength(0);
-    } finally { sql.exec("DROP TRIGGER EmailChangeAuditFailure"); sql.close(); }
+    } finally { await restore(); }
   });
   it("allows only one concurrent PIN reset effect", async () => {
     const registration = await service.beginRegistration(userId);
@@ -186,13 +180,12 @@ describe("Nice Jobs phone and PIN candidate authentication", () => {
     const reset = await service.beginPinReset({ country: "IN", nationalNumber: raw.nationalNumber });
     const code = messages.at(-1)!.code;
     const failing = createJobsEmailAuth(db, { now: () => now, env, send: async () => "mock-receipt", notifyPinChange: async () => { throw new Error("mock notice failure"); } });
-    const sql = new DatabaseSync(file);
-    sql.exec("CREATE TRIGGER PinNoticeAuditFailure BEFORE INSERT ON AuditEvent WHEN NEW.action = 'auth.pin_reset_notice_failed' BEGIN SELECT RAISE(ABORT, 'audit unavailable'); END;");
+    const restore = await postgres.rejectInsert("AuditEvent", "auth.pin_reset_notice_failed");
     try {
       await expect(failing.completePinReset({ ...reset, code, pin: "654321", confirmPin: "654321" })).resolves.toBeUndefined();
       expect(await auth.validate(session.token, secret, "jobs")).toBeNull();
       expect(await verifyJobsPin("654321", (await db.user.findUniqueOrThrow({ where: { id: userId } })).jobsPinHash!)).toBe(true);
-    } finally { sql.exec("DROP TRIGGER PinNoticeAuditFailure"); sql.close(); }
+    } finally { await restore(); }
   });
   it("transitions a legacy candidate without changing identity and retires old credentials and sessions", async () => {
     const oldPassword = "legacy-test-password-123";
@@ -211,14 +204,13 @@ describe("Nice Jobs phone and PIN candidate authentication", () => {
   it("rolls back legacy activation if the audit write fails", async () => {
     await db.user.update({ where: { id: userId }, data: { jobsPhone: null, jobsPinHash: null, passwordHash: await hashPassword("legacy-test-password-123"), emailVerifiedAt: now } });
     const oldSession = await db.session.create({ data: { userId, createdAt: now, expiresAt: new Date(now.getTime() + 3600000) } });
-    const sql = new DatabaseSync(file);
-    sql.exec("CREATE TRIGGER ActivationAuditFailure BEFORE INSERT ON AuditEvent WHEN NEW.action = 'auth.jobs_pin_activated' BEGIN SELECT RAISE(ABORT, 'audit unavailable'); END;");
+    const restore = await postgres.rejectInsert("AuditEvent", "auth.jobs_pin_activated");
     try {
       await expect(createJobsPinActivation(db, () => now)(userId, oldSession.id, { country: "US", nationalNumber: "2025550123", pin: "654321", confirmPin: "654321" })).rejects.toThrow();
       const current = await db.user.findUniqueOrThrow({ where: { id: userId } });
       expect(current.jobsPhone).toBeNull(); expect(current.jobsPinHash).toBeNull(); expect(current.passwordHash).not.toBeNull();
       expect(await db.session.count({ where: { userId } })).toBe(1);
-    } finally { sql.exec("DROP TRIGGER ActivationAuditFailure"); sql.close(); }
+    } finally { await restore(); }
   });
   it("does not issue a session if the PIN hash changes after credential verification", async () => {
     await db.user.update({ where: { id: userId }, data: { emailVerifiedAt: now } });
