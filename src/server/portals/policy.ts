@@ -2,6 +2,7 @@ import type { Prisma } from "@prisma/client";
 import { AccessError, createAccessContext } from "@/server/authorization/engine";
 import { siteById, type PortalId } from "./sites";
 import { accountPortalRealm } from "@/server/auth/account-realm";
+import { labsStaffRoleKeys } from "@/server/skillcity/staff-roles";
 
 const skillCityStaffRoles = new Set(["Director", "Division Director", "Business Development & Operations Manager", "Senior Academic Advisor", "Junior Academic Advisor", "Software Developer", "Full Stack Developer", "Junior Developer"]);
 
@@ -39,7 +40,7 @@ export async function requirePortalAccess(db: Prisma.TransactionClient, userId: 
     const metadata = JSON.parse(user?.person?.metadata ?? "{}");
     if (metadata.credentialKind === "STAFF_PASSWORD") {
       if (accountPortalRealm(user?.person?.metadata) !== "labs" || !user?.emailVerifiedAt || !user.personId ||
-        !(await db.membership.findFirst({ where: { personId: user.personId, organizationId: division.id, status: "ACTIVE", roles: { some: { role: { status: "ACTIVE", principalType: "HUMAN", key: { in: ["labs-full-stack-developer", "labs-junior-developer", "labs-business-development-manager"] } } } } } }))) throw new AccessError("Verified Labs employee appointment required");
+        !(await db.membership.findFirst({ where: { personId: user.personId, organizationId: division.id, status: "ACTIVE", roles: { some: { role: { status: "ACTIVE", principalType: "HUMAN", key: { in: [...labsStaffRoleKeys] } } } } } }))) throw new AccessError("Verified Labs employee appointment required");
     }
   }
   if (id === "labs" && !credentialSetup) {

@@ -33,6 +33,7 @@ import { skillCityEmployeeDashboard, employeeViews } from "@/server/skillcity/em
 import { SkillCityWorkspace } from "../../skillcity-ui/workspace";
 import { skillCityDeveloperDesk } from "@/server/skillcity/developer-desk";
 import { DeveloperWorkspace } from "../../skillcity-ui/developer-workspace";
+import { labsDeveloperRoleKeys, labsStaffRoleKeys, labsStaffViewsForRole } from "@/server/skillcity/staff-roles";
 const views = ["overview", "programs", "projects", "tasks", "goals"];
 export default async function Gateway({ params, searchParams }: { params: Promise<{ site: string }>; searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const { site, paths } = await requestPortal((await params).site), query = await searchParams;
@@ -52,11 +53,16 @@ export default async function Gateway({ params, searchParams }: { params: Promis
   }
   if (site.id === "skillcity") notFound();
   if (site.id === "labs") {
-    const developer = await prisma.membership.findFirst({ where: { person: { users: { some: { id: session.userId, status: "ACTIVE", emailVerifiedAt: { not: null } } } }, organization: { slug: "aira-labs" }, status: "ACTIVE", roles: { some: { role: { status: "ACTIVE", principalType: "HUMAN", key: { in: ["labs-full-stack-developer", "labs-junior-developer"] } } } } }, select: { id: true } });
-    if (developer) {
-      if (query.view && view !== "developer") notFound();
+    const staff = await prisma.membership.findFirst({ where: { person: { users: { some: { id: session.userId, status: "ACTIVE", emailVerifiedAt: { not: null } } } }, organization: { slug: "aira-labs" }, status: "ACTIVE", roles: { some: { role: { status: "ACTIVE", principalType: "HUMAN", key: { in: [...labsStaffRoleKeys] } } } } }, select: { roles: { where: { role: { status: "ACTIVE", principalType: "HUMAN", key: { in: [...labsStaffRoleKeys] } } }, select: { role: { select: { key: true } } } } } });
+    const developerRole = staff?.roles.find(item => labsDeveloperRoleKeys.some(key => key === item.role.key));
+    if (developerRole) {
+      if (query.view && !labsStaffViewsForRole(developerRole.role.key).includes(view)) notFound();
       const desk = await skillCityDeveloperDesk.workspace(session.userId);
       return <main className="sc-workspace portal-labs"><header className="portal-header"><Link href={paths.home}>AIRA Labs</Link><span>{session.email}</span><form action={portalLogoutAction}><input type="hidden" name="site" value="labs"/><button>Sign out</button></form></header><DeveloperWorkspace desk={desk} portal="labs"/></main>;
+    }
+    if (staff?.roles.some(item => item.role.key === "labs-business-development-manager")) {
+      if (!labsStaffViewsForRole("labs-business-development-manager").includes(view)) notFound();
+      return <LabsWorkspace userId={session.userId} email={session.email} base={paths.gateway} home={paths.home} query={query} businessDevelopmentManager/>;
     }
   }
   if (site.id === "labs" && await labsCustomerService.isCustomer(session.userId)) {
