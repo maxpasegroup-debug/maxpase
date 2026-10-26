@@ -79,12 +79,12 @@ describe("Skill City manager desk", () => {
     expect(focus?.focusHistory.map(item => item.status)).toEqual(["ACTIVE", "ARCHIVED"]);
     await expect(desk.setFocus(managerId, { ...input, organizationId: foreignId, reference: randomUUID() })).rejects.toThrow();
     expect(await db.responsibility.count({ where: { organizationId: foreignId } })).toBe(0);
-    await db.$executeRawUnsafe("CREATE TRIGGER fail_focus_audit BEFORE INSERT ON AuditEvent WHEN NEW.action = 'staff.focus_approved' BEGIN SELECT RAISE(ABORT, 'isolated audit failure'); END");
+    const restoreLegacyTrigger1 = await postgres.rejectInsert("AuditEvent", "staff.focus_approved");
     try {
       await expect(desk.setFocus(managerId, { ...input, title: "Should roll back", reference: randomUUID() })).rejects.toThrow();
       expect((await desk.list(managerId)).people.find(person => person.personId === staffId)?.currentFocus?.title).toBe("Startup follow-ups");
       expect(await db.responsibility.count({ where: { personId: staffId } })).toBe(2);
-    } finally { await db.$executeRawUnsafe("DROP TRIGGER fail_focus_audit"); }
+    } finally { await restoreLegacyTrigger1(); }
     const task = await db.task.findFirstOrThrow({ where: { organizationId: labsId, assigneePersonId: staffId } });
     const change = { taskId: task.id, revision: task.revision, status: "BLOCKED", deadlineMode: "SET", dueDate: "2026-11-02T10:00:00.000Z", reason: "Delivery needs a revised deadline", reference: randomUUID() };
     expect((await desk.changeTask(managerId, change)).replay).toBe(false);
@@ -104,12 +104,12 @@ describe("Skill City manager desk", () => {
     expect((await desk.endFocus(managerId, end)).replay).toBe(false);
     expect((await desk.endFocus(managerId, end)).replay).toBe(true);
     expect((await desk.list(managerId)).people.find(person => person.personId === staffId)?.currentFocus).toBeNull();
-    await db.$executeRawUnsafe("CREATE TRIGGER fail_task_control_audit BEFORE INSERT ON AuditEvent WHEN NEW.action = 'staff.task_controlled' BEGIN SELECT RAISE(ABORT, 'isolated audit failure'); END");
+    const restoreLegacyTrigger2 = await postgres.rejectInsert("AuditEvent", "staff.task_controlled");
     try {
       const current = await db.task.findUniqueOrThrow({ where: { id: task.id } });
       await expect(desk.changeTask(managerId, { taskId: task.id, revision: current.revision, status: "TODO", deadlineMode: "CLEAR", dueDate: null, reason: "Should roll back with audit", reference: randomUUID() })).rejects.toThrow();
       expect((await db.task.findUniqueOrThrow({ where: { id: task.id } })).status).toBe("BLOCKED");
-    } finally { await db.$executeRawUnsafe("DROP TRIGGER fail_task_control_audit"); }
+    } finally { await restoreLegacyTrigger2(); }
     await db.reportingRelationship.updateMany({ where: { organizationId: labsId, personId: staffId }, data: { status: "INACTIVE" } });
     expect((await desk.list(managerId)).people).toEqual([]);
     await expect(desk.setFocus(managerId, { ...input, reference: randomUUID() })).rejects.toThrow();

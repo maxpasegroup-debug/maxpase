@@ -50,7 +50,7 @@ describe("Wave 03 scoped context cost controls", () => {
     queries.length = 0;
     const result = await buildToolContext(db, userId, selection(), "get_tasks");
     expect(result.facts).toHaveLength(200);
-    expect(queries.filter(q => q.includes('FROM `main`.`Task`') && !q.includes("COUNT(") && !q.includes("GROUP BY"))).toHaveLength(1);
+    expect(queries.filter(q => /FROM\s+(?:"public"\.)?"Task"/.test(q) && !q.includes("COUNT(") && !q.includes("GROUP BY"))).toHaveLength(1);
     expect(result.limitations.join(" ")).toContain("200 facts");
     const graph = result.context.graph as { nodes: { id: string }[]; edges: { from: string; to: string }[] };
     expect(graph.nodes.length).toBeLessThanOrEqual(500); expect(graph.edges.length).toBeLessThanOrEqual(1000);
@@ -78,8 +78,8 @@ describe("Wave 03 scoped context cost controls", () => {
       const ctx = await createAccessContext(userId, db, selection()); queries.length = 0;
       const memory = await retrieveMemory(db, ctx, selection());
       expect(memory).toHaveLength(100);
-      expect(queries.filter(q => q.includes('FROM `main`.`ExecutiveHistory`'))).toHaveLength(1);
-      expect(queries.filter(q => q.includes('FROM `main`.`ExecutiveRecord`'))).toHaveLength(100);
+      expect(queries.filter(q => /FROM\s+(?:"public"\.)?"ExecutiveHistory"/.test(q))).toHaveLength(1);
+      expect(queries.filter(q => /FROM\s+(?:"public"\.)?"ExecutiveRecord"/.test(q))).toHaveLength(100);
       expect(memory[0].source).toMatchObject({ historyTruncated: true, historyLimit: 50, details: { description: "Preserved decision context" }, history: expect.arrayContaining([expect.objectContaining({ reason: "Reason 54" })]) });
       const result = await buildToolContext(db, userId, selection(), "get_tasks");
       expect(result.limitations.join(" ")).toContain("not a complete audit history");
@@ -102,7 +102,7 @@ describe("Wave 03 scoped context cost controls", () => {
     try {
       const ctx = await createAccessContext(userId, db, selection()); queries.length = 0;
       await expect(retrieveMemory(db, ctx, selection())).rejects.toThrow(QueryBudgetError);
-      expect(queries.filter(q => q.includes('FROM `main`.`ExecutiveHistory`'))).toHaveLength(1);
+      expect(queries.filter(q => /FROM\s+(?:"public"\.)?"ExecutiveHistory"/.test(q))).toHaveLength(1);
     } finally {
       await db.siaContext.deleteMany({ where: { sourceId: record.id } }); await db.executiveHistory.deleteMany({ where: { recordId: record.id } }); await db.executiveRecord.delete({ where: { id: record.id } });
     }

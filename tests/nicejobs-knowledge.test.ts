@@ -296,11 +296,11 @@ describe("Nice Jobs scoped knowledge and internal communications", () => {
     await db.user.update({ where: { id: manager }, data: { status: "SUSPENDED" } }); try { await expect(knowledge.mutate(manager, c)).rejects.toThrow(); } finally { await db.user.update({ where: { id: manager }, data: { status: "ACTIVE" } }); }
   });
   it("rolls back content and publication when audit persistence fails", async () => {
-    await db.$executeRawUnsafe("CREATE TRIGGER fail_knowledge_audit BEFORE INSERT ON AuditEvent WHEN NEW.action LIKE 'nicejobs.knowledge.%' BEGIN SELECT RAISE(ABORT,'fixture audit failure'); END");
-    try { await expect(draft()).rejects.toThrow(); expect(await db.niceJobsKnowledge.count()).toBe(0); } finally { await db.$executeRawUnsafe("DROP TRIGGER fail_knowledge_audit"); }
+    const restoreLegacyTrigger1 = await postgres.rejectInsert("AuditEvent", "nicejobs.knowledge.", "PREFIX");
+    try { await expect(draft()).rejects.toThrow(); expect(await db.niceJobsKnowledge.count()).toBe(0); } finally { await restoreLegacyTrigger1(); }
     const d = await draft("COMMUNICATION"); await contentAct(d.id, "SUBMIT"); await contentAct(d.id, "REVIEW", { reason: "Independent fixture review" }, approver);
-    await db.$executeRawUnsafe("CREATE TRIGGER fail_knowledge_audit BEFORE INSERT ON AuditEvent WHEN NEW.action='nicejobs.knowledge.publish' BEGIN SELECT RAISE(ABORT,'fixture audit failure'); END");
-    try { await expect(contentAct(d.id, "PUBLISH")).rejects.toThrow(); expect(await db.communicationTemplate.count()).toBe(0); expect((await db.niceJobsKnowledgeVersion.findUniqueOrThrow({ where: { id: d.id } })).status).toBe("IN_REVIEW"); } finally { await db.$executeRawUnsafe("DROP TRIGGER fail_knowledge_audit"); }
+    const restoreLegacyTrigger2 = await postgres.rejectInsert("AuditEvent", "nicejobs.knowledge.publish");
+    try { await expect(contentAct(d.id, "PUBLISH")).rejects.toThrow(); expect(await db.communicationTemplate.count()).toBe(0); expect((await db.niceJobsKnowledgeVersion.findUniqueOrThrow({ where: { id: d.id } })).status).toBe("IN_REVIEW"); } finally { await restoreLegacyTrigger2(); }
   });
   it("links exact SOP versions to assigned tasks, leads, follow-ups and SOP change messages", async () => {
     const fixture = await leadFixture(), sop = await published(), resource = await published("RESOURCE");

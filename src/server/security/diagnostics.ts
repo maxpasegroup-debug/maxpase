@@ -22,3 +22,12 @@ export function safeDiagnostic(code: "authentication_failed" | "readiness_failed
   console.error(JSON.stringify({ level: "error", code, correlationId, timestamp: new Date().toISOString(), ...detail }));
   return correlationId;
 }
+
+export type MigrationValidationStage = "target_configuration" | "baseline_checksum" | "target_identity" | "empty_database_check" | "initial_migration" | "repeat_deploy" | "migration_status" | "readiness_and_triggers" | "disconnect";
+export function migrationValidationDiagnostic(error: unknown, stage: MigrationValidationStage) {
+  const rawCode = error && typeof error === "object" && "code" in error ? error.code : undefined;
+  const prismaCode = typeof rawCode === "string" && /^P\d{4}$/.test(rawCode) ? rawCode : undefined;
+  const rawStatus = error && typeof error === "object" && "status" in error ? error.status : undefined;
+  const processExitCode = typeof rawStatus === "number" && Number.isInteger(rawStatus) ? rawStatus : undefined;
+  return { code: "postgresql_migration_validation_failed", stage, correlationId: randomUUID(), ...(prismaCode ? { prismaCode } : {}), ...(processExitCode !== undefined ? { processExitCode } : {}) };
+}

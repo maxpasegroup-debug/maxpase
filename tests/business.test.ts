@@ -227,11 +227,11 @@ describe("authorization and atomic audit", () => {
     expect(events[0]).toMatchObject({ actorUserId: admin.id, actorPersonId: admin.personId, organizationId: a.organizationId, result: "SUCCESS", metadata: null });
   });
   it("rolls back a mutation when audit storage fails", async () => {
-    await db.$executeRawUnsafe("CREATE TRIGGER test_fail_audit BEFORE INSERT ON AuditEvent BEGIN SELECT RAISE(ABORT, 'test audit unavailable'); END");
+    const restoreLegacyTrigger1 = await postgres.rejectInsert("AuditEvent");
     const before = await db.brand.count();
     await expect(service.save(admin.id, "brands", { ...identity("Rollback brand"), organizationId: a.organizationId })).rejects.toThrow();
     expect(await db.brand.count()).toBe(before);
-    await db.$executeRawUnsafe("DROP TRIGGER test_fail_audit");
+    await restoreLegacyTrigger1();
   });
   it("leaves no resource or success audit for rejected mutations", async () => {
     const before = await db.auditEvent.count();

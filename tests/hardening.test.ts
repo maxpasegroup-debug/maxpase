@@ -103,15 +103,15 @@ describe("authentication, session lifecycle and audit integrity", () => {
     expect(await auth.validate(result.token, secret + "wrong")).toBeNull(); expect(await auth.validate("malformed", secret)).toBeNull();
   });
   it("rolls session creation back when its mandatory audit fails", async () => {
-    await db.$executeRawUnsafe("CREATE TRIGGER fail_auth_audit BEFORE INSERT ON AuditEvent WHEN NEW.action = 'auth.login' BEGIN SELECT RAISE(ABORT, 'test audit failure'); END");
+    const restoreLegacyTrigger1 = await postgres.rejectInsert("AuditEvent", "auth.login");
     try { await expect(auth.login({ email: "auth@test.invalid", password }, secret)).rejects.toThrow(); expect(await db.session.count()).toBe(0); }
-    finally { await db.$executeRawUnsafe("DROP TRIGGER fail_auth_audit"); }
+    finally { await restoreLegacyTrigger1(); }
   });
   it("does not silently revoke a session without its logout audit", async () => {
     const result = await auth.create(userId, secret);
-    await db.$executeRawUnsafe("CREATE TRIGGER fail_logout_audit BEFORE INSERT ON AuditEvent WHEN NEW.action = 'auth.logout' BEGIN SELECT RAISE(ABORT, 'test audit failure'); END");
+    const restoreLegacyTrigger2 = await postgres.rejectInsert("AuditEvent", "auth.logout");
     try { await expect(auth.revoke(result.token, secret)).rejects.toThrow(); expect(await auth.validate(result.token, secret)).not.toBeNull(); }
-    finally { await db.$executeRawUnsafe("DROP TRIGGER fail_logout_audit"); }
+    finally { await restoreLegacyTrigger2(); }
   });
 });
 

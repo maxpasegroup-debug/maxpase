@@ -277,12 +277,12 @@ describe("reporting, responsibility, SIA and audit", () => {
   it("rolls back access-control writes when audit persistence fails", async () => {
     const role = await db.role.create({ data: { organizationId: aId, key: "test-rollback-role", name: "Test rollback role" } });
     const permission = await db.permission.findUniqueOrThrow({ where: { key: "person.read" } });
-    await db.$executeRawUnsafe("CREATE TRIGGER test_access_audit_failure BEFORE INSERT ON AuditEvent BEGIN SELECT RAISE(ABORT, 'test audit unavailable'); END");
+    const restoreLegacyTrigger1 = await postgres.rejectInsert("AuditEvent");
     await expect(workforce.setPermission(adminId, role.id, permission.id, true)).rejects.toThrow();
     expect(await db.rolePermission.count({ where: { roleId: role.id } })).toBe(0);
     const before = await db.person.count();
     await expect(workforce.save(adminId, "people", { organizationId: aId, displayName: "Test rollback person" })).rejects.toThrow();
     expect(await db.person.count()).toBe(before);
-    await db.$executeRawUnsafe("DROP TRIGGER test_access_audit_failure");
+    await restoreLegacyTrigger1();
   });
 });

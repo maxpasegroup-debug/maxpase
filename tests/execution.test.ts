@@ -211,14 +211,14 @@ describe("Phase 04 execution domain", () => {
   it("rolls back execution and progress mutations if audit persistence fails", async () => {
     const g = await execution.save(admin, "goals", { organizationId: a, title: "Audit rollback" });
     const before = await db.task.count(); const updates = await db.progressUpdate.count();
-    await db.$executeRawUnsafe("CREATE TRIGGER execution_audit_failure BEFORE INSERT ON AuditEvent BEGIN SELECT RAISE(ABORT, 'audit unavailable'); END");
+    const restoreLegacyTrigger1 = await postgres.rejectInsert("AuditEvent");
     try {
       await expect(task()).rejects.toThrow();
       await expect(execution.progress(admin, g.id, 50)).rejects.toThrow();
       expect(await db.task.count()).toBe(before);
       expect(await db.progressUpdate.count()).toBe(updates);
       expect((await db.goal.findUniqueOrThrow({ where: { id: g.id } })).progress).toBe(0);
-    } finally { await db.$executeRawUnsafe("DROP TRIGGER execution_audit_failure"); }
+    } finally { await restoreLegacyTrigger1(); }
   });
   it("does not expose derived task progress to a project-read-only principal", async () => {
     const p = await project(); await task(p.id, { status: "COMPLETED" });

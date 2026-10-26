@@ -91,7 +91,8 @@ export function createFinanceService(client: PrismaClient = prisma, now: () => D
     const totals = await balance(db, w.id);
     boundedMoney(BigInt(totals.postedMinor) + amount);
     if (!amount || BigInt(totals.availableMinor) + amount < 0n) fail("Insufficient unreserved wallet funds");
-    await db.niceJobsWallet.update({ where: { id: w.id, revision: w.revision }, data: { revision: { increment: 1 } } });
+    // Lock and compare the observed revision; the PostgreSQL ledger trigger increments it once.
+    await db.niceJobsWallet.update({ where: { id: w.id, revision: w.revision }, data: { revision: { increment: 0 } } });
     return db.niceJobsWalletLedger.create({ data: { ...data, walletId: w.id, currency: w.currency, actorUserId: b.userId, createdAt: now() } });
   }
   async function approval(db: DB, b: Boundary, type: FinancialResource, id: string, controlPointId: string, idempotencyKey: string, reason: string) {

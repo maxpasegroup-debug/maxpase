@@ -64,7 +64,9 @@ describe("F06 scope-first context", () => {
       expect(result.queries).toBeLessThanOrEqual(small.queries + 5);
       const ctx = await createAccessContext(userId, db, selection());
       expect(ctx.nodes.map(n => n.id)).toEqual([organizationId]);
-      expect(queries.filter(q => q.sql.includes('FROM `main`.`Organization`')).every(q => q.sql.includes("WHERE"))).toBe(true);
+      const organizationReads = queries.filter(q => /FROM\s+(?:"public"\.)?"Organization"/.test(q.sql));
+      expect(organizationReads.length).toBeGreaterThan(0);
+      expect(organizationReads.every(q => q.sql.includes("WHERE"))).toBe(true);
     } catch (error) {
       console.info("F06 large failure", JSON.stringify({ ms: performance.now() - start, queries: queries.length, code: (error as { code?: string }).code, message: error instanceof Error ? error.message : "unknown" }));
       throw error;
@@ -121,7 +123,7 @@ describe("F06 scope-first context", () => {
     try {
       queries.length = 0;
       await expect(createAccessContext(userId, db, selection())).rejects.toThrow(QueryBudgetError);
-      const permissionReads = queries.filter(q => q.sql.includes('FROM `main`.`RolePermission`'));
+      const permissionReads = queries.filter(q => /FROM\s+(?:"public"\.)?"RolePermission"/.test(q.sql));
       expect(permissionReads).toHaveLength(1);
       expect(permissionReads[0].sql).toContain("LIMIT");
       expect(queries.some(q => q.sql.includes("passwordHash"))).toBe(false);

@@ -147,9 +147,9 @@ describe("Nice Jobs Phase 10 automation and command control", () => {
     const recipient = await db.user.findUniqueOrThrow({ where: { id: reviewer } });
     const task = await db.task.create({ data: { organizationId: division, title: "Audit rollback task", ownerPersonId: recipient.personId, status: "TODO", dueDate: new Date("2026-10-08T00:00:00Z") } });
     const source = await db.$transaction(tx => operationalEvent(tx, { actorUserId: manager, organizationId: division, action: "task.created", entityType: "Task", entityId: task.id, result: "SUCCESS" }));
-    await db.$executeRawUnsafe("CREATE TRIGGER phase10_audit_failure BEFORE INSERT ON AuditEvent WHEN NEW.action='automation.executed' BEGIN SELECT RAISE(ABORT, 'isolated audit failure'); END");
+    const restoreLegacyTrigger1 = await postgres.rejectInsert("AuditEvent", "automation.executed");
     try { await expect(automation.mutate(manager, { operation: "PROCESS_EVENT", ruleId, eventId: source.id })).rejects.toThrow(); }
-    finally { await db.$executeRawUnsafe("DROP TRIGGER phase10_audit_failure"); }
+    finally { await restoreLegacyTrigger1(); }
     expect(await db.automationRun.count({ where: { ruleId } })).toBe(0);
     expect(await db.notification.count({ where: { resourceId: task.id } })).toBe(0);
   });

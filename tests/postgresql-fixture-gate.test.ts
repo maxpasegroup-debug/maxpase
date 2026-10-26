@@ -24,6 +24,8 @@ describe("isolated PostgreSQL fixture gate", () => {
     "postgresql://user:password@production.invalid:5432/maxpase_ci?schema=public",
     "postgresql://user:password@127.0.0.1:5432/maxpase?schema=public",
     "postgresql://user:password@127.0.0.1:5432/maxpase_ci?schema=private",
+    "postgresql://user:password@127.0.0.1:5432/maxpase_ci?schema=public&host=production.invalid",
+    "postgresql://user:password@127.0.0.1:5432/maxpase_ci?schema=public&schema=private",
     "file:/tmp/maxpase_ci.db"
   ])("refuses an unsafe target", url => {
     process.env.TEST_DATABASE_URL = url;

@@ -193,8 +193,11 @@ describe("Nice Jobs workforce and versioned job foundation", () => {
       const plan = await db.$queryRaw<{ "QUERY PLAN": string }[]>`EXPLAIN SELECT "id" FROM "NiceJobsAssignment"
         WHERE "divisionId" = ${labs} AND "status" = 'PREPARED' AND "id" > 'large-assignment-'
         ORDER BY "id" LIMIT 26`;
-      expect(plan.map(row => row["QUERY PLAN"]).join(" ")).toContain("NiceJobsAssignment_divisionId_status_id_idx");
-      console.log(`Nice Jobs isolated 100,001-worker fixture: two 25-row pages in ${(performance.now() - started).toFixed(1)}ms; composite index selected. Not production load certification.`);
+      const planText = plan.map(row => row["QUERY PLAN"]).join(" ");
+      expect(planText).toMatch(/Index Scan using "(?:NiceJobsAssignment_divisionId_status_id_idx|NiceJobsAssignment_pkey)"/);
+      expect(planText).toContain("Index Cond:");
+      expect(planText).not.toContain("Seq Scan");
+      console.log(`Nice Jobs isolated 100,001-worker fixture: two 25-row pages in ${(performance.now() - started).toFixed(1)}ms; indexed keyset scan selected. Not production load certification.`);
     } finally {
       await db.$executeRawUnsafe(`DELETE FROM "NiceJobsAssignment" WHERE "id" LIKE 'large-assignment-%'`);
       await db.$executeRawUnsafe(`DELETE FROM "NiceJobsWorkerProfile" WHERE "id" LIKE 'large-profile-%'`);

@@ -75,11 +75,11 @@ describe("Skill City developer desk", () => {
     await desk.review(secondId, { taskId: one.id, duty: "CODE_REVIEW", verdict: "APPROVED", comment: "Changes and tests reviewed", reference: randomUUID() });
     await desk.review(secondId, { taskId: one.id, duty: "TESTING", verdict: "APPROVED", comment: "Failure cases independently tested", reference: randomUUID() });
     await expect(desk.completeReviewedTask(firstId, completion)).rejects.toThrow();
-    await db.$executeRawUnsafe("CREATE TRIGGER fail_reviewed_completion_audit BEFORE INSERT ON AuditEvent WHEN NEW.action = 'staff.developer_task_reviewed_complete' BEGIN SELECT RAISE(ABORT, 'isolated audit failure'); END");
+    const restoreLegacyTrigger1 = await postgres.rejectInsert("AuditEvent", "staff.developer_task_reviewed_complete");
     try {
       await expect(desk.completeReviewedTask(directorId, completion)).rejects.toThrow();
       expect((await db.task.findUniqueOrThrow({ where: { id: one.id } })).status).toBe("BLOCKED");
-    } finally { await db.$executeRawUnsafe("DROP TRIGGER fail_reviewed_completion_audit"); }
+    } finally { await restoreLegacyTrigger1(); }
     expect((await desk.completeReviewedTask(directorId, completion)).replay).toBe(false);
     expect((await desk.completeReviewedTask(directorId, completion)).replay).toBe(true);
     await expect(desk.completeReviewedTask(directorId, { ...completion, reason: "Changed replay" })).rejects.toThrow();
@@ -97,10 +97,10 @@ describe("Skill City developer desk", () => {
   });
 
   it("rolls assignment back when operational audit fails", async () => {
-    await db.$executeRawUnsafe("CREATE TRIGGER fail_developer_audit BEFORE INSERT ON AuditEvent WHEN NEW.action = 'staff.developer_task_assigned' BEGIN SELECT RAISE(ABORT, 'isolated audit failure'); END");
+    const restoreLegacyTrigger2 = await postgres.rejectInsert("AuditEvent", "staff.developer_task_assigned");
     try {
       await expect(desk.assignTask(directorId, { projectId, developerUserId: firstId, title: "Must roll back", dueDate: "2026-11-03T10:00:00.000Z", reference: randomUUID() })).rejects.toThrow();
       expect(await db.task.count({ where: { title: "Must roll back" } })).toBe(0);
-    } finally { await db.$executeRawUnsafe("DROP TRIGGER fail_developer_audit"); }
+    } finally { await restoreLegacyTrigger2(); }
   });
 });

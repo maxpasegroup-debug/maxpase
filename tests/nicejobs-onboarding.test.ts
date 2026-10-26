@@ -249,8 +249,8 @@ describe("Nice Jobs orientation, OJT and human readiness", () => {
     const row=await progress(ref,"day_2"),dueAt=new Date(row.dueAt!.getTime()+86400000).toISOString();
     await act(ref,"PROPOSE_CONTROL",{control:{kind:"EXTEND",progressId:row.id,dueAt},feedback:"Extra time for evidence"},manager,false);
     const p=(await onboarding.detail(manager,ref,false)).control.proposals[0],decision=await command(ref,"DECIDE_CONTROL",{controlDecision:{proposalId:p.id,decision:"APPROVED"},feedback:"Approved extension"},controller,false),rev=(await onboarding.detail(manager,ref,false)).revision;
-    await db.$executeRawUnsafe("CREATE TRIGGER fail_training_control BEFORE INSERT ON OperationalEvent WHEN NEW.eventType = 'nicejobs.onboarding.decide_control' BEGIN SELECT RAISE(ABORT, 'control audit unavailable'); END");
-    try{await expect(onboarding.mutate(controller,decision,false)).rejects.toThrow();}finally{await db.$executeRawUnsafe("DROP TRIGGER IF EXISTS fail_training_control");}
+    const restoreLegacyTrigger1 = await postgres.rejectInsert("OperationalEvent", "nicejobs.onboarding.decide_control");
+    try{await expect(onboarding.mutate(controller,decision,false)).rejects.toThrow();}finally{await restoreLegacyTrigger1();}
     expect((await progress(ref,"day_2")).dueAt).toEqual(row.dueAt);expect((await onboarding.detail(manager,ref,false)).revision).toBe(rev);
     await onboarding.mutate(controller,decision,false);await onboarding.mutate(controller,decision,false);
     expect((await progress(ref,"day_2")).dueAt?.toISOString()).toBe(dueAt);
@@ -305,8 +305,8 @@ describe("Nice Jobs orientation, OJT and human readiness", () => {
   });
   it("rolls back daily report and revision if its mandatory audit fails",async()=>{
     const ref=await enroll();await act(ref,"START_ORIENTATION");const before=(await onboarding.detail(candidate,ref,true)).revision;
-    await db.$executeRawUnsafe("CREATE TRIGGER fail_daily_training_report BEFORE INSERT ON OperationalEvent WHEN NEW.eventType = 'nicejobs.onboarding.daily_report' BEGIN SELECT RAISE(ABORT, 'report audit unavailable'); END");
-    try{await expect(act(ref,"DAILY_REPORT",{report:{date:"2026-10-08",notes:"Must roll back"}})).rejects.toThrow();}finally{await db.$executeRawUnsafe("DROP TRIGGER IF EXISTS fail_daily_training_report");}
+    const restoreLegacyTrigger2 = await postgres.rejectInsert("OperationalEvent", "nicejobs.onboarding.daily_report");
+    try{await expect(act(ref,"DAILY_REPORT",{report:{date:"2026-10-08",notes:"Must roll back"}})).rejects.toThrow();}finally{await restoreLegacyTrigger2();}
     expect(await db.niceJobsTrainingProgress.count({where:{phase:"DAILY_REPORT"}})).toBe(0);expect((await onboarding.detail(candidate,ref,true)).revision).toBe(before);
   });
   it("requires visible rework instructions and records acknowledgement and comprehension as separate signals",async()=>{
@@ -377,11 +377,12 @@ describe("Nice Jobs orientation, OJT and human readiness", () => {
     for (const key of ["notification.read", "sia.access.read"]) await db.permission.upsert({ where: { key }, update: {}, create: { key, name: key, scope: "GROUP" } });
     process.env.NICEJOBS_PIN_PEPPER = "isolated-test-pepper-at-least-thirty-two-characters";
     const user = await createApplicantAccess(db).register({ displayName: "Rollback trainee", email: "rollback-trainee@phase03.invalid", country: "IN", nationalNumber: "9876543214", pin: "123456", confirmPin: "123456", acknowledge: true });
+    let restoreLegacyTrigger3: Awaited<ReturnType<typeof postgres.rejectInsert>> | undefined;
     try {
       await expect(accepted(user.userId, versionId, async () => {
-        await db.$executeRawUnsafe("CREATE TRIGGER fail_training_access BEFORE INSERT ON OperationalEvent WHEN NEW.eventType = 'nicejobs.participant.training_access' BEGIN SELECT RAISE(ABORT, 'training audit unavailable'); END");
+        restoreLegacyTrigger3 = await postgres.rejectInsert("OperationalEvent", "nicejobs.participant.training_access");
       })).rejects.toThrow();
-    } finally { await db.$executeRawUnsafe("DROP TRIGGER IF EXISTS fail_training_access"); }
+    } finally { if (restoreLegacyTrigger3) await restoreLegacyTrigger3(); }
     const app = await db.niceJobsApplication.findFirstOrThrow({ where: { candidate: { users: { some: { id: user.userId } } } } });
     expect(app.status).toBe("OFFER");
     expect(await db.niceJobsOffer.count({ where: { applicationId: app.id, status: "ACCEPTED" } })).toBe(0);

@@ -352,8 +352,8 @@ describe("Nice Jobs interview, approval and offer controls", () => {
   });
   it("rolls back offer acceptance and its notification when audit insertion fails", async () => {
     const a = await shortlisted(), o = await issued(a), before = await db.notification.count();
-    await db.$executeRawUnsafe("CREATE TRIGGER phase03_audit_failure BEFORE INSERT ON AuditEvent BEGIN SELECT RAISE(ABORT, 'isolated audit failure'); END");
-    try { await expect(act(a, "ACCEPT_OFFER", { offerReference: o.reference, recordRevision: o.revision }, candidate)).rejects.toThrow(); } finally { await db.$executeRawUnsafe("DROP TRIGGER phase03_audit_failure"); }
+    const restoreLegacyTrigger1 = await postgres.rejectInsert("AuditEvent");
+    try { await expect(act(a, "ACCEPT_OFFER", { offerReference: o.reference, recordRevision: o.revision }, candidate)).rejects.toThrow(); } finally { await restoreLegacyTrigger1(); }
     expect((await row(a)).status).toBe("OFFER"); expect((await offer(a)).status).toBe("ISSUED"); expect((await offer(a)).acceptedAt).toBeNull(); expect(await db.notification.count()).toBe(before);
   });
   it("bounds historical joins and cursor pagination while applying candidate and UTC interview filters", async () => {

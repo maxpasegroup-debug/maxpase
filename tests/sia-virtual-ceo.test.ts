@@ -199,13 +199,13 @@ describe("Phase 08 SIA controlled Virtual CEO", () => {
   it("rolls back task, action state, request and audit together on audit failure", async () => {
     const action = await proposal(); await approve(action);
     const count = await db.task.count();
-    await db.$executeRawUnsafe("CREATE TRIGGER fail_sia_audit BEFORE INSERT ON AuditEvent WHEN NEW.action = 'sia.action_verified' BEGIN SELECT RAISE(ABORT, 'audit unavailable'); END");
-    try { await expect(sia.execute(admin, action.id, 0, true)).rejects.toThrow(); } finally { await db.$executeRawUnsafe("DROP TRIGGER fail_sia_audit"); }
+    const restoreLegacyTrigger1 = await postgres.rejectInsert("AuditEvent", "sia.action_verified");
+    try { await expect(sia.execute(admin, action.id, 0, true)).rejects.toThrow(); } finally { await restoreLegacyTrigger1(); }
     expect(await db.task.count()).toBe(count);
     expect(await db.siaAction.findUnique({ where: { id: action.id } })).toMatchObject({ status: "APPROVAL_REQUIRED", resultId: null, version: 0 });
     const requests = await db.operationalRequest.count();
-    await db.$executeRawUnsafe("CREATE TRIGGER fail_sia_proposal BEFORE INSERT ON AuditEvent WHEN NEW.action = 'sia.action_authorized' BEGIN SELECT RAISE(ABORT, 'audit unavailable'); END");
-    try { await expect(proposal()).rejects.toThrow(); } finally { await db.$executeRawUnsafe("DROP TRIGGER fail_sia_proposal"); }
+    const restoreLegacyTrigger2 = await postgres.rejectInsert("AuditEvent", "sia.action_authorized");
+    try { await expect(proposal()).rejects.toThrow(); } finally { await restoreLegacyTrigger2(); }
     expect(await db.operationalRequest.count()).toBe(requests);
   });
   it("records safe failures and usage without private prompts or chain-of-thought", async () => {

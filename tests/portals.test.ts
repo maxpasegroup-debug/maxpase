@@ -235,9 +235,18 @@ describe("Separate brand domains and authenticated gateways", () => {
     finally { await db.membership.update({ where: { id: membershipId }, data: { status: "ACTIVE" } }); }
   });
   it("keeps concurrent brand sessions separate and revokes only the matching brand session", async () => {
-    const startup = await auth.loginPortal(credentials(), secret, "startup"), labs = await auth.loginPortal(credentials(), secret, "labs");
+    const labsPerson = await db.person.create({ data: { displayName: "Labs session member", metadata: JSON.stringify({ authenticationRealm: "labs", credentialKind: "STAFF_PASSWORD" }) } });
+    const labsEmail = "labs-session-member@test.invalid";
+    const labsUser = await db.user.create({ data: { email: labsEmail, personId: labsPerson.id, passwordHash: await hashPassword(password), emailVerifiedAt: new Date() } });
+    const labsRole = await db.role.create({ data: { organizationId: labsId, key: "labs-business-development-manager", name: "Labs business development manager", permissions: { create: { permission: { connect: { key: "organization.read" } } } } } });
+    await db.membership.create({ data: { personId: labsPerson.id, organizationId: labsId, roles: { create: { roleId: labsRole.id } } } });
+    const startup = await auth.loginPortal(credentials(), secret, "startup"), labs = await auth.loginPortal({ email: labsEmail, password }, secret, "labs");
+    expect(labs).not.toBeNull();
+    expect(startup).not.toBeNull();
+    expect(await auth.validate(labs!.token, secret, "startup")).toBeNull();
     await auth.revoke(startup!.token, secret, "labs"); expect(await auth.validate(startup!.token, secret, "startup")).not.toBeNull();
     await auth.revoke(startup!.token, secret, "startup"); expect(await auth.validate(startup!.token, secret, "startup")).toBeNull(); expect(await auth.validate(labs!.token, secret, "labs")).not.toBeNull();
+    expect((await auth.validate(labs!.token, secret, "labs"))?.userId).toBe(labsUser.id);
   });
   it("returns only authorized division work/programs, never sibling content or sensitive raw records", async () => {
     await db.task.create({ data: { organizationId: startupId, title: "Startup authorized work", description: "Internal metadata not displayed" } });

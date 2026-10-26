@@ -347,8 +347,8 @@ describe("Nice Jobs applications and screening", () => {
   });
   it("rolls back mutation, numbering, history and notification when mandatory audit fails", async () => {
     const a = await applications.create(candidate, { versionId, divisionId: labs });
-    await db.$executeRawUnsafe("CREATE TRIGGER phase02_audit_failure BEFORE INSERT ON AuditEvent BEGIN SELECT RAISE(ABORT, 'audit failure'); END");
-    try { await expect(applications.mutate(candidate, { reference: a.reference, revision: 0, action: "SUBMIT", answers: { experience: 3, answer: "Yes" } })).rejects.toThrow(); } finally { await db.$executeRawUnsafe("DROP TRIGGER phase02_audit_failure"); }
+    const restoreLegacyTrigger1 = await postgres.rejectInsert("AuditEvent");
+    try { await expect(applications.mutate(candidate, { reference: a.reference, revision: 0, action: "SUBMIT", answers: { experience: 3, answer: "Yes" } })).rejects.toThrow(); } finally { await restoreLegacyTrigger1(); }
     expect(await db.niceJobsApplicationSequence.count()).toBe(0); expect(await db.notification.count()).toBe(0); expect((await applications.detail(candidate, a.reference, true)).status).toBe("DRAFT"); expect(await db.niceJobsApplicationHistory.count()).toBe(1);
   });
   it("reuses recipient-scoped internal notifications and honors in-app opt-out without providers", async () => {

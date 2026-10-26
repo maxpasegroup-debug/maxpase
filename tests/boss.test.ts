@@ -58,8 +58,8 @@ describe("MAXPASE group and Boss controls", () => {
     expect(data.executive.companies[0]).toHaveProperty("evidence.lastUpdated", null);
     expect(data.cards[0].evidence).toMatchObject({ recordCount: 0, lastUpdated: null, freshness: "NO RECORDED WORK" });
     expect(data.cards[0].metrics.find(m => m.name === "Overdue tasks")?.value).toBe(0);
-    // This fixture intentionally lacks Prisma migration metadata: readiness must not pretend to pass.
-    expect(data.system).toMatchObject({ database: "UNAVAILABLE", application: "REQUEST SERVED", backup: "NOT VERIFIED", monitoring: "NOT VERIFIED", production: "NOT VERIFIED" });
+    // The PostgreSQL fixture applies the baseline; schema readiness is distinct from operational assurance.
+    expect(data.system).toMatchObject({ database: "SCHEMA READY", application: "REQUEST SERVED", backup: "NOT VERIFIED", monitoring: "NOT VERIFIED", production: "NOT VERIFIED" });
     expect(data.sia).toMatchObject({ status: "NOT CONFIGURED", canAsk: false, capabilities: [], autonomousExecution: false });
   });
   it("reconciles company oversight to underlying records, not a bounded preview", async () => {

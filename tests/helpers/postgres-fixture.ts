@@ -12,7 +12,7 @@ function isolatedBaseUrl() {
     !["postgres:", "postgresql:"].includes(url.protocol) ||
     !["localhost", "127.0.0.1", "[::1]"].includes(url.hostname) ||
     url.pathname !== "/maxpase_ci" || url.searchParams.get("schema") !== "public" ||
-    !url.username || !url.password) {
+    !url.username || !url.password || url.hash || [...url.searchParams.keys()].some(key => key !== "schema") || url.searchParams.getAll("schema").length !== 1) {
     throw new Error("Refusing an unconfirmed or non-local PostgreSQL test target");
   }
   return url;
@@ -104,10 +104,13 @@ export function createPostgresFixture(options: Omit<Prisma.PrismaClientOptions, 
             WHERE n.nspname = 'public' AND t.tgisinternal AND t.tgenabled NOT IN ('O', 'A')) AS disabled`;
       if (row.invalid !== 0n || row.disabled !== 0n) throw new Error("PostgreSQL foreign-key integrity enforcement is not active");
     },
-    async rejectInsert(table: "AuditEvent" | "Notification", value?: string) {
-      const field = table === "AuditEvent" ? "action" : "type";
+    async rejectInsert(table: "AuditEvent" | "Notification" | "OperationalEvent", value?: string, match: "EXACT" | "PREFIX" = "EXACT") {
+      const field = table === "AuditEvent" ? "action" : table === "Notification" ? "type" : "eventType";
       const name = `maxpase_test_reject_${randomUUID().replaceAll("-", "")}`;
-      const when = value === undefined ? "" : `WHEN (NEW."${field}" = '${value.replaceAll("'", "''")}')`;
+      const escaped = value?.replaceAll("'", "''");
+      const when = escaped === undefined ? "" : match === "PREFIX"
+        ? `WHEN (starts_with(NEW."${field}", '${escaped}'))`
+        : `WHEN (NEW."${field}" = '${escaped}')`;
       await db.$executeRawUnsafe(`CREATE TRIGGER "${name}" BEFORE INSERT ON "${table}"
         FOR EACH ROW ${when} EXECUTE FUNCTION maxpase_test_reject_insert()`);
       return async () => db.$executeRawUnsafe(`DROP TRIGGER "${name}" ON "${table}"`);

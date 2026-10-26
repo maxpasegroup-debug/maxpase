@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { readFileSync, readdirSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { migrationManifest } from "@/server/security/readiness";
+import { Prisma } from "@prisma/client";
 
 const [name, checksum] = migrationManifest[0];
 const sql = readFileSync(`prisma/migrations/${name}/migration.sql`, "utf8");
@@ -26,5 +27,26 @@ describe("PostgreSQL migration source", () => {
     expect(triggers.sort()).toEqual(names.sort());
     expect(sql).toContain('UPDATE "NiceJobsWallet" SET "revision" = "revision" + 1');
     expect(sql).toContain('r."siaId" IS NULL');
+  });
+
+  it("declares every Prisma model table and attaches all safeguards to declared tables", () => {
+    const tables = [...sql.matchAll(/^CREATE TABLE "public"\."([^"]+)"/gm)].map(match => match[1]);
+    const models = Prisma.dmmf.datamodel.models.map(model => model.dbName ?? model.name);
+    expect(new Set(tables).size).toBe(tables.length);
+    expect(tables.sort()).toEqual(models.sort());
+    const attachments = [...sql.matchAll(/^CREATE TRIGGER\s+(?:"[^"]+"|[a-z_]+)\s+BEFORE\s+(?:INSERT|UPDATE|DELETE)\s+ON\s+"([^"]+)"/gm)];
+    expect(attachments).toHaveLength(13);
+    for (const [, table] of attachments) {
+      expect(tables).toContain(table);
+    }
+    expect(triggers).toHaveLength(13);
+    for (const table of ["User", "Session", "Person", "Organization", "Membership", "Role", "Permission", "RolePermission", "MembershipRole", "AuditEvent"]) {
+      expect(tables).toContain(table);
+    }
+    expect(sql).toContain('CREATE UNIQUE INDEX "User_email_key"');
+    expect(sql).toContain('CREATE UNIQUE INDEX "Membership_personId_organizationId_scopeKey_key"');
+    expect(sql).toContain('CREATE UNIQUE INDEX "Role_organizationId_key_key"');
+    expect(sql).toContain('CREATE UNIQUE INDEX "Permission_key_key"');
+    expect(sql).toContain('FOREIGN KEY ("personId") REFERENCES "public"."Person"("id")');
   });
 });

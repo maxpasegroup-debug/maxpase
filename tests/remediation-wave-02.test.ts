@@ -147,13 +147,13 @@ describe("Wave 02 persisted automation continuation", () => {
   });
   it("rolls back page output and cursor when the page completion audit fails, then resumes safely", async () => {
     const f = await foundation(); await tasks(f, 26); const { job, rule } = await ruleJob(f);
-    await db.$executeRawUnsafe("CREATE TRIGGER wave02_page_failure BEFORE INSERT ON AuditEvent WHEN NEW.action = 'automation.job_progressed' BEGIN SELECT RAISE(ABORT, 'fixture audit failure'); END");
+    const restoreLegacyTrigger1 = await postgres.rejectInsert("AuditEvent", "automation.job_progressed");
     try {
       expect(await f.automation.processDue(f.owner.userId)).toMatchObject([{ processed: 0, status: "FAILED" }]);
       expect(await db.automationRun.count({ where: { ruleId: rule.id } })).toBe(0);
       expect(await db.notification.count({ where: { organizationId: f.org } })).toBe(0);
       expect(await db.scheduledJob.findUnique({ where: { id: job.id } })).toMatchObject({ scanCursor: null, runs: 0, attempts: 1 });
-    } finally { await db.$executeRawUnsafe("DROP TRIGGER wave02_page_failure"); }
+    } finally { await restoreLegacyTrigger1(); }
     time = new Date(time.getTime() + 180000);
     expect(await f.automation.processDue(f.owner.userId)).toMatchObject([{ processed: 25, status: "PENDING" }]);
     time = new Date(time.getTime() + 60001);
@@ -225,12 +225,12 @@ describe("Wave 02 communication action semantic feedback", () => {
     expect(await action("integration", input)).toMatchObject({ ok: false, outcome: "BLOCKED" });
     expect(await db.integration.count({ where: { organizationId: f.org } })).toBe(0);
     session.userId = f.owner.userId;
-    await db.$executeRawUnsafe("CREATE TRIGGER wave02_mutation_failure BEFORE INSERT ON AuditEvent WHEN NEW.action = 'integration.created' BEGIN SELECT RAISE(ABORT, 'private database failure'); END");
+    const restoreLegacyTrigger2 = await postgres.rejectInsert("AuditEvent", "integration.created");
     try {
       const state = await action("integration", input);
       expect(state).toMatchObject({ ok: false, outcome: "FAILED" }); expect(state.message).not.toContain("private database");
       expect(await db.integration.count({ where: { organizationId: f.org } })).toBe(0);
-    } finally { await db.$executeRawUnsafe("DROP TRIGGER wave02_mutation_failure"); }
+    } finally { await restoreLegacyTrigger2(); }
   });
   it("keeps pending, simulated, provider-accepted and recipient-confirmed results semantically distinct", () => {
     expect(resultFeedback("ACCEPTED").message).toContain("not yet verified");

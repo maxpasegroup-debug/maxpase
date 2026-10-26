@@ -8,7 +8,7 @@ permissions:
 jobs:
   validation:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 45
     services:
       postgres:
         image: postgres:16
@@ -39,10 +39,17 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y postgresql-client-16
       - run: npm run prisma:generate
       - run: npm run prisma:validate
-      - run: npm run validate:migrations
+      - name: Verify empty PostgreSQL baseline, repeat deploy and all safeguard triggers
+        run: npm run validate:migrations
       - run: npm run lint
       - run: npm run typecheck
-      - run: npm test
+      - name: Confirm PostgreSQL 16 client binaries
+        run: |
+          psql --version
+          pg_dump --version
+          pg_restore --version
+      - name: Run PostgreSQL integration and regression suite
+        run: npm test
       - run: npm run build
       - name: Require reviewed registry metadata submission
         env:

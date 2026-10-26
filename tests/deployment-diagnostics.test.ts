@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { randomBytes } from "node:crypto";
-import { failureReason, safeDiagnostic } from "@/server/security/diagnostics";
+import { failureReason, safeDiagnostic, migrationValidationDiagnostic } from "@/server/security/diagnostics";
 
 const env: NodeJS.ProcessEnv = { NODE_ENV: "production", AUTH_SECRET: randomBytes(32).toString("hex"), DATABASE_URL: "postgresql://app:private-password@db.internal:5432/maxpase", APP_ORIGIN: "https://maxpase.com", AUTH_COOKIE_SECURE: "true" };
 describe("Secret-safe deployment diagnostics", () => {
@@ -23,5 +23,12 @@ describe("Secret-safe deployment diagnostics", () => {
       expect(JSON.stringify(record)).not.toContain("private"); expect(JSON.stringify(record)).not.toContain(env.AUTH_SECRET);
       expect(failureReason({ code: "private-arbitrary-code" }, "authentication", env)).toBe("operation_failed");
     } finally { log.mockRestore(); }
+  });
+  it("identifies the failed isolated migration stage without logging child-process output", () => {
+    const diagnostic = migrationValidationDiagnostic({ code: "P2021", status: 1, message: "private-connection-url", stderr: "private-password" }, "initial_migration");
+    expect(diagnostic).toMatchObject({ code: "postgresql_migration_validation_failed", stage: "initial_migration", prismaCode: "P2021", processExitCode: 1 });
+    expect(diagnostic.correlationId).toMatch(/^[0-9a-f-]{36}$/);
+    expect(JSON.stringify(diagnostic)).not.toContain("private");
+    expect(migrationValidationDiagnostic({ code: "secret-token", stderr: "private" }, "readiness_and_triggers")).not.toHaveProperty("prismaCode");
   });
 });
