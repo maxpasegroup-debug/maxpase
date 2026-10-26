@@ -1,8 +1,8 @@
 # PostgreSQL Safeguard Mapping
 
-Status: **SQL IMPLEMENTED, NOT DATABASE-VERIFIED**. The active baseline is `prisma/migrations/20261025000000_initial/migration.sql`. The original SQLite SQL is preserved in `prisma/sqlite-migrations-archive`. Static name/checksum checks do not establish that PostgreSQL can execute the migration or preserve concurrency semantics.
+Status (2026-10-26): **VERIFIED ON ISOLATED LOCAL POSTGRESQL 16; CURRENT-COMMIT CI FAILED 2 OF 790 TESTS; PRODUCTION POSTGRESQL 18 UNMIGRATED**. The active baseline is `prisma/migrations/20261025000000_initial/migration.sql`. The original SQLite SQL is preserved in `prisma/sqlite-migrations-archive`. A fresh local database applied the migration; repeat deploy, readiness, 13 enabled triggers, direct financial denials, transactional rollback, and concurrent posting checks passed. GitHub Actions rerun `40273303463` used disposable PostgreSQL 16 and reached the full test step (788 passed, 2 failed); the build step did not run. Local results do not prove PostgreSQL 18 compatibility or production sign-in. The production schema and Boss account were not changed.
 
-| SQLite trigger | PostgreSQL invariant | Verification still required |
+| SQLite trigger | PostgreSQL invariant | Local PostgreSQL check |
 | --- | --- | --- |
 | `nicejobs_wallet_ledger_no_update` | Posted ledger rows cannot change. | Direct SQL update denial and rollback. |
 | `nicejobs_wallet_ledger_no_delete` | Posted ledger rows cannot be deleted. | Direct SQL delete denial and rollback. |
@@ -18,6 +18,6 @@ Status: **SQL IMPLEMENTED, NOT DATABASE-VERIFIED**. The active baseline is `pris
 | `NiceJobsAutomationPublishedMaterialImmutable` | Published rule definition/review material cannot change. | Published versus draft updates. |
 | `NiceJobsAutomationPublishedDeleteForbidden` | Published automation version cannot be removed. | Published versus draft deletes. |
 
-The ledger-source trigger updates the wallet revision before calculating the balance. This is intended to serialize postings under `READ COMMITTED` and force a serialization conflict for a stale `REPEATABLE READ`/`SERIALIZABLE` transaction; it is **not proven** until two-client PostgreSQL tests run. The application still uses optimistic wallet revision checks and an independent human approval boundary. The DB trigger is the final enforcement layer for direct writes and concurrent requests. No payout provider is configured.
+The ledger-source trigger updates the wallet revision before calculating the balance. Local concurrent PostgreSQL tests exercised posting and rollback; production concurrency remains unverified. The application still uses optimistic wallet revision checks and an independent human approval boundary. The DB trigger is the final enforcement layer for direct writes and concurrent requests. No payout provider is configured.
 
 The baseline must pass an empty-database migration, repeat deployment, all safeguard cases above, rollback/audit tests, and recovery on an isolated PostgreSQL service. Any mismatch blocks launch; do not bypass a guard or mark a migration applied manually.

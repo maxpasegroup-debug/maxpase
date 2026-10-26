@@ -163,9 +163,12 @@ export function createOnboardingService(client: PrismaClient = prisma, now: () =
         const p = configuredTrainingPlan(a.area.version.configuration);
         if (p.ojt?.curriculum && curriculumIssues(p.ojt).length) throw new NiceJobsError("The pinned 100-day curriculum is incomplete");
         const snapshot = JSON.stringify(p), digest = hash(p);
-        const shared = await db.niceJobsTrainingPlan.upsert({ where: { versionId: a.versionId }, create: { versionId: a.versionId, configuration: snapshot, fingerprint: digest }, update: {} });
+        await db.niceJobsTrainingPlan.createMany({ data: [{ versionId: a.versionId, configuration: snapshot, fingerprint: digest }], skipDuplicates: true });
+        const shared = await db.niceJobsTrainingPlan.findUniqueOrThrow({ where: { versionId: a.versionId } });
         if (shared.fingerprint !== digest || shared.configuration !== snapshot) throw new NiceJobsError("Pinned training configuration changed unexpectedly");
-        const e = await db.niceJobsOnboarding.create({ data: { applicationId: a.id, offerId: o.id, planId: shared.id }, include });
+        const created = await db.niceJobsOnboarding.createMany({ data: [{ applicationId: a.id, offerId: o.id, planId: shared.id }], skipDuplicates: true });
+        const e = await db.niceJobsOnboarding.findUniqueOrThrow({ where: { applicationId: a.id }, include });
+        if (!created.count) { await readAccess(b, e, own); return { reference: a.reference, status: e.status }; }
         const lessons = orderedItems(p, "ORIENTATION");
         if (lessons.length) await db.niceJobsTrainingProgress.createMany({ data: lessons.map(l => ({ onboardingId: e.id, phase: "ORIENTATION", key: l.key })) });
         await event(db, b, e, data, fingerprint, "NOT_ENROLLED"); await notice(db, b, e, "Orientation enrollment created");
