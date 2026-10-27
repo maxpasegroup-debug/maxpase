@@ -3,7 +3,7 @@
 import { usePathname } from "next/navigation";
 import { useLayoutEffect } from "react";
 
-const shells = ".al-form, .startup-hero-art, .startup-next-step, .hero-art-card, .group-hero-office, .al-hero, .portal-hero";
+const shells = ".al-form, .startup-hero-art, .startup-next-step, .hero-art-card, .group-hero-office, .al-hero, .portal-hero, .skillcity-hero";
 
 function isCard(element: Element) {
   return element.matches(`article, [data-card], ${shells}`) || (element.matches("li") && element.parentElement?.tagName === "OL");
