@@ -4,7 +4,7 @@ import { businessService } from "@/server/domain/business-service";
 import { businessKinds, type BusinessKind } from "@/server/domain/business-input";
 import { BusinessManager, type Options, type Row } from "../business-manager";
 import { getBusinessManagementScopes } from "@/server/domain/business-workspace";
-export default async function BusinessPage({ params }: { params: Promise<{ kind: string }> }) {
+export default async function BusinessPage({ params, searchParams }: { params: Promise<{ kind: string }>; searchParams?: Promise<{ recordId?: string | string[] }> }) {
   const { kind: requested } = await params;
   if (!businessKinds.includes(requested as BusinessKind)) notFound();
   const kind = requested as BusinessKind;
@@ -26,5 +26,6 @@ export default async function BusinessPage({ params }: { params: Promise<{ kind:
     const organization = r.organization as { slug: string; parentId: string | null } | undefined;
     return { ...r, name: r.name ?? r.displayName, slug: r.slug ?? organization?.slug, groupOrganizationId: kind === "companies" ? organization?.parentId : undefined };
   });
-  return <BusinessManager kind={kind} rows={JSON.parse(JSON.stringify(normalized)) as Row[]} options={options} canManage={scopes.length > 0}/>;
+  const recordId = (await searchParams)?.recordId;
+  return <BusinessManager kind={kind} rows={JSON.parse(JSON.stringify(normalized)) as Row[]} options={options} canManage={scopes.length > 0} initialRecordId={typeof recordId === "string" ? recordId : undefined}/>;
 }

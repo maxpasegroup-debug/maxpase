@@ -2199,3 +2199,54 @@ progress { width: 120px; accent-color: var(--accent); }
   .skillcity-grid article, .skillcity-next { transition: none; }
   .skillcity-grid article:hover { transform: none; }
 }
+.boss-hierarchy { --tree-line: #cbd5e1; }
+.boss-hierarchy-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; }
+.boss-hierarchy-heading h2 { margin: 2px 0 6px; }
+.boss-hierarchy-heading p { margin: 0; }
+.boss-hierarchy-count { color: var(--muted); font-size: 12px; white-space: nowrap; }
+.boss-hierarchy-filters { display: grid; grid-template-columns: minmax(170px, 1fr) minmax(220px, 1.5fr) minmax(150px, .8fr); gap: 12px; margin: 20px 0 10px; }
+.boss-hierarchy-filters label { display: grid; gap: 6px; min-width: 0; font-size: 12px; font-weight: 600; }
+.boss-hierarchy-filters select, .boss-hierarchy-search { width: 100%; min-width: 0; min-height: 44px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); }
+.boss-hierarchy-filters select { padding: 0 12px; }
+.boss-hierarchy-search { display: flex; align-items: center; gap: 8px; padding: 0 10px; }
+.boss-hierarchy-search input { min-width: 0; flex: 1; border: 0; outline: 0; background: transparent; color: inherit; }
+.boss-hierarchy-search:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
+.boss-hierarchy-search button { min-width: 32px; min-height: 32px; border: 0; background: transparent; cursor: pointer; color: inherit; }
+.boss-hierarchy-feedback { min-height: 20px; margin: 10px 0 16px; font-size: 12px; color: var(--muted); }
+.boss-hierarchy-root, .boss-hierarchy-children { list-style: none; padding: 0; margin: 0; }
+.boss-hierarchy-root > .boss-hierarchy-branch > .boss-hierarchy-children { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 14px; margin-top: 14px; padding-left: 0; border: 0; }
+.boss-hierarchy-root > .boss-hierarchy-branch > .boss-hierarchy-children > .boss-hierarchy-branch::before { content: ""; display: block; height: 14px; border-left: 2px solid var(--tree-line); margin: -14px 0 0 20px; }
+.boss-hierarchy-children .boss-hierarchy-children { border-left: 2px solid var(--tree-line); margin: 6px 0 0 20px; padding-left: 16px; }
+.boss-hierarchy-children .boss-hierarchy-children > .boss-hierarchy-branch { position: relative; margin-top: 8px; }
+.boss-hierarchy-children .boss-hierarchy-children > .boss-hierarchy-branch::before { content: ""; position: absolute; top: 23px; left: -16px; width: 16px; border-top: 2px solid var(--tree-line); }
+.boss-hierarchy-node { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 9px; border: 1px solid var(--line); border-left: 4px solid var(--tree-accent); border-radius: 8px; background: var(--surface); }
+.boss-hierarchy-group { --tree-accent: #102954; }
+.boss-hierarchy-company { --tree-accent: #2463c5; }
+.boss-hierarchy-unit, .boss-hierarchy-brand { --tree-accent: #19805c; }
+.boss-hierarchy-product { --tree-accent: #7644ae; }
+.boss-hierarchy-service { --tree-accent: #a66611; }
+.boss-hierarchy-group > .boss-hierarchy-node { background: #102954; color: #fff; border-color: #102954; }
+.boss-hierarchy-group > .boss-hierarchy-node .boss-hierarchy-kind { color: #cbdcf7; }
+.boss-hierarchy-group > .boss-hierarchy-node .boss-hierarchy-toggle { color: #fff; }
+.boss-hierarchy-toggle, .boss-hierarchy-toggle-spacer { display: grid; place-items: center; flex: 0 0 44px; min-width: 44px; min-height: 44px; }
+.boss-hierarchy-toggle { border: 0; border-radius: 6px; background: transparent; color: inherit; cursor: pointer; }
+.boss-hierarchy-toggle:hover { background: rgba(90, 135, 195, .15); }
+.boss-hierarchy-link { display: grid; flex: 1; min-width: 0; gap: 2px; color: inherit; text-decoration: none; overflow-wrap: anywhere; }
+.boss-hierarchy-link:hover strong { text-decoration: underline; }
+.boss-hierarchy-link strong { font-size: 14px; line-height: 1.35; }
+.boss-hierarchy-link small { color: var(--muted); font-size: 11px; }
+.boss-hierarchy-kind { color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.boss-hierarchy-states { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px; max-width: 45%; }
+.boss-hierarchy-states .status { font-size: 10px; white-space: nowrap; }
+.boss-hierarchy-empty { padding: 18px; border: 1px dashed var(--line); border-radius: 8px; color: var(--muted); font-size: 13px; }
+.boss-hierarchy :is(a, button, select, input):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+@media (max-width: 760px) {
+  .boss-hierarchy-heading { display: block; }
+  .boss-hierarchy-count { display: block; margin-top: 8px; }
+  .boss-hierarchy-filters { grid-template-columns: 1fr; }
+  .boss-hierarchy-root > .boss-hierarchy-branch > .boss-hierarchy-children { display: block; margin-left: 20px; border-left: 2px solid var(--tree-line); }
+  .boss-hierarchy-root > .boss-hierarchy-branch > .boss-hierarchy-children > .boss-hierarchy-branch { position: relative; margin: 8px 0 0 16px; }
+  .boss-hierarchy-root > .boss-hierarchy-branch > .boss-hierarchy-children > .boss-hierarchy-branch::before { position: absolute; top: 23px; left: -16px; width: 16px; height: 0; border-top: 2px solid var(--tree-line); border-left: 0; margin: 0; }
+  .boss-hierarchy-node { flex-wrap: wrap; }
+  .boss-hierarchy-states { max-width: none; margin-left: 52px; }
+}

@@ -55,11 +55,11 @@ function Editor({ kind, row, options, close }: { kind: BusinessKind; row?: Row; 
   </div>;
 }
 const titles: Record<BusinessKind, string> = { groups: "MAXPASE Group", companies: "Companies", organizations: "Organization structure", relationships: "Company relationships", ownership: "Ownership", people: "People", memberships: "Memberships", brands: "Brands", products: "Products & services", projects: "Projects", goals: "Goals" };
-export function BusinessManager({ kind, rows, options, canManage }: { kind: BusinessKind; rows: Row[]; options: Options; canManage: boolean }) {
+export function BusinessManager({ kind, rows, options, canManage, initialRecordId }: { kind: BusinessKind; rows: Row[]; options: Options; canManage: boolean; initialRecordId?: string }) {
   const [editing, setEditing] = useState<Row | null | undefined>();
   const [search, setSearch] = useState("");
   const [scope, setScope] = useState("");
-  const [inspecting, setInspecting] = useState<Row | undefined>();
+  const [inspecting, setInspecting] = useState<Row | undefined>(() => rows.find(row => row.id === initialRecordId));
   const orgName = (id: unknown) => options.organizations.find(o => o.id === id)?.name ?? "Not recorded";
   const shown = rows.filter(r => JSON.stringify(r).toLowerCase().includes(search.toLowerCase()) && (!scope || r.organizationId === scope));
   const tree = (parent: string | null, depth = 0): React.ReactNode => {

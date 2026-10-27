@@ -5,16 +5,14 @@ import { UserTime } from "@/components/ui/user-time";
 import { bossHref } from "@/server/group/boss-reliability";
 import { overviewHref, overviewKey } from "@/server/group/boss-overview";
 import { projectBossStructure } from "@/server/group/boss-structure";
-import { seniorAcademicAdvisorDraft } from "@/server/group/product-drafts";
+import { buildBossHierarchy } from "@/server/group/boss-hierarchy";
 import { workspaceHref, bossViews, type PrimaryBossView } from "@/lib/workspace-navigation";
 import type { bossService } from "@/server/group/boss-service";
 import { OverviewRows } from "./overview";
+import { BossHierarchy } from "./hierarchy";
 
 type Data = Awaited<ReturnType<typeof bossService.dashboard>>;
 type Query = Record<string, string | string[] | undefined>;
-function RecordState({row, readable}:{row:{status?:string;lifecycle?:string}|undefined;readable:boolean}) {
-  return <span className="boss-record-state">{!readable ? "Not authorized" : !row ? "Not configured" : row.lifecycle ? `Recorded / ${row.lifecycle} / ${row.status ?? "Status unavailable"}` : `Recorded / ${row.status ?? "Status unavailable"}`}</span>;
-}
 
 function CompanySummary({data,query}:{data:Data;query:Query}) {
   const companies=projectBossStructure(data);
@@ -28,26 +26,10 @@ function CompanySummary({data,query}:{data:Data;query:Query}) {
 }
 
 function CompanyBrowser({data,query}:{data:Data;query:Query}) {
-  const companies=projectBossStructure(data);
-  const commandHref=(companySlug:string,unitSlug:string)=>`/app/boss/command/${encodeURIComponent(companySlug)}/${encodeURIComponent(unitSlug)}`;
-  const slug=(name:string)=>name.toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"");
-  return <section className="executive-band boss-structure" aria-labelledby="boss-structure-heading"><header><h2 id="boss-structure-heading">MAXPASE GROUP</h2><span>{companies.length} authorized company records</span></header>
-    <p className="muted">The names below are the owner-approved target map. Each state comes from the current authorized registry; missing records are not treated as live offerings.</p>
-    {companies.map(company=><section className="boss-structure-company" key={company.organizationId}>
-      <header><h3>{company.legalName}</h3><Status value={company.status}/><Link prefetch={false} href={bossHref("companies",company.organizationId,query)}>Company overview</Link></header>
-      {company.recordedLegalName!==company.legalName&&<p className="boss-record-state">Recorded legal name: {company.recordedLegalName ?? "Unavailable"}. Correction not yet applied to this database.</p>}
-      <div className="boss-command-grid">
-        {company.slug==="aira-skill-city"&&<Link prefetch={false} className="boss-command-tile" href={commandHref(company.slug,company.slug)}><span className="boss-command-tile-title">AIRA Skill City<ArrowUpRight size={16}/></span><small>Internal employee workplace</small><RecordState row={company.primaryBrand} readable={data.readable.brand}/></Link>}
-        {company.divisions.map(item=><Link prefetch={false} className="boss-command-tile" key={item.slug} href={commandHref(company.slug,item.slug)}><span className="boss-command-tile-title">{item.label}<ArrowUpRight size={16}/></span><small>{item.product}</small><RecordState row={item.row} readable={data.readable.organization}/><RecordState row={item.productRow} readable={data.readable.product}/></Link>)}
-        {company.products.map(item=><Link prefetch={false} className="boss-command-tile" key={item.name} href={commandHref(company.slug,slug(item.name))}><span className="boss-command-tile-title">{item.name}<ArrowUpRight size={16}/></span><RecordState row={item.row} readable={data.readable.product}/></Link>)}
-        {company.brands.map(item=><Link prefetch={false} className="boss-command-tile" key={item.name} href={commandHref(company.slug,slug(item.name))}><span className="boss-command-tile-title">{item.name}<ArrowUpRight size={16}/></span><RecordState row={item.row} readable={data.readable.brand}/></Link>)}
-      </div>
-      {company.legalName==="AIRA SKILL CITY PRIVATE LIMITED"&&<p className="muted">BGOS, PBA and GenZ Builder require commercial terms, verified product owners and independent publication approval before sale.</p>}
-    </section>)}
-    {!companies.length&&<p className="executive-empty">No authorized company records are available.</p>}
-    {companies.some(company=>company.legalName==="AIRA SKILL CITY PRIVATE LIMITED")&&<section className="boss-structure-company"><h3>In-house position setup</h3><p><strong>{seniorAcademicAdvisorDraft.title}</strong> / Draft / {seniorAcademicAdvisorDraft.engagement.replaceAll("_"," ")}</p><p>Stated salary: INR {(seniorAcademicAdvisorDraft.monthlySalaryMinor/100).toLocaleString("en-IN")} per month. No payroll or employment agreement is active.</p><p className="muted">Manager, verified account, approved agreement and payroll configuration: pending. Product scope: {seniorAcademicAdvisorDraft.scope.join(", ")}.</p></section>}
-    <Link prefetch={false} href={bossHref("brands",data.selectedCompanyId,query)}>Open recorded brands and domains <ArrowUpRight size={15}/></Link>
-  </section>;
+  const brands = data.brands.flatMap(row => "organizationId" in row && "name" in row && "status" in row ? [{ id: row.id, organizationId: String(row.organizationId), name: String(row.name), status: String(row.status), website: "website" in row && row.website ? String(row.website) : null }] : []);
+  const products = data.products.flatMap(row => "organizationId" in row && "name" in row && "type" in row && "status" in row && "lifecycle" in row ? [{ id: row.id, organizationId: String(row.organizationId), name: String(row.name), type: String(row.type), status: String(row.status), lifecycle: String(row.lifecycle), brandId: "brandId" in row ? String(row.brandId || "") : null, divisionId: "divisionId" in row ? String(row.divisionId || "") : null }] : []);
+  const root = buildBossHierarchy({ groupId: data.groupId, organizations: data.graph.organizations, companies: data.companies, brands, products });
+  return <BossHierarchy root={root} selectedCompanyId={data.selectedCompanyId} initialSearch={typeof query.hierarchySearch === "string" ? query.hierarchySearch : ""} initialStatus={typeof query.hierarchyStatus === "string" ? query.hierarchyStatus : ""} brandReadable={data.readable.brand} productReadable={data.readable.product}/>;
 }
 
 export function BossPrimary({view,data,query}:{view:PrimaryBossView;data:Data;query:Query}) {

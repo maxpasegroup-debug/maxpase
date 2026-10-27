@@ -17,7 +17,7 @@ import { createAccountPreferences } from "../account/preferences";
 
 export function createBossService(client: PrismaClient = prisma) {
   async function authority(userId: string, db: Prisma.TransactionClient = client) {
-    const root = await db.organization.findUnique({ where: { slug: groupIdentity.slug }, select: { id: true, type: true, parentId: true } });
+    const root = await db.organization.findUnique({ where: { slug: groupIdentity.slug }, select: { id: true, name: true, status: true, type: true, parentId: true } });
     if (!root || root.type !== "GROUP" || root.parentId) throw new AccessError("Group unavailable");
     const ctx = await createAccessContext(userId, db, undefined, { organizationId: root.id });
     if (ctx.user?.id !== userId || (await db.user.findUnique({ where: { id: userId }, select: { email: true } }))?.email !== BOSS_EMAIL) throw new AccessError("Boss Panel access denied");
@@ -28,7 +28,7 @@ export function createBossService(client: PrismaClient = prisma) {
   async function dashboard(userId: string, companyId?: string, rawFilters: unknown = {}) {
     const { ctx, root } = await authority(userId);
     const filters = bossFilter.parse(rawFilters);
-    const companies = await boundedRead(take => client.companyProfile.findMany({ take, where: { organization: { parentId: root.id, type: "COMPANY", id: { in: ctx.organizationIds("company.read").filter(id => ctx.organizationIds("executive.read").includes(id) && ctx.organizationIds("organization.read").includes(id)) } } }, select: { organizationId: true, legalName: true, displayName: true, status: true, organization: { select: { slug: true } } }, orderBy: { displayName: "asc" } }));
+    const companies = await boundedRead(take => client.companyProfile.findMany({ take, where: { organization: { parentId: root.id, type: "COMPANY", id: { in: ctx.organizationIds("company.read").filter(id => ctx.organizationIds("executive.read").includes(id) && ctx.organizationIds("organization.read").includes(id)) } } }, select: { id: true, organizationId: true, legalName: true, displayName: true, status: true, organization: { select: { slug: true } } }, orderBy: { displayName: "asc" } }));
     if (companyId && !companies.some(c => c.organizationId === companyId)) throw new AccessError("Company context unavailable");
     const scope = { organizationId: companyId ?? root.id };
     const access = (id: string, db?: Prisma.TransactionClient) => createAccessContext(id, db ?? client, undefined, scope);
@@ -116,7 +116,7 @@ export function createBossService(client: PrismaClient = prisma) {
     const shortcuts = [];
     for (const [permission, label, href] of [["project.manage", "New project", "/app/execution/projects?create=true"], ["task.manage", "New task", "/app/execution/tasks?create=true"], ["goal.manage", "New goal", "/app/execution/goals?create=true"], ["request.manage", "New request", "/app/operations/requests?create=true"], ["approval.read", "Approval inbox", "/app/operations/approvals?status=PENDING"], ["task.read", "My assignments", "/app/operations/my-tasks"], ["reminder.read", "Reminders", "/app/operations/reminders?status=PENDING"], ["escalation.read", "Open escalations", "/app/operations/escalations?status=OPEN"], ["activity.read", "Activity history", "/app/operations/activity?sort=newest"]]) if ((await scoped.decide(permission, scope)).allowed) shortcuts.push({ label, href });
     return { companies, cards, selectedCompanyId: companyId, groupId: root.id, executive: qualifiedExecutive, snapshot, overview, oversight, headline, nextActions, shortcuts, readable, brands, products, nexa,
-      graph: { organizations: organizations.map(o => ({ id: o.id, name: "name" in o ? String(o.name) : "NO DATA", type: "type" in o ? String(o.type) : "", parentId: "parentId" in o ? o.parentId : null })), brands, products, ownership, relationships },
+      graph: { organizations: [{ id: root.id, name: root.name, type: root.type, status: root.status, parentId: root.parentId }, ...organizations.filter(o => o.id !== root.id).map(o => ({ id: o.id, name: "name" in o ? String(o.name) : "NO DATA", type: "type" in o ? String(o.type) : "", status: "status" in o ? String(o.status) : "NOT CONFIGURED", parentId: "parentId" in o ? o.parentId : null }))], brands, products, ownership, relationships },
       members: people.map(m => ({ id: m.id, name: "person" in m ? (m.person as { displayName: string }).displayName : "NO DATA", organizationId: "organizationId" in m ? String(m.organizationId) : "", projectId: "projectId" in m ? m.projectId : null })),
       sia: { status: siaStatus, href: siaHref, canAsk, provider: provider.name, capabilities, autonomousExecution: false }, integrations, jobs, audit,
       system: { database, application: "REQUEST SERVED", authentication: "ACTIVE SESSION", backup: "NOT VERIFIED", monitoring: "NOT VERIFIED", production: "NOT VERIFIED" } };

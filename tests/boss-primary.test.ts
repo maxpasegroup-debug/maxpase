@@ -5,6 +5,7 @@ import { runInNewContext } from "node:vm";
 import { transpileModule, ModuleKind, JsxEmit } from "typescript";
 import { createElement, type ComponentType, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { buildBossHierarchy, type HierarchyNode } from "@/server/group/boss-hierarchy";
 
 const require = createRequire(import.meta.url);
 function load<T>(path: string, mocks: Record<string, unknown>): T {
@@ -31,26 +32,21 @@ const { BossPrimary } = load<{ BossPrimary: ComponentType<{ view: string; data: 
   "@/server/group/boss-reliability": { bossHref: (view: string, companyId?: string) => `/app/boss?view=${view}${companyId ? `&companyId=${companyId}` : ""}` },
   "@/server/group/boss-overview": { overviewHref: () => "/app/boss?view=overview", overviewKey: () => "item" },
   "@/server/group/boss-structure": { projectBossStructure: () => structure },
-  "@/server/group/product-drafts": { seniorAcademicAdvisorDraft: { title: "Senior Academic Advisor", engagement: "IN_HOUSE_EMPLOYEE", monthlySalaryMinor: 1800000, scope: ["BGOS", "PBA", "GenZ Builder"] } },
+  "@/server/group/boss-hierarchy": { buildBossHierarchy },
   "@/lib/workspace-navigation": { workspaceHref: (href: string) => href, bossViews: { brands: "Brands & Domains" } },
-  "./overview": { OverviewRows: () => createElement("p", null, "No matching records") }
+  "./overview": { OverviewRows: () => createElement("p", null, "No matching records") },
+  "./hierarchy": { BossHierarchy: ({ root }: { root: HierarchyNode }) => createElement("section", null, root.name, ...root.children.map(company => createElement("p", { key: company.id }, company.name, " / ", company.children.map(child => child.name).join(", ")))) }
 });
 
-const data = { selectedCompanyId: undefined, readable: { organization: true, product: true, brand: true }, cards: [], shortcuts: [], system: { backup: "NOT VERIFIED", monitoring: "NOT VERIFIED", production: "NOT VERIFIED" } };
+const data = { selectedCompanyId: undefined, groupId: "group", graph: { organizations: [{ id: "group", parentId: null, type: "GROUP", name: "MAXPASE GROUP", status: "ACTIVE" }, { id: "aira", parentId: "group", type: "COMPANY", name: "AIRA", status: "ACTIVE" }, { id: "tearn", parentId: "group", type: "COMPANY", name: "TEARN", status: "ACTIVE" }, { id: "labs", parentId: "aira", type: "DIVISION", name: "AIRA Labs", status: "ACTIVE" }] }, companies: [{ organizationId: "aira", legalName: "AIRA SKILL CITY PRIVATE LIMITED", displayName: "AIRA", status: "ACTIVE" }, { organizationId: "tearn", legalName: "PEARN PRIVATE LIMITED", displayName: "PEARN", status: "ACTIVE" }], brands: [{ id: "happi", organizationId: "aira", name: "HappiNotes", status: "INACTIVE" }], products: [{ id: "bgos", organizationId: "aira", brandId: null, divisionId: "labs", name: "BGOS", status: "INACTIVE", lifecycle: "CONCEPT", type: "PLATFORM" }], readable: { organization: true, product: true, brand: true }, cards: [], shortcuts: [], system: { backup: "NOT VERIFIED", monitoring: "NOT VERIFIED", production: "NOT VERIFIED" } };
 describe("Boss primary surface", () => {
-  it("shows the owner-approved hierarchy with missing products and brands qualified", () => {
+  it("passes recorded registry relationships to the Companies hierarchy", () => {
     const html = renderToStaticMarkup(createElement(BossPrimary, { view: "companies", data, query: {} }));
     expect(html).toContain("MAXPASE GROUP");
-    expect(html).toContain("TEARN PRIVATE LIMITED");
-    expect(html).toContain("Recorded legal name: PEARN PRIVATE LIMITED");
-    expect(html).toContain("BGOS");
+    expect(html).toContain("PEARN PRIVATE LIMITED");
+    expect(html).toContain("AIRA Labs");
     expect(html).toContain("HappiNotes");
-    expect(html).toContain("Not configured");
-    expect(html).toContain("Recorded / CONCEPT");
-    expect(html).toContain("INR 18,000 per month");
-    expect(html).toContain("/app/boss/command/aira-skill-city/aira-labs");
-    expect(html).toContain("/app/boss/command/aira-skill-city/aira-skill-city");
-    expect(html).toContain("/app/boss/command/pearn/teachx-guru");
+    expect(html).not.toContain("TEARN PRIVATE LIMITED");
   });
   it("keeps agent authority limited in the Boss settings surface", () => {
     const html = renderToStaticMarkup(createElement(BossPrimary, { view: "settings", data, query: {} }));
