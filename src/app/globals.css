@@ -1350,7 +1350,7 @@ progress { width: 120px; accent-color: var(--accent); }
   border: 1px solid rgba(231,244,255,.6);
   border-radius: 30px;
   background: #163b73;
-  box-shadow: 0 20px 46px rgba(0,12,39,.28), inset 0 1px 0 rgba(255,255,255,.45);
+  box-shadow: 0 34px 90px rgba(0,12,39,.32), inset 0 1px 0 rgba(255,255,255,.45);
 }
 .group-hero-office img {
   object-fit: cover;
@@ -1370,13 +1370,61 @@ progress { width: 120px; accent-color: var(--accent); }
   bottom: 9%;
   transform: rotate(2deg);
 }
+.group-hero-content { width: min(46%, 590px); }
+.group-login-panel,
+.staff-login-panel,
+.portal-login-panel {
+  border: 1px solid rgba(234,245,255,.34);
+  background:
+    linear-gradient(145deg, rgba(227,240,255,.22), rgba(221,235,255,.1)),
+    rgba(17,47,92,.52);
+  box-shadow: 0 30px 90px rgba(0,10,35,.32), inset 0 1px 0 rgba(255,255,255,.28);
+  -webkit-backdrop-filter: blur(30px) saturate(145%);
+  backdrop-filter: blur(30px) saturate(145%);
+}
+.group-login-panel h1,
+.staff-login-panel h1,
+.portal-login-panel h1 { color: #f7faff; }
+.group-login-panel .group-kicker,
+.staff-login-panel .eyebrow,
+.portal-login-panel .portal-kicker { color: #a9d4ff; }
+.group-login-panel .login-subtitle,
+.staff-login-panel .login-subtitle,
+.portal-login-panel > p.muted { color: #d1e0f5; }
+.group-login-panel label,
+.staff-login-panel label,
+.portal-login-panel label { color: #ecf4ff; }
+.group-login-panel input,
+.staff-login-panel input,
+.portal-login-panel input {
+  border-color: rgba(223,239,255,.3);
+  background: rgba(8,28,64,.34);
+  color: #fff;
+}
+.group-login-panel input::placeholder,
+.staff-login-panel input::placeholder,
+.portal-login-panel input::placeholder { color: #bfd0e8; }
+.group-login-panel input:focus,
+.staff-login-panel input:focus,
+.portal-login-panel input:focus {
+  border-color: rgba(172,213,255,.9);
+  outline-color: rgba(141,194,255,.25);
+  background: rgba(8,28,64,.52);
+}
+.login-shield,
+.staff-login-panel .login-shield,
+.portal-login-panel > svg { color: #a9d4ff; }
+.staff-login-panel .section a,
+.staff-login-link { color: #b9d9ff; }
+.staff-login-panel .section a:hover,
+.staff-login-link:hover { color: #fff; }
+.portal-login-panel .portal-button { color: #fff; }
 
 @media (max-width: 800px) {
   .group-hero-content { width: min(53%, 500px); }
   .group-hero-art { right: 4%; width: 46vw; }
   .hero-art-card { right: -14px; }
 }
-
 @media (max-width: 600px) {
   .group-hero-art {
     top: 49%;
