@@ -8,7 +8,7 @@ import { decodeJwt, SignJWT } from "jose";
 import { createAuthenticationService } from "@/server/auth/service";
 import { hashPassword, verifyPassword } from "@/server/auth/password";
 import { validateRuntimeEnvironment } from "@/server/config";
-import { createSecurityLimiter, securityKey } from "@/server/security/rate-limit";
+import { createSecurityLimiter, RateLimitError, securityKey } from "@/server/security/rate-limit";
 import { validateActionOrigin } from "@/server/security/origin";
 
 const directory = mkdtempSync(join(tmpdir(), "maxpase-hardening-"));
@@ -128,8 +128,9 @@ describe("persistent bounded abuse protection", () => {
   });
   it("bounds concurrent requests, persists across service instances and resets only by window", async () => {
     const consume = createSecurityLimiter(db, () => time), key = securityKey("regression", userId);
-    const outcomes = await Promise.allSettled(Array.from({ length: 8 }, () => consume(key, 3, 60)));
+    const outcomes = await Promise.allSettled(Array.from({ length: 16 }, () => consume(key, 3, 60)));
     expect(outcomes.filter(r => r.status === "fulfilled")).toHaveLength(3);
+    expect(outcomes.filter(r => r.status === "rejected").every(r => r.status === "rejected" && r.reason instanceof RateLimitError)).toBe(true);
     await expect(createSecurityLimiter(db, () => time)(key, 3, 60)).rejects.toThrow("Too many");
     expect((await db.securityRateBucket.findFirstOrThrow()).count).toBe(3);
     time = new Date(time.getTime() + 61000); await expect(consume(key, 3, 60)).resolves.toBeUndefined();

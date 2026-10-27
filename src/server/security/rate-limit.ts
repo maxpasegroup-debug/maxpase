@@ -14,7 +14,9 @@ export function createSecurityLimiter(client: PrismaClient = prisma, now = () =>
     const time = now(), windowStart = new Date(Math.floor(time.getTime() / (windowSeconds * 1000)) * windowSeconds * 1000);
     const expiresAt = new Date(windowStart.getTime() + windowSeconds * 1000);
     const accepted = await client.$transaction(async db => {
-      await db.securityRateBucket.upsert({ where: { key_windowStart: { key, windowStart } }, create: { key, windowStart, expiresAt }, update: {} });
+      // Concurrent first requests can race through Prisma's read-then-create upsert.
+      // PostgreSQL resolves the unique-key race before the bounded increment.
+      await db.securityRateBucket.createMany({ data: [{ key, windowStart, expiresAt }], skipDuplicates: true });
       return (await db.securityRateBucket.updateMany({ where: { key, windowStart, count: { lt: limit } }, data: { count: { increment: 1 } } })).count === 1;
     });
     if (!accepted) throw new RateLimitError();
