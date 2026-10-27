@@ -1,10 +1,6 @@
 import { beforeAll, beforeEach, afterAll, describe, it, expect } from "vitest";
-import { DatabaseSync } from "node:sqlite";
-import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { randomBytes, randomUUID } from "node:crypto";
-import { PrismaClient } from "@prisma/client";
+import { createPostgresFixture } from "./helpers/postgres-fixture";
 import { NextRequest } from "next/server";
 import { middleware } from "../src/middleware";
 import { initializeGroupStructure } from "@/server/group/structure";
@@ -18,8 +14,8 @@ import { signPortalContext, verifyPortalContext } from "@/server/portals/context
 import { createSkillCityEmployeeDashboard } from "@/server/skillcity/employee-dashboard";
 import { createLabsService } from "@/server/labs/service";
 
-const directory = mkdtempSync(join(tmpdir(), "maxpase-portals-")), file = join(directory, "test.db");
-const db = new PrismaClient({ datasourceUrl: "file:" + file.replaceAll("\\", "/") });
+const postgres = createPostgresFixture();
+const db = postgres.db;
 const password = randomBytes(24).toString("base64url"), secret = randomBytes(32).toString("base64url");
 const auth = createAuthenticationService(db), service = createPortalService(db);
 const priorSecret = process.env.AUTH_SECRET;
@@ -27,9 +23,7 @@ let userId: string, startupId: string, labsId: string, membershipId: string, lab
 const credentials = () => ({ email: "portal-member@test.invalid", password });
 beforeAll(async () => {
   process.env.AUTH_SECRET = secret;
-  const sql = new DatabaseSync(file);
-  for (const folder of readdirSync("prisma/migrations").filter(f => /^\d/.test(f)).sort()) sql.exec(readFileSync(join("prisma/migrations", folder, "migration.sql"), "utf8"));
-  sql.close(); await db.$transaction(initializeGroupStructure);
+  await postgres.initialize(); await db.$transaction(initializeGroupStructure);
   startupId = (await db.organization.findUniqueOrThrow({ where: { slug: "aira-startup-school" } })).id;
   labsId = (await db.organization.findUniqueOrThrow({ where: { slug: "aira-labs" } })).id;
   const person = await db.person.create({ data: { displayName: "Portal test member" } });
@@ -39,9 +33,9 @@ beforeAll(async () => {
     const member = await db.membership.create({ data: { personId: person.id, organizationId: division, roles: { create: { roleId: role.id } } } });
     if (division === startupId) { membershipId = member.id; roleId = role.id; } else labsMembershipId = member.id;
   }
-}, 30000);
+}, 120000);
 beforeEach(async () => { await db.securityRateBucket.deleteMany(); });
-afterAll(async () => { if (priorSecret === undefined) delete process.env.AUTH_SECRET; else process.env.AUTH_SECRET = priorSecret; await db.$disconnect(); rmSync(directory, { recursive: true, force: true }); });
+afterAll(async () => { if (priorSecret === undefined) delete process.env.AUTH_SECRET; else process.env.AUTH_SECRET = priorSecret; await postgres.dispose(); }, 30000);
 
 describe("Separate brand domains and authenticated gateways", () => {
   it("gates employee views by active role and permission, and isolates advisor and developer work", async () => {
@@ -49,6 +43,7 @@ describe("Separate brand domains and authenticated gateways", () => {
     const foreign = await db.organization.findUniqueOrThrow({ where: { slug: "pearn" } });
     const personId = (await db.user.findUniqueOrThrow({ where: { id: userId } })).personId!;
     const dashboard = createSkillCityEmployeeDashboard(db);
+    await db.user.update({ where: { id: userId }, data: { emailVerifiedAt: new Date() } });
     await expect(dashboard.dashboard(userId, "director")).rejects.toThrow();
     const keys = ["organization.read", "organization.manage", "executive.read", "decision.decide", "labs.sales.self", "labs.sales.perform", "labs.delivery.assignee", "project.read", "task.read", "task.manage"];
     for (const key of keys) await db.permission.upsert({ where: { key }, create: { key, name: key, scope: "GROUP" }, update: {} });
@@ -62,6 +57,7 @@ describe("Separate brand domains and authenticated gateways", () => {
     const lead = await db.executiveRecord.create({ data: { kind: "LABS_LEAD", organizationId: labsId, ownerPersonId: personId, title: "Labs assigned lead", status: "NEW", sourceKey: "phase3:labs-lead", payload: JSON.stringify(payload) } });
     const foreignLead = await db.executiveRecord.create({ data: { kind: "LABS_LEAD", organizationId: foreign.id, ownerPersonId: personId, title: "Foreign lead", status: "NEW", sourceKey: "phase3:foreign-lead", payload: JSON.stringify(payload) } });
     const project = await db.project.create({ data: { organizationId: labsId, name: "Assigned Labs project", slug: "phase3-labs-project", ownerPersonId: personId, metadata: JSON.stringify({ kind: "AIRALABS_PROJECT" }) } });
+    await db.task.create({ data: { organizationId: labsId, projectId: project.id, assigneePersonId: personId, title: "Assigned developer task" } });
     const foreignProject = await db.project.create({ data: { organizationId: foreign.id, name: "Foreign project", slug: "phase3-foreign-project", ownerPersonId: personId, metadata: JSON.stringify({ kind: "AIRALABS_PROJECT" }) } });
     try {
       const skillLabs = createLabsService(db, () => new Date(), "skillcity");
@@ -76,13 +72,21 @@ describe("Separate brand domains and authenticated gateways", () => {
       const director = await dashboard.dashboard(userId, "director");
       expect(director.view).toBe("director");
       expect(director.available).toEqual(["advisor", "director", "developer"]);
+      await db.membership.update({ where: { id: companyMember.id }, data: { status: "SUSPENDED" } });
+      expect((await dashboard.dashboard(userId)).view).toBe("advisor");
+      await expect(dashboard.dashboard(userId, "director")).rejects.toThrow();
+      await db.role.updateMany({ where: { id: { in: [advisorRole.id, developerRole.id] } }, data: { status: "SUSPENDED" } });
+      await expect(requirePortalAccess(db, userId, "skillcity")).rejects.toThrow();
+      await db.role.updateMany({ where: { id: { in: [advisorRole.id, developerRole.id] } }, data: { status: "ACTIVE" } });
+      await db.membership.update({ where: { id: companyMember.id }, data: { status: "ACTIVE" } });
       await skillLabs.updateLead(userId, { id: lead.id, version: 0, reference: randomUUID(), status: "CONTACTED", outcome: "Reached the prospect", qualification: "", nextFollowUp: null });
       expect((await db.executiveRecord.findUniqueOrThrow({ where: { id: lead.id } })).status).toBe("CONTACTED");
       await expect(skillLabs.updateLead(userId, { id: foreignLead.id, version: 0, reference: randomUUID(), status: "CONTACTED", outcome: "Invalid scope", qualification: "", nextFollowUp: null })).rejects.toThrow();
       await skillLabs.saveTask(userId, { projectId: project.id, title: "Review implementation", description: "Synthetic project notes", dueDate: new Date(Date.now() + 86400000).toISOString(), status: "TODO", reference: randomUUID() });
-      expect(await db.task.count({ where: { projectId: project.id, assigneePersonId: personId } })).toBe(1);
+      expect(await db.task.count({ where: { projectId: project.id, assigneePersonId: personId } })).toBe(2);
       await expect(skillLabs.saveTask(userId, { projectId: foreignProject.id, title: "Forbidden task", description: "", dueDate: new Date(Date.now() + 86400000).toISOString(), status: "TODO", reference: randomUUID() })).rejects.toThrow();
     } finally {
+      await db.user.update({ where: { id: userId }, data: { emailVerifiedAt: null } });
       await db.task.deleteMany({ where: { projectId: project.id } });
       await db.operationalEvent.deleteMany({ where: { entityId: { in: [lead.id, project.id] } } });
       await db.executiveHistory.deleteMany({ where: { recordId: lead.id } });
@@ -100,6 +104,7 @@ describe("Separate brand domains and authenticated gateways", () => {
     const realms = [undefined, "skillcity", "startup", "labs", "jobs"] as const;
     const tokens: string[] = [];
     try {
+      await db.user.update({ where: { id: userId }, data: { emailVerifiedAt: new Date() } });
       for (const slug of ["aira-skill-city", "aira-career-hub"]) {
         const org = await db.organization.findUniqueOrThrow({ where: { slug } });
         const role = await db.role.create({ data: { organizationId: org.id, key: "launch-realm-fixture", name: slug === "aira-skill-city" ? "Director" : "Isolated realm fixture", permissions: { create: { permissionId: permission.id } } } });
@@ -107,14 +112,11 @@ describe("Separate brand domains and authenticated gateways", () => {
         const member = await db.membership.create({ data: { personId: person.personId!, organizationId: org.id, roles: { create: { roleId: role.id } } } });
         members.push(member.id);
       }
-      for (const realm of realms) {
-        if (realm === "jobs") {
-          let code = "";
-          const emailAuth = createJobsEmailAuth(db, { env: { NICEJOBS_EMAIL_AUTH_ENABLED: "true", RESEND_API_KEY: "isolated-test-key", NICEJOBS_AUTH_FROM: "auth@test.invalid", NICEJOBS_OTP_SECRET: secret }, send: async message => { code = message.code; return "isolated-receipt"; } });
-          const proof = await emailAuth.beginLogin(credentials());
-          tokens.push((await emailAuth.completeLogin({ ...proof, code }, secret)).token);
-        } else tokens.push((await auth.create(userId, secret, undefined, 300000, realm)).token);
-      }
+      let code = "";
+      const emailAuth = createJobsEmailAuth(db, { env: { NICEJOBS_EMAIL_AUTH_ENABLED: "true", RESEND_API_KEY: "isolated-test-key", NICEJOBS_AUTH_FROM: "auth@test.invalid", NICEJOBS_OTP_SECRET: secret }, send: async message => { code = message.code; return "isolated-receipt"; } });
+      const proof = await emailAuth.beginLogin(credentials());
+      const jobsToken = (await emailAuth.completeLogin({ ...proof, code }, secret)).token;
+      for (const realm of realms) tokens.push(realm === "jobs" ? jobsToken : (await auth.create(userId, secret, undefined, 300000, realm)).token);
       for (const [i, source] of realms.entries()) {
         for (const [j, target] of realms.entries()) {
           if (i === j) expect(await auth.validate(tokens[i], secret, target)).toMatchObject({ userId });
@@ -127,6 +129,7 @@ describe("Separate brand domains and authenticated gateways", () => {
       }
     } finally {
       for (const [i, realm] of realms.entries()) if (tokens[i]) await auth.revoke(tokens[i], secret, realm);
+      await db.user.update({ where: { id: userId }, data: { emailVerifiedAt: null } });
       await db.membership.deleteMany({ where: { id: { in: members } } });
       await db.role.deleteMany({ where: { id: { in: roles } } });
     }
@@ -143,15 +146,22 @@ describe("Separate brand domains and authenticated gateways", () => {
     const role = await db.role.create({ data: { organizationId: company.id, key: "skillcity-test", name: "Director", permissions: { create: { permissionId: permission.id } } } });
     const member = await db.membership.create({ data: { personId: person.personId!, organizationId: company.id, roles: { create: { roleId: role.id } } } });
     try {
+      await expect(requirePortalAccess(db, userId, "skillcity")).rejects.toThrow();
+      await db.user.update({ where: { id: userId }, data: { emailVerifiedAt: new Date() } });
       const session = await auth.loginPortal(credentials(), secret, "skillcity"); expect(session).not.toBeNull();
       for (const realm of [undefined, "startup", "labs", "jobs"] as const) expect(await auth.validate(session!.token, secret, realm)).toBeNull();
       expect((await requirePortalAccess(db, userId, "skillcity")).companyId).toBe(company.id);
+      await db.user.update({ where: { id: userId }, data: { emailVerifiedAt: null } });
+      expect(await auth.validate(session!.token, secret, "skillcity")).toBeNull();
+      await expect(requirePortalAccess(db, userId, "skillcity")).rejects.toThrow();
+      await db.user.update({ where: { id: userId }, data: { emailVerifiedAt: new Date("2026-10-24T00:00:00.000Z") } });
+      expect(await auth.validate(session!.token, secret, "skillcity")).toBeNull();
       const programs = (await service.dashboard(userId, "skillcity", "programs")).programs;
       expect(programs).toEqual([]);
       await db.membership.update({ where: { id: member.id }, data: { status: "SUSPENDED" } });
       await expect(requirePortalAccess(db, userId, "skillcity")).rejects.toThrow();
       await auth.revoke(session!.token, secret, "skillcity");
-    } finally { await db.membership.delete({ where: { id: member.id } }); await db.role.delete({ where: { id: role.id } }); }
+    } finally { await db.user.update({ where: { id: userId }, data: { emailVerifiedAt: null } }); await db.membership.delete({ where: { id: member.id } }); await db.role.delete({ where: { id: role.id } }); }
   });
   it("maps only exact canonical/www hosts and rejects suffixes, paths and forwarded-host tricks", async () => {
     for (const site of portalSites) {
@@ -225,9 +235,18 @@ describe("Separate brand domains and authenticated gateways", () => {
     finally { await db.membership.update({ where: { id: membershipId }, data: { status: "ACTIVE" } }); }
   });
   it("keeps concurrent brand sessions separate and revokes only the matching brand session", async () => {
-    const startup = await auth.loginPortal(credentials(), secret, "startup"), labs = await auth.loginPortal(credentials(), secret, "labs");
+    const labsPerson = await db.person.create({ data: { displayName: "Labs session member", metadata: JSON.stringify({ authenticationRealm: "labs", credentialKind: "STAFF_PASSWORD" }) } });
+    const labsEmail = "labs-session-member@test.invalid";
+    const labsUser = await db.user.create({ data: { email: labsEmail, personId: labsPerson.id, passwordHash: await hashPassword(password), emailVerifiedAt: new Date() } });
+    const labsRole = await db.role.create({ data: { organizationId: labsId, key: "labs-business-development-manager", name: "Labs business development manager", permissions: { create: { permission: { connect: { key: "organization.read" } } } } } });
+    await db.membership.create({ data: { personId: labsPerson.id, organizationId: labsId, roles: { create: { roleId: labsRole.id } } } });
+    const startup = await auth.loginPortal(credentials(), secret, "startup"), labs = await auth.loginPortal({ email: labsEmail, password }, secret, "labs");
+    expect(labs).not.toBeNull();
+    expect(startup).not.toBeNull();
+    expect(await auth.validate(labs!.token, secret, "startup")).toBeNull();
     await auth.revoke(startup!.token, secret, "labs"); expect(await auth.validate(startup!.token, secret, "startup")).not.toBeNull();
     await auth.revoke(startup!.token, secret, "startup"); expect(await auth.validate(startup!.token, secret, "startup")).toBeNull(); expect(await auth.validate(labs!.token, secret, "labs")).not.toBeNull();
+    expect((await auth.validate(labs!.token, secret, "labs"))?.userId).toBe(labsUser.id);
   });
   it("returns only authorized division work/programs, never sibling content or sensitive raw records", async () => {
     await db.task.create({ data: { organizationId: startupId, title: "Startup authorized work", description: "Internal metadata not displayed" } });
@@ -255,9 +274,9 @@ describe("Separate brand domains and authenticated gateways", () => {
     expect((await db.membership.findUniqueOrThrow({ where: { id: labsMembershipId } })).status).toBe("ACTIVE");
   });
   it("rolls back brand session issuance if mandatory audit insertion fails", async () => {
-    const sql = new DatabaseSync(file); sql.exec("CREATE TRIGGER PortalAuditFailure BEFORE INSERT ON AuditEvent WHEN NEW.action = 'auth.login' BEGIN SELECT RAISE(ABORT, 'audit unavailable'); END;");
+    const restore = await postgres.rejectInsert("AuditEvent", "auth.login");
     const count = await db.session.count();
     try { await expect(auth.loginPortal(credentials(), secret, "startup")).rejects.toThrow(); expect(await db.session.count()).toBe(count); }
-    finally { sql.exec("DROP TRIGGER PortalAuditFailure"); sql.close(); }
+    finally { await restore(); }
   });
 });

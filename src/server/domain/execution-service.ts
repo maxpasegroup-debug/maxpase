@@ -8,6 +8,7 @@ import { isCareerGoal } from "@/server/nicejobs/goal-plan";
 import { createWorkforceService } from "./workforce-service";
 import { operationalEvent, notify } from "./operational-events";
 import { READ_BUDGET, databasePage, checkRows, boundedRead, resultPage, sortedResultPage, type PageInput } from "./query-bounds";
+import { requireSkillCityTaskReviews } from "./task-review";
 
 type DB = Prisma.TransactionClient;
 type Context = Awaited<ReturnType<typeof defaultAccessContext>>;
@@ -190,6 +191,22 @@ export function createExecutionService(client: PrismaClient = prisma, createAcce
         }
         case "tasks": {
           const { reopen: _reopen, ...data } = input.taskInput.parse(raw); void _reopen;
+          if (recordId && data.metadata !== undefined) {
+            const priorMeta = await db.task.findUniqueOrThrow({ where: { id: recordId }, select: { metadata: true } });
+            let wasRequired = false, remainsRequired = false;
+            try { wasRequired = JSON.parse(priorMeta.metadata ?? "{}").skillCityDeveloperReviewRequired === true; remainsRequired = JSON.parse(data.metadata ?? "{}").skillCityDeveloperReviewRequired === true; }
+            catch { throw new AccessError("Task review configuration unavailable"); }
+            if (wasRequired && !remainsRequired) throw new AccessError("Developer review requirement cannot be removed");
+          }
+          if (recordId && previous?.status === "BLOCKED" && data.status !== "BLOCKED" && await db.executionBlocker.count({ where: { taskId: recordId, status: "OPEN" } })) throw new AccessError("Resolve open blockers before unblocking this task");
+          if (recordId && data.status === "COMPLETED") {
+            const reviewedTask = await db.task.findUniqueOrThrow({ where: { id: recordId }, select: { id: true, organizationId: true, assigneePersonId: true, updatedAt: true, metadata: true } });
+            const approvals = await requireSkillCityTaskReviews(db, reviewedTask);
+            if (approvals) {
+              await ctx.requireAccess("decision.decide", scope);
+              if (ctx.user?.personId === reviewedTask.assigneePersonId) throw new AccessError("Independent completion decision required");
+            }
+          }
           await person(db, ctx, data.assigneePersonId, scope);
           const workforceTask = recordId ? await db.task.findUnique({ where: { id: recordId }, select: { niceJobsAssignmentId: true, evidenceRequired: true, assigneePersonId: true, updatedAt: true } }) : null;
           if (workforceTask?.niceJobsAssignmentId) {
@@ -304,9 +321,9 @@ export function createExecutionService(client: PrismaClient = prisma, createAcce
       await audit(db, ctx, task, enabled ? "dependency.created" : "dependency.removed", taskId, { prerequisiteId });
     });
   }
-  async function blocker(userId: string, raw: unknown, recordId?: string) {
+  async function blocker(userId: string, raw: unknown, recordId?: string, transaction?: DB) {
     const data = input.blockerInput.parse(raw);
-    return client.$transaction(async db => {
+    const operation = async (db: DB) => {
       const ctx = await createAccessContext(userId, db);
       const resource = await target(db, ctx, data.taskId ? "tasks" : data.goalId ? "goals" : "projects", data.taskId ?? data.goalId ?? data.projectId!, "blocker.manage");
       const scope = { organizationId: resource.organizationId, projectId: data.projectId ?? ("projectId" in resource ? resource.projectId : null) };
@@ -325,7 +342,8 @@ export function createExecutionService(client: PrismaClient = prisma, createAcce
       const row = recordId ? await db.executionBlocker.update({ where: { id: recordId }, data: changes }) : await db.executionBlocker.create({ data: changes });
       await audit(db, ctx, scope, data.status === "RESOLVED" ? "blocker.resolved" : recordId ? "blocker.updated" : "blocker.created", row.id);
       return row;
-    });
+    };
+    return transaction ? operation(transaction) : client.$transaction(operation);
   }
   async function list(userId: string, kind: input.ExecutionKind, query: ExecutionQuery = {}) {
     if (kind === "responsibilities") return createWorkforceService(client, createAccessContext).list(userId, "responsibilities", query);

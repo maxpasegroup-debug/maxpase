@@ -1,9 +1,5 @@
 import { beforeAll, beforeEach, afterAll, describe, it, expect, vi } from "vitest";
-import { PrismaClient } from "@prisma/client";
-import { DatabaseSync } from "node:sqlite";
-import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { createPostgresFixture } from "./helpers/postgres-fixture";
 import { randomBytes } from "node:crypto";
 import { initializeGroupStructure } from "@/server/group/structure";
 import { createApplicantAccess, applicantPermissionKeys } from "@/server/nicejobs/applicant-access";
@@ -12,8 +8,8 @@ import { createJobsEmailAuth } from "@/server/auth/jobs-email-auth";
 import { createResendOtpSender, emailAuthSettings, type OtpDelivery } from "@/server/auth/resend-otp";
 import { hashPassword, verifyPassword } from "@/server/auth/password";
 
-const directory = mkdtempSync(join(tmpdir(), "nicejobs-email-auth-")), file = join(directory, "test.db");
-const db = new PrismaClient({ datasourceUrl: "file:" + file.replaceAll("\\", "/") });
+const postgres = createPostgresFixture();
+const db = postgres.db;
 const secret = randomBytes(32).toString("hex"), password = randomBytes(24).toString("hex");
 process.env.NICEJOBS_PIN_PEPPER = secret;
 const env = { NICEJOBS_EMAIL_AUTH_ENABLED: "true", RESEND_API_KEY: "isolated-key-not-live", NICEJOBS_AUTH_FROM: "auth@test.invalid", NICEJOBS_OTP_SECRET: secret };
@@ -23,21 +19,19 @@ const auth = createAuthenticationService(db, () => clock), service = createJobsE
 const credentials = { email: "otp-applicant@test.invalid", password };
 const latest = () => messages[messages.length - 1];
 beforeAll(async () => {
-  const sql = new DatabaseSync(file);
-  for (const folder of readdirSync("prisma/migrations").filter(f => /^\d/.test(f)).sort()) sql.exec(readFileSync(join("prisma/migrations", folder, "migration.sql"), "utf8"));
-  sql.close(); await db.$transaction(initializeGroupStructure);
+  await postgres.initialize(); await db.$transaction(initializeGroupStructure);
   for (const key of applicantPermissionKeys) await db.permission.upsert({ where: { key }, update: {}, create: { key, name: key, scope: "GROUP" } });
   userId = (await createApplicantAccess(db).register({ displayName: "Isolated applicant", email: credentials.email, country: "IN", nationalNumber: "9876543210", pin: "123456", confirmPin: "123456", acknowledge: true })).userId;
   personId = (await db.user.findUniqueOrThrow({ where: { id: userId } })).personId!;
   membershipId = (await db.membership.findFirstOrThrow({ where: { personId } })).id;
-}, 30000);
+}, 120000);
 beforeEach(async () => {
   clock = new Date("2026-10-10T08:00:00Z"); messages = [];
   await db.session.deleteMany(); await db.emailAuthChallenge.deleteMany(); await db.securityRateBucket.deleteMany();
   await db.membership.update({ where: { id: membershipId }, data: { status: "ACTIVE" } });
   await db.user.update({ where: { id: userId }, data: { email: credentials.email, passwordHash: await hashPassword(password), emailVerifiedAt: null, status: "ACTIVE" } });
 });
-afterAll(async () => { await db.$disconnect(); rmSync(directory, { recursive: true, force: true }); });
+afterAll(() => postgres.dispose(), 30000);
 describe("Nice Jobs email OTP authentication", () => {
   it("requires password plus a single-use email proof; preserves least privilege and realm isolation", async () => {
     expect(await auth.loginPortal(credentials, secret, "jobs")).toBeNull();
@@ -136,25 +130,25 @@ describe("Nice Jobs email OTP authentication", () => {
   });
   it("rolls back proof consumption, verification and session issuance on audit failure", async () => {
     const proof = await service.beginLogin(credentials);
-    const sql = new DatabaseSync(file); sql.exec("CREATE TRIGGER OtpAuditFailure BEFORE INSERT ON AuditEvent WHEN NEW.action = 'auth.login' BEGIN SELECT RAISE(ABORT, 'audit unavailable'); END;");
+    const restore = await postgres.rejectInsert("AuditEvent", "auth.login");
     try {
       await expect(service.completeLogin({ ...proof, code: latest().code }, secret)).rejects.toThrow();
       expect(await db.session.count()).toBe(0);
       expect((await db.user.findUniqueOrThrow({ where: { id: userId } })).emailVerifiedAt).toBeNull();
       expect((await db.emailAuthChallenge.findUniqueOrThrow({ where: { id: proof.challengeId } })).status).toBe("SENT");
-    } finally { sql.exec("DROP TRIGGER OtpAuditFailure"); sql.close(); }
+    } finally { await restore(); }
   });
   it("rolls back password, revocation and reset consumption if audit fails", async () => {
     const proof = await service.beginReset({ email: credentials.email }), code = latest().code;
     const prior = await db.user.findUniqueOrThrow({ where: { id: userId } });
     await db.session.create({ data: { userId, expiresAt: new Date(clock.getTime() + 3600000) } });
-    const sql = new DatabaseSync(file); sql.exec("CREATE TRIGGER ResetAuditFailure BEFORE INSERT ON AuditEvent WHEN NEW.action = 'auth.password_reset' BEGIN SELECT RAISE(ABORT, 'audit unavailable'); END;");
+    const restore = await postgres.rejectInsert("AuditEvent", "auth.password_reset");
     try {
       await expect(service.completeReset({ ...proof, code, password: "new-test-password-123", confirmPassword: "new-test-password-123" })).rejects.toThrow();
       expect((await db.user.findUniqueOrThrow({ where: { id: userId } })).passwordHash).toBe(prior.passwordHash);
       expect(await db.session.count()).toBe(1);
       expect((await db.emailAuthChallenge.findUniqueOrThrow({ where: { id: proof.challengeId } })).status).toBe("SENT");
-    } finally { sql.exec("DROP TRIGGER ResetAuditFailure"); sql.close(); }
+    } finally { await restore(); }
   });
   it("fails closed without configuration and records unusable challenges on delivery failure", async () => {
     expect(() => emailAuthSettings({})).toThrow();

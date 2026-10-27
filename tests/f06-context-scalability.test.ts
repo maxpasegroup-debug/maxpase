@@ -1,20 +1,17 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { DatabaseSync } from "node:sqlite";
-import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { performance } from "node:perf_hooks";
-import { PrismaClient } from "@prisma/client";
+import type { PrismaClient } from "@prisma/client";
+import { createPostgresFixture } from "./helpers/postgres-fixture";
 import { workforcePermissions } from "@/server/authorization/registry";
 import { createAccessContext } from "@/server/authorization/engine";
 import { buildToolContext, checkContextSize, CONTEXT_BYTE_BUDGET } from "@/server/sia/context";
 import { siaToolRegistry } from "@/server/sia/registry";
 import { QueryBudgetError } from "@/server/domain/query-bounds";
 
-const directory = mkdtempSync(join(tmpdir(), "maxpase-f06-")), file = join(directory, "fixture.db");
-const db = new PrismaClient({ datasourceUrl: "file:" + file.replaceAll("\\", "/"), log: [{ emit: "event", level: "query" }] });
+const postgres = createPostgresFixture({ log: [{ emit: "event", level: "query" }] });
+const db = postgres.db;
 const queries: { sql: string; params: string; duration: number; observedAt: number }[] = [];
-db.$on("query", event => queries.push({ sql: event.query, params: event.params, duration: event.duration, observedAt: performance.now() }));
+(db as PrismaClient<{ log: [{ emit: "event"; level: "query" }] }>).$on("query", event => queries.push({ sql: event.query, params: event.params, duration: event.duration, observedAt: performance.now() }));
 let organizationId: string, foreignId: string, personId: string, userId: string, siaId: string, roleId: string, projectId: string;
 const selection = () => ({ organizationId, siaId });
 let small: { queries: number; ms: number };
@@ -30,9 +27,7 @@ async function measure() {
   return { context, queries: queries.length, ms: performance.now() - start, maxTransactionMs };
 }
 beforeAll(async () => {
-  const sql = new DatabaseSync(file);
-  for (const folder of readdirSync("prisma/migrations").filter(f => /^\d/.test(f)).sort()) sql.exec(readFileSync(join("prisma/migrations", folder, "migration.sql"), "utf8"));
-  sql.close();
+  await postgres.initialize();
   organizationId = (await db.organization.create({ data: { name: "F06 authorized company", slug: "f06-company", type: "COMPANY" } })).id;
   foreignId = (await db.organization.create({ data: { name: "FOREIGN confidential company", slug: "f06-foreign", type: "COMPANY" } })).id;
   personId = (await db.person.create({ data: { displayName: "Scoped fixture human" } })).id;
@@ -48,8 +43,8 @@ beforeAll(async () => {
   await db.siaTool.create({ data: { siaId, key: "get_tasks", name: "Task context", permissionKey: "task.read", enabled: true } });
   projectId = (await db.project.create({ data: { organizationId, name: "Relevant project", slug: "f06-project" } })).id;
   await db.task.create({ data: { organizationId, projectId, title: "Relevant task" } });
-}, 30000);
-afterAll(async () => { await db.$disconnect(); rmSync(directory, { recursive: true, force: true }); });
+}, 120000);
+afterAll(() => postgres.dispose(), 30000);
 
 describe("F06 scope-first context", () => {
   it("small baseline returns the relevant task", async () => {
@@ -69,7 +64,9 @@ describe("F06 scope-first context", () => {
       expect(result.queries).toBeLessThanOrEqual(small.queries + 5);
       const ctx = await createAccessContext(userId, db, selection());
       expect(ctx.nodes.map(n => n.id)).toEqual([organizationId]);
-      expect(queries.filter(q => q.sql.includes('FROM `main`.`Organization`')).every(q => q.sql.includes("WHERE"))).toBe(true);
+      const organizationReads = queries.filter(q => /FROM\s+(?:"public"\.)?"Organization"/.test(q.sql));
+      expect(organizationReads.length).toBeGreaterThan(0);
+      expect(organizationReads.every(q => q.sql.includes("WHERE"))).toBe(true);
     } catch (error) {
       console.info("F06 large failure", JSON.stringify({ ms: performance.now() - start, queries: queries.length, code: (error as { code?: string }).code, message: error instanceof Error ? error.message : "unknown" }));
       throw error;
@@ -126,7 +123,7 @@ describe("F06 scope-first context", () => {
     try {
       queries.length = 0;
       await expect(createAccessContext(userId, db, selection())).rejects.toThrow(QueryBudgetError);
-      const permissionReads = queries.filter(q => q.sql.includes('FROM `main`.`RolePermission`'));
+      const permissionReads = queries.filter(q => /FROM\s+(?:"public"\.)?"RolePermission"/.test(q.sql));
       expect(permissionReads).toHaveLength(1);
       expect(permissionReads[0].sql).toContain("LIMIT");
       expect(queries.some(q => q.sql.includes("passwordHash"))).toBe(false);

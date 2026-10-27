@@ -1,9 +1,5 @@
 import { beforeAll, afterAll, describe, it, expect } from "vitest";
-import { DatabaseSync } from "node:sqlite";
-import { mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { PrismaClient } from "@prisma/client";
+import { createPostgresFixture } from "./helpers/postgres-fixture";
 import { createAiraService } from "@/server/domain/aira-service";
 import { seedAiraStructure } from "@/server/domain/aira-seed";
 import { airaDivisions } from "@/server/domain/company-structure";
@@ -12,8 +8,8 @@ import { createBusinessService } from "@/server/domain/business-service";
 import { createExecutionService } from "@/server/domain/execution-service";
 import { createOperationsService } from "@/server/domain/operations-service";
 import { workforcePermissions } from "@/server/authorization/registry";
-const dir = mkdtempSync(join(tmpdir(), "maxpase-phase06-")), file = join(dir, "test.db");
-const db = new PrismaClient({ datasourceUrl: "file:" + file.replaceAll("\\", "/") });
+const postgres = createPostgresFixture();
+const db = postgres.db;
 const service = createAiraService(db), workforce = createWorkforceService(db), business = createBusinessService(db), execution = createExecutionService(db), ops = createOperationsService(db);
 let company: string, group: string, other: string, school: string, labs: string, career: string, admin: string, outsider: string, exact: string, reader: string;
 let sequence = 0;
@@ -27,9 +23,8 @@ async function actor(organizationId: string, permissions = keys, descendants = f
   return user.id;
 }
 beforeAll(async () => {
-  const sql = new DatabaseSync(file);
-  for (const folder of readdirSync("prisma/migrations").filter(f => /^\d/.test(f)).sort()) sql.exec(readFileSync(`prisma/migrations/${folder}/migration.sql`, "utf8"));
-  expect(sql.prepare("PRAGMA foreign_key_check").all()).toEqual([]); sql.close();
+  await postgres.initialize();
+  await postgres.assertIntegrity();
   const g = await db.organization.create({ data: { name: "MAXPASE GROUP", slug: "maxpase-group", type: "GROUP", group: { create: { name: "MAXPASE GROUP" } } }, include: { group: true } }); group = g.id;
   company = (await db.organization.create({ data: { name: "AIRA Skill City Private Limited", slug: "aira-skill-city", type: "COMPANY", parentId: group, company: { create: { displayName: "AIRA Skill City", groupId: g.group!.id } } } })).id;
   other = (await db.organization.create({ data: { name: "Other company", slug: unique(), type: "COMPANY", parentId: group, company: { create: { displayName: "Other company", groupId: g.group!.id } } } })).id;
@@ -37,8 +32,8 @@ beforeAll(async () => {
   school = divisions.find(d => d.slug === "aira-startup-school")!.id; labs = divisions.find(d => d.slug === "aira-labs")!.id; career = divisions.find(d => d.slug === "aira-career-hub")!.id;
   for (const key of keys) await db.permission.create({ data: { key, name: key, scope: "GROUP" } });
   admin = await actor(group, keys, true); outsider = await actor(other); exact = await actor(company); reader = await actor(company, ["company.read", "organization.read", "program.read", "batch.read", "location.read"], true);
-}, 30000);
-afterAll(async () => { await db.$disconnect(); rmSync(dir, { recursive: true, force: true }); });
+}, 120000);
+afterAll(() => postgres.dispose(), 30000);
 const program = async (organizationId = school, extra = {}) => service.save(admin, "programs", { organizationId, name: unique(), slug: unique(), ...extra });
 describe("Phase 06 AIRA company OS", () => {
   it("seeds only the canonical structure and Nice Jobs, idempotently", async () => {
@@ -190,10 +185,9 @@ describe("Phase 06 AIRA company OS", () => {
     const audit = await db.auditEvent.findFirstOrThrow({ where: { action: "company.context_entered", actorUserId: admin } });
     expect(audit.organizationId).toBe(company);
     const before = await db.program.count(), name = unique();
-    const sql = new DatabaseSync(file);
-    sql.exec("CREATE TRIGGER fail_company_audit BEFORE INSERT ON AuditEvent BEGIN SELECT RAISE(ABORT, 'audit unavailable'); END;");
+    const restore = await postgres.rejectInsert("AuditEvent");
     try { await expect(service.save(admin, "programs", { organizationId: school, name, slug: unique() })).rejects.toThrow(); }
-    finally { sql.exec("DROP TRIGGER fail_company_audit"); sql.close(); }
+    finally { await restore(); }
     expect(await db.program.count()).toBe(before);
     expect(await db.operationalEvent.count({ where: { auditId: audit.id } })).toBe(1);
   });

@@ -1,11 +1,12 @@
-.space { display: grid; gap: 22px; max-width: 1120px; margin-inline: auto; color: #183b2d; }
+.space { display: grid; gap: 22px; max-width: 1120px; min-width: 0; margin-inline: auto; color: #183b2d; overflow-wrap: anywhere; }
 .space a { color: #126847; text-decoration: none; font-weight: 650; }
 .space a:focus-visible { outline: 3px solid #087e78; outline-offset: 3px; }
 .back { display: inline-flex; align-items: center; gap: 7px; min-height: 44px; width: fit-content; }
 .header { display: flex; gap: 16px; align-items: flex-start; padding-bottom: 22px; border-bottom: 1px solid #dbe6df; }
+.header > div:last-child { min-width: 0; }
 .header p { color: #52665b; font-size: 13px; }
 .header h1 { font-size: 29px; line-height: 1.2; margin: 4px 0 8px; overflow-wrap: anywhere; }
-.header span { display: inline-block; text-transform: capitalize; color: #245b42; font-weight: 700; }
+.header span { display: inline-block; overflow-wrap: anywhere; text-transform: capitalize; color: #245b42; font-weight: 700; }
 .icon { display: grid; place-items: center; flex: none; width: 48px; height: 48px; border-radius: 6px; background: #e5f3e9; color: #176147; }
 .tabs { display: flex; flex-wrap: wrap; gap: 6px; border-bottom: 1px solid #dbe6df; }
 .tabs a { display: inline-flex; align-items: center; min-height: 44px; padding: 8px 12px; border-bottom: 3px solid transparent; }
@@ -15,3 +16,4 @@
 .overview h2 { margin: 0 0 12px; font-size: 18px; }
 .overview p { display: flex; gap: 8px; align-items: flex-start; margin: 0 0 14px; line-height: 1.5; color: #465b51; }
 .overview a { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; }
+@media (max-width: 480px) { .space { gap: 16px; } .header { gap: 10px; } .header h1 { font-size: 24px; } .icon { width: 40px; height: 40px; } .tabs a { min-width: 44px; padding-inline: 10px; } }

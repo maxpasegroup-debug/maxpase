@@ -19,7 +19,9 @@ const templates = [
   { scope: "aira-startup-school", key: "startup-junior-academic-advisor", name: "Junior Academic Advisor", permissions: ["organization.read", "aira.crm.self", "aira.crm.perform"] },
   { scope: "aira-skill-studio", key: "studio-junior-academic-advisor", name: "Junior Academic Advisor", permissions: ["organization.read", "aira.crm.self", "aira.crm.perform"] },
   { scope: "aira-labs", key: "labs-full-stack-developer", name: "Full Stack Developer", permissions: ["organization.read", "labs.delivery.assignee", "project.read", "task.read", "task.manage"] },
-  { scope: "aira-labs", key: "labs-junior-developer", name: "Junior Developer", permissions: ["organization.read", "labs.delivery.assignee", "project.read", "task.read", "task.manage"] }
+  { scope: "aira-labs", key: "labs-software-developer", name: "Software Developer", permissions: ["organization.read", "labs.delivery.assignee", "project.read", "task.read", "task.manage"] },
+  { scope: "aira-labs", key: "labs-junior-developer", name: "Junior Developer", permissions: ["organization.read", "labs.delivery.assignee", "project.read", "task.read", "task.manage"] },
+  { scope: "aira-labs", key: "labs-business-development-manager", name: "Business Development Manager", permissions: ["organization.read", "person.read", "notification.read", "labs.sales.self", "labs.sales.perform", "labs.sales.read", "labs.sales.manage"] }
 ] as const;
 
 export function createSkillCityRoleTemplates(client: PrismaClient = prisma) {

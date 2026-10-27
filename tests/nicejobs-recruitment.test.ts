@@ -1,9 +1,5 @@
 import { beforeAll, beforeEach, afterAll, describe, it, expect } from "vitest";
-import { PrismaClient } from "@prisma/client";
-import { DatabaseSync } from "node:sqlite";
-import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { createPostgresFixture } from "./helpers/postgres-fixture";
 import { initializeGroupStructure } from "@/server/group/structure";
 import { workforcePermissions } from "@/server/authorization/registry";
 import { createNiceJobsService } from "@/server/nicejobs/service";
@@ -20,8 +16,8 @@ import { createOnboardingService } from "@/server/nicejobs/onboarding";
 import { programmeOfferSummary } from "@/server/nicejobs/training-programme";
 import { createApplicantAccess } from "@/server/nicejobs/applicant-access";
 
-const directory = mkdtempSync(join(tmpdir(), "nicejobs-phase03-")), file = join(directory, "test.db");
-const db = new PrismaClient({ datasourceUrl: "file:" + file.replaceAll("\\", "/") });
+const postgres = createPostgresFixture();
+const db = postgres.db;
 const jobs = createNiceJobsService(db), applications = createApplicationService(db), operations = createOperationsService(db);
 let clock: Date;
 const recruitment = createRecruitmentService(db, () => clock);
@@ -74,7 +70,7 @@ async function issued(a: Pick<Application, "reference">) {
   await act(a, "ISSUE_OFFER", { offerReference: o.reference, recordRevision: o.revision }); return offer(a);
 }
 beforeAll(async () => {
-  const sql = new DatabaseSync(file); for (const folder of readdirSync("prisma/migrations").filter(f => /^\d/.test(f)).sort()) sql.exec(readFileSync(join("prisma/migrations", folder, "migration.sql"), "utf8")); sql.close();
+  await postgres.initialize();
   await db.$transaction(initializeGroupStructure);
   for (const p of workforcePermissions) await db.permission.upsert({ where: { key: p.key }, update: {}, create: p });
   await db.permission.upsert({ where: { key: "organization.read" }, update: {}, create: { key: "organization.read", name: "Read", scope: "GROUP" } });
@@ -90,7 +86,7 @@ beforeAll(async () => {
   other = await human("other", career, ["organization.read", "nicejobs.application.self", "notification.read"]);
   outsider = await human("outsider", await org("pearn"), all, true); reader = await human("reader", labs, ["nicejobs.application.read"]);
   const control = await operations.saveControl(manager, { organizationId: labs, name: "Independent test hiring approval", kind: "HUMAN_DECISION", requiredPermission: "nicejobs.management.approve", stages: [[{ approverUserId: approver, requiredPermission: "nicejobs.management.approve" }]] }); controlId = control.id;
-}, 30000);
+}, 120000);
 beforeEach(async () => {
   await db.niceJobsTrainingReview.deleteMany();await db.niceJobsTrainingSubmission.deleteMany();await db.niceJobsTrainingProgress.deleteMany();await db.niceJobsOnboarding.deleteMany();await db.niceJobsTrainingPlan.deleteMany();
   await db.niceJobsInterviewEvaluation.deleteMany(); await db.niceJobsInterviewer.deleteMany(); await db.niceJobsInterview.deleteMany(); await db.niceJobsOffer.deleteMany(); await db.niceJobsApplicationHistory.deleteMany(); await db.niceJobsApplication.deleteMany();
@@ -98,7 +94,7 @@ beforeEach(async () => {
   await db.niceJobsTemplate.updateMany({ data: { publishedVersionId: null } }); await db.niceJobsVersionArea.deleteMany(); await db.niceJobsVersion.deleteMany(); await db.niceJobsTemplate.deleteMany();
   clock = new Date("2026-10-08T08:00:00.000Z"); versionId = await publish();
 });
-afterAll(async () => { await db.$disconnect(); rmSync(directory, { recursive: true, force: true }); });
+afterAll(() => postgres.dispose(), 30000);
 
 describe("Nice Jobs interview, approval and offer controls", () => {
   it("completes one approved 100-day candidate journey with no skipped decision, policy or enrollment",async()=>{
@@ -193,9 +189,9 @@ describe("Nice Jobs interview, approval and offer controls", () => {
     await expect(service.mutate(candidate, { ...command, actorUserId: manager })).rejects.toThrow();
     await expect(service.mutate(candidate, { ...command, fingerprint: "0".repeat(64) })).rejects.toThrow();
     await expect(service.mutate(candidate, { ...command, revision: 0 })).rejects.toThrow();
-    const sql = new DatabaseSync(file); sql.exec("CREATE TRIGGER fail_preoffer_audit BEFORE INSERT ON AuditEvent WHEN NEW.action = 'nicejobs.application.pre_offer_orientation' BEGIN SELECT RAISE(ABORT, 'Isolated audit failure'); END;"); sql.close();
+    const restore = await postgres.rejectInsert("AuditEvent", "nicejobs.application.pre_offer_orientation");
     try { await expect(service.mutate(candidate, command)).rejects.toThrow(); expect((await service.detail(candidate, a.reference))?.attempts).toBe(0); expect((await row(a)).revision).toBe(detail.revision); }
-    finally { const cleanup = new DatabaseSync(file); cleanup.exec("DROP TRIGGER fail_preoffer_audit"); cleanup.close(); }
+    finally { await restore(); }
   });
   it("blocks publication without required pre-offer content and keeps completion separate from hiring decisions", async () => {
     const draft = await jobs.create(manager, { code: "REQUIRED-PRE-OFFER", title: "Synthetic draft", description: "Synthetic publication fixture", visibility: "PUBLIC", divisionIds: [labs], configuration: { schemaVersion: 1, opportunity: await fixtureOpportunity(db, manager), preOfferRequired: true } });
@@ -356,8 +352,8 @@ describe("Nice Jobs interview, approval and offer controls", () => {
   });
   it("rolls back offer acceptance and its notification when audit insertion fails", async () => {
     const a = await shortlisted(), o = await issued(a), before = await db.notification.count();
-    await db.$executeRawUnsafe("CREATE TRIGGER phase03_audit_failure BEFORE INSERT ON AuditEvent BEGIN SELECT RAISE(ABORT, 'isolated audit failure'); END");
-    try { await expect(act(a, "ACCEPT_OFFER", { offerReference: o.reference, recordRevision: o.revision }, candidate)).rejects.toThrow(); } finally { await db.$executeRawUnsafe("DROP TRIGGER phase03_audit_failure"); }
+    const restoreLegacyTrigger1 = await postgres.rejectInsert("AuditEvent");
+    try { await expect(act(a, "ACCEPT_OFFER", { offerReference: o.reference, recordRevision: o.revision }, candidate)).rejects.toThrow(); } finally { await restoreLegacyTrigger1(); }
     expect((await row(a)).status).toBe("OFFER"); expect((await offer(a)).status).toBe("ISSUED"); expect((await offer(a)).acceptedAt).toBeNull(); expect(await db.notification.count()).toBe(before);
   });
   it("bounds historical joins and cursor pagination while applying candidate and UTC interview filters", async () => {

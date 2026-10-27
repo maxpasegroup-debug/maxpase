@@ -1,15 +1,10 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { DatabaseSync } from "node:sqlite";
-import { mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
-import { join } from "node:path";
-import { tmpdir } from "node:os";
-import { PrismaClient } from "@prisma/client";
+import { createPostgresFixture } from "./helpers/postgres-fixture";
 import { createBusinessService } from "@/server/domain/business-service";
 import { getPermissionGrantsForUser } from "@/server/authorization/service";
 
-const directory = mkdtempSync(join(tmpdir(), "maxpase-phase02-"));
-const databasePath = join(directory, "test.db");
-const db = new PrismaClient({ datasourceUrl: "file:" + databasePath.replaceAll("\\", "/") });
+const postgres = createPostgresFixture();
+const db = postgres.db;
 const service = createBusinessService(db);
 let group: { id: string; group: { id: string } | null };
 let admin: { id: string; personId: string | null };
@@ -23,11 +18,8 @@ const identity = (prefix: string) => ({ name: prefix, slug: prefix.toLowerCase()
 const keys = [...["organization", "company", "membership", "ownership", "brand", "product", "project", "goal"].flatMap(k => [k + ".read", k + ".manage"]), "membership.scope.manage", "membership.assign_role", "goal.progress"];
 
 beforeAll(async () => {
-  const sql = new DatabaseSync(databasePath);
-  for (const folder of readdirSync("prisma/migrations").filter(f => /^\d/.test(f)).sort()) sql.exec(readFileSync(`prisma/migrations/${folder}/migration.sql`, "utf8"));
-  expect(sql.prepare("PRAGMA foreign_key_check").all()).toEqual([]);
-  expect(sql.prepare("PRAGMA integrity_check").get()).toEqual({ integrity_check: "ok" });
-  sql.close();
+  await postgres.initialize();
+  await postgres.assertIntegrity();
   group = await db.organization.create({ data: { ...identity("Test group"), type: "GROUP", group: { create: { name: "Test group" } } }, include: { group: true } });
   for (const key of keys) await db.permission.create({ data: { key, name: key, scope: key === "organization.manage" ? "GLOBAL" : "GROUP" } });
   const role = await db.role.create({ data: { organizationId: group.id, key: "test-admin", name: "Test admin", permissions: { create: keys.map(key => ({ permission: { connect: { key } } })) } } });
@@ -45,9 +37,9 @@ beforeAll(async () => {
   memberId = member.id;
   const human = await db.person.create({ data: { displayName: "Human without login", memberships: { create: { organizationId: a.organizationId } } } });
   personId = human.id;
-}, 30000);
+}, 120000);
 
-afterAll(async () => { await db.$disconnect(); rmSync(directory, { recursive: true, force: true }); });
+afterAll(() => postgres.dispose(), 30000);
 
 describe("Phase 02 relational business graph", () => {
   it("preserves the Phase 01 group and makes the company affiliation explicit", async () => {
@@ -235,11 +227,11 @@ describe("authorization and atomic audit", () => {
     expect(events[0]).toMatchObject({ actorUserId: admin.id, actorPersonId: admin.personId, organizationId: a.organizationId, result: "SUCCESS", metadata: null });
   });
   it("rolls back a mutation when audit storage fails", async () => {
-    await db.$executeRawUnsafe("CREATE TRIGGER test_fail_audit BEFORE INSERT ON AuditEvent BEGIN SELECT RAISE(ABORT, 'test audit unavailable'); END");
+    const restoreLegacyTrigger1 = await postgres.rejectInsert("AuditEvent");
     const before = await db.brand.count();
     await expect(service.save(admin.id, "brands", { ...identity("Rollback brand"), organizationId: a.organizationId })).rejects.toThrow();
     expect(await db.brand.count()).toBe(before);
-    await db.$executeRawUnsafe("DROP TRIGGER test_fail_audit");
+    await restoreLegacyTrigger1();
   });
   it("leaves no resource or success audit for rejected mutations", async () => {
     const before = await db.auditEvent.count();

@@ -1,10 +1,6 @@
 import { beforeAll, afterAll, describe, it, expect } from "vitest";
 import { createHmac } from "node:crypto";
-import { DatabaseSync } from "node:sqlite";
-import { mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { PrismaClient } from "@prisma/client";
+import { createPostgresFixture } from "./helpers/postgres-fixture";
 import { createCommunicationsService } from "@/server/communications/service";
 import { createAutomationService } from "@/server/communications/automation";
 import { mockAdapter, environmentCredentials, unavailableAttachments, type CommunicationAdapter } from "@/server/communications/providers";
@@ -14,8 +10,8 @@ import { createExecutionService } from "@/server/domain/execution-service";
 import { createSiaService } from "@/server/sia/service";
 import { registeredTool } from "@/server/sia/registry";
 import { workforcePermissions } from "@/server/authorization/registry";
-const dir = mkdtempSync(join(tmpdir(), "maxpase-phase09-")), file = join(dir, "test.db");
-const db = new PrismaClient({ datasourceUrl: "file:" + file.replaceAll("\\", "/") });
+const postgres = createPostgresFixture();
+const db = postgres.db;
 const secret = "test-only-webhook-signing-value-no-live-access";
 let time = new Date(), sequence = 0;
 const unique = () => "communication-" + ++sequence;
@@ -31,14 +27,13 @@ async function actor(org: string, permissions = keys) {
   await db.membership.create({ data: { organizationId: org, personId: person.id, roles: { create: { roleId: role.id } } } }); return user.id;
 }
 beforeAll(async () => {
-  const sql = new DatabaseSync(file);
-  for (const f of readdirSync("prisma/migrations").filter(f => /^\d/.test(f)).sort()) sql.exec(readFileSync(`prisma/migrations/${f}/migration.sql`, "utf8")); sql.close();
+  await postgres.initialize();
   a = (await db.organization.create({ data: { name: "A", slug: unique(), type: "COMPANY" } })).id;
   b = (await db.organization.create({ data: { name: "B", slug: unique(), type: "COMPANY" } })).id;
   for (const key of keys) await db.permission.create({ data: { key, name: key, scope: "GROUP" } });
   author = await actor(a); reviewer = await actor(a); outsider = await actor(b); recipient = await actor(a);
-}, 30000);
-afterAll(async () => { await db.$disconnect(); rmSync(dir, { recursive: true, force: true }); });
+}, 120000);
+afterAll(() => postgres.dispose(), 30000);
 async function foundation(channel = "EMAIL", perMinute = 30) {
   const sender = channel === "EMAIL" ? "operations@test.invalid" : "+919123456789";
   const integration = await comm.saveIntegration(author, { organizationId: a, name: unique(), channel, provider: "MOCK", enabled: true, credentialReference: "env:TEST_SIGNING_KEY", configuration: { sender } });
@@ -202,9 +197,9 @@ describe("Phase 09 communications, integrations and automation boundaries", () =
   });
   it("rolls back message intent and audit atomically when audit persistence fails", async () => {
     const f = await foundation(), before = await db.communicationMessage.count(), requests = await db.operationalRequest.count();
-    const sql = new DatabaseSync(file); sql.exec('CREATE TRIGGER fail_communication_audit BEFORE INSERT ON AuditEvent BEGIN SELECT RAISE(ABORT, "audit unavailable"); END;');
+    const restore = await postgres.rejectInsert("AuditEvent");
     try { await expect(comm.propose(author, f.raw)).rejects.toThrow(); expect(await db.communicationMessage.count()).toBe(before); expect(await db.operationalRequest.count()).toBe(requests); }
-    finally { sql.exec("DROP TRIGGER fail_communication_audit"); sql.close(); }
+    finally { await restore(); }
   });
   it("runs finite UTC jobs through registered internal actions with real owner relationship and no duplicate events", async () => {
     const p = (await db.user.findUniqueOrThrow({ where: { id: recipient } })).personId!;
@@ -246,7 +241,7 @@ describe("Phase 09 communications, integrations and automation boundaries", () =
   }, 30000);
   it("fails closed for private files and preserves scoped integrity", async () => {
     await expect(unavailableAttachments.authorize(author, a, "private:document")).rejects.toThrow("not configured");
-    const sql = new DatabaseSync(file); expect(sql.prepare("PRAGMA foreign_key_check").all()).toEqual([]); expect(sql.prepare("PRAGMA integrity_check").get()).toEqual({ integrity_check: "ok" }); sql.close();
+    await postgres.assertIntegrity();
   });
   it("protects integration updates, sender changes, immutable previews and cancellation against replay", async () => {
     const f = await foundation(), message = await queued(f);

@@ -1,17 +1,13 @@
 import { beforeAll, afterAll, describe, it, expect } from "vitest";
-import { DatabaseSync } from "node:sqlite";
-import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { PrismaClient } from "@prisma/client";
+import { createPostgresFixture } from "./helpers/postgres-fixture";
 import { workforcePermissions } from "@/server/authorization/registry";
 import { createExecutiveService } from "@/server/domain/executive-service";
 import { createExecutionService } from "@/server/domain/execution-service";
 import { createOperationsService } from "@/server/domain/operations-service";
 import { kpiStatus, trend } from "@/server/domain/executive-input";
 import { notify, operationalEvent } from "@/server/domain/operational-events";
-const dir = mkdtempSync(join(tmpdir(), "maxpase-phase07-")), file = join(dir, "test.db");
-const db = new PrismaClient({ datasourceUrl: "file:" + file.replaceAll("\\", "/") });
+const postgres = createPostgresFixture();
+const db = postgres.db;
 const service = createExecutiveService(db), execution = createExecutionService(db), ops = createOperationsService(db);
 let group: string, a: string, b: string, division: string, admin: string, reader: string, narrow: string, other: string, projectOnly: string, projectId: string, taskId: string, goalId: string;
 let seq = 0; const unique = () => "executive-" + ++seq;
@@ -29,9 +25,8 @@ async function payload(kind: "DECISION" | "KPI" | "RISK" | "OPPORTUNITY", extra 
 }
 const metric = (data: Awaited<ReturnType<typeof service.dashboard>>, name: string) => data.metrics.find(m => m.name === name)!;
 beforeAll(async () => {
-  const sql = new DatabaseSync(file);
-  for (const folder of readdirSync("prisma/migrations").filter(f => /^\d/.test(f)).sort()) sql.exec(readFileSync(`prisma/migrations/${folder}/migration.sql`, "utf8"));
-  expect(sql.prepare("PRAGMA foreign_key_check").all()).toEqual([]); sql.close();
+  await postgres.initialize();
+  await postgres.assertIntegrity();
   group = (await db.organization.create({ data: { type: "GROUP", name: "Group", slug: unique() } })).id;
   a = (await db.organization.create({ data: { type: "COMPANY", parentId: group, name: "Company A", slug: unique() } })).id;
   b = (await db.organization.create({ data: { type: "COMPANY", parentId: group, name: "Secret B", slug: unique() } })).id;
@@ -45,8 +40,8 @@ beforeAll(async () => {
   const secret = await execution.save(admin, "projects", { organizationId: b, name: "Secret blocked project", slug: unique(), status: "BLOCKED" });
   await execution.save(admin, "tasks", { organizationId: b, projectId: secret.id, title: "Secret critical task", priority: "CRITICAL", dueDate: "2025-01-01" });
   projectOnly = await actor(division, ["executive.read", "project.read", "task.read", "goal.read", "event.read", "kpi.read"], false, projectId);
-}, 30000);
-afterAll(async () => { await db.$disconnect(); rmSync(dir, { recursive: true, force: true }); });
+}, 120000);
+afterAll(() => postgres.dispose(), 30000);
 describe("Phase 07 deterministic executive boundary", () => {
   it("batch scope checks reject mismatched project ownership and never survive permission revocation", async () => {
     const foreignProject = await db.project.findFirstOrThrow({ where: { organizationId: b } });
@@ -150,10 +145,10 @@ describe("Phase 07 deterministic executive boundary", () => {
     expect(await db.auditEvent.count({ where: { entityId: risk.id } })).toBe(3);
   });
   it("rolls back business records and history if the audit fails", async () => {
-    const sql = new DatabaseSync(file); sql.exec("CREATE TRIGGER fail_executive_audit BEFORE INSERT ON AuditEvent BEGIN SELECT RAISE(ABORT, 'audit unavailable'); END;");
+    const restore = await postgres.rejectInsert("AuditEvent");
     const before = await db.executiveRecord.count(), history = await db.executiveHistory.count();
     try { await expect(service.save(admin, await payload("RISK", { severity: "LOW" }))).rejects.toThrow(); expect(await db.executiveRecord.count()).toBe(before); expect(await db.executiveHistory.count()).toBe(history); }
-    finally { sql.exec("DROP TRIGGER fail_executive_audit"); sql.close(); }
+    finally { await restore(); }
   });
   it("detects only meaningful changes and deadline crossings, preserving source confidentiality", async () => {
     const view = await service.dashboard(reader, { from: "2024-01-01", until: "2030-01-01" });
@@ -258,9 +253,9 @@ describe("Phase 07 deterministic executive boundary", () => {
   });
   it("surfaces actual processing failures through wrapped resources and reauthorizes handling", async () => {
     const reminder = await ops.saveReminder(admin, { organizationId: a, resourceType: "ORGANIZATION", resourceId: a, recipientUserId: reader, remindAt: "2020-01-01", reason: "Real failure exercise", reference: unique() + "-reminder" });
-    const sql = new DatabaseSync(file); sql.exec("CREATE TRIGGER fail_reminder_delivery BEFORE INSERT ON Notification BEGIN SELECT RAISE(ABORT, 'test delivery failure'); END;");
+    const restore = await postgres.rejectInsert("Notification");
     try { expect((await ops.processDue(admin, 25)).failures.map(f => f.id)).toContain(reminder.id); }
-    finally { sql.exec("DROP TRIGGER fail_reminder_delivery"); sql.close(); }
+    finally { await restore(); }
     const failure = await db.operationalEvent.findFirstOrThrow({ where: { entityId: reminder.id, status: "FAILED" } });
     const view = await service.dashboard(reader);
     expect(metric(view, "Failed events").entities.map(e => e.id)).toContain(failure.id);

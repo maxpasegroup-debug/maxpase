@@ -1,9 +1,5 @@
 import { beforeAll, afterAll, describe, it, expect } from "vitest";
-import { DatabaseSync } from "node:sqlite";
-import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { PrismaClient } from "@prisma/client";
+import { createPostgresFixture } from "./helpers/postgres-fixture";
 import { workforcePermissions } from "@/server/authorization/registry";
 import { createAccessContext } from "@/server/authorization/engine";
 import { createSiaService } from "@/server/sia/service";
@@ -14,8 +10,8 @@ import { createExecutionService } from "@/server/domain/execution-service";
 import { createOperationsService } from "@/server/domain/operations-service";
 import { createExecutiveService } from "@/server/domain/executive-service";
 import { createWorkforceService } from "@/server/domain/workforce-service";
-const dir = mkdtempSync(join(tmpdir(), "maxpase-phase08-")), file = join(dir, "test.db");
-const db = new PrismaClient({ datasourceUrl: "file:" + file.replaceAll("\\", "/") });
+const postgres = createPostgresFixture();
+const db = postgres.db;
 const sia = createSiaService(db), ops = createOperationsService(db), execution = createExecutionService(db);
 const keys = [...new Set([...workforcePermissions.filter(p => p.scope !== "GLOBAL").map(p => p.key), "sia.approve_action", ...["organization", "company", "brand", "product", "ownership", "membership", "project", "goal"].flatMap(k => [k + ".read", k + ".manage"])])];
 let sequence = 0; const unique = () => "sia-test-" + ++sequence;
@@ -35,9 +31,8 @@ async function approve(action: Awaited<ReturnType<typeof proposal>>) {
   await ops.decide(approver, { approvalId: approval.id, decision: "APPROVED", comment: "Independent human approval" });
 }
 beforeAll(async () => {
-  const sql = new DatabaseSync(file);
-  for (const f of readdirSync("prisma/migrations").filter(f => /^\d/.test(f)).sort()) sql.exec(readFileSync(`prisma/migrations/${f}/migration.sql`, "utf8"));
-  expect(sql.prepare("PRAGMA foreign_key_check").all()).toEqual([]); sql.close();
+  await postgres.initialize();
+  await postgres.assertIntegrity();
   group = (await db.organization.create({ data: { name: "MAXPASE", slug: unique(), type: "GROUP", group: { create: { name: "MAXPASE" } } } })).id;
   a = (await db.organization.create({ data: { name: "Company A", slug: unique(), type: "COMPANY", parentId: group, company: { create: { displayName: "Company A" } } } })).id;
   b = (await db.organization.create({ data: { name: "Secret B", slug: unique(), type: "COMPANY", parentId: group, company: { create: { displayName: "Secret B" } } } })).id;
@@ -52,8 +47,8 @@ beforeAll(async () => {
   await execution.save(admin, "tasks", { organizationId: b, title: "Secret B overdue task", priority: "CRITICAL", dueDate: "2025-01-01" });
   controlId = (await ops.saveControl(admin, { organizationId: a, name: "Independent SIA task approval", kind: "APPROVAL", requiredPermission: "task.manage", stages: [[{ approverUserId: approver, requiredPermission: "approval.decide" }]] })).id;
   for (const t of siaToolRegistry) await sia.setTool(admin, scope(), t.key, true);
-}, 30000);
-afterAll(async () => { await db.$disconnect(); rmSync(dir, { recursive: true, force: true }); });
+}, 120000);
+afterAll(() => postgres.dispose(), 30000);
 
 describe("Phase 08 SIA controlled Virtual CEO", () => {
   it("preserves nonhuman identity, config versions and immutable server tool risk", async () => {
@@ -204,13 +199,13 @@ describe("Phase 08 SIA controlled Virtual CEO", () => {
   it("rolls back task, action state, request and audit together on audit failure", async () => {
     const action = await proposal(); await approve(action);
     const count = await db.task.count();
-    await db.$executeRawUnsafe("CREATE TRIGGER fail_sia_audit BEFORE INSERT ON AuditEvent WHEN NEW.action = 'sia.action_verified' BEGIN SELECT RAISE(ABORT, 'audit unavailable'); END");
-    try { await expect(sia.execute(admin, action.id, 0, true)).rejects.toThrow(); } finally { await db.$executeRawUnsafe("DROP TRIGGER fail_sia_audit"); }
+    const restoreLegacyTrigger1 = await postgres.rejectInsert("AuditEvent", "sia.action_verified");
+    try { await expect(sia.execute(admin, action.id, 0, true)).rejects.toThrow(); } finally { await restoreLegacyTrigger1(); }
     expect(await db.task.count()).toBe(count);
     expect(await db.siaAction.findUnique({ where: { id: action.id } })).toMatchObject({ status: "APPROVAL_REQUIRED", resultId: null, version: 0 });
     const requests = await db.operationalRequest.count();
-    await db.$executeRawUnsafe("CREATE TRIGGER fail_sia_proposal BEFORE INSERT ON AuditEvent WHEN NEW.action = 'sia.action_authorized' BEGIN SELECT RAISE(ABORT, 'audit unavailable'); END");
-    try { await expect(proposal()).rejects.toThrow(); } finally { await db.$executeRawUnsafe("DROP TRIGGER fail_sia_proposal"); }
+    const restoreLegacyTrigger2 = await postgres.rejectInsert("AuditEvent", "sia.action_authorized");
+    try { await expect(proposal()).rejects.toThrow(); } finally { await restoreLegacyTrigger2(); }
     expect(await db.operationalRequest.count()).toBe(requests);
   });
   it("records safe failures and usage without private prompts or chain-of-thought", async () => {

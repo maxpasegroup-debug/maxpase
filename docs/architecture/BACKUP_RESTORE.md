@@ -1,5 +1,15 @@
 # Backup And Restore
 
+## PostgreSQL release procedure
+
+The active Prisma datasource and migration chain now target PostgreSQL. The SQLite procedures below are historical and must not be used for a PostgreSQL launch. Production PostgreSQL backup, monitoring and restoration remain **NOT VERIFIED**.
+
+- Back up the verified Railway PostgreSQL service using the operator-approved managed backup or `pg_dump` with a privately supplied connection reference. Never put credentials in command arguments, committed files or shared logs. Include private uploaded objects on `maxpase-volume` separately; database migration does not justify removing that volume.
+- Restore into a **new isolated PostgreSQL database**, never over the live target. Verify schema, migration checksum, all 13 triggers, row counts, scoped access, audit, file references and application readiness before switching a release. Exercise failure and rollback with a matching application artifact and secret versions.
+- Stop writes/processors for a cutover; preserve and reconcile post-backup communication and financial effects. Encryption, retention, RPO/RTO, restore ownership and monitoring require explicit owner approval and measured evidence.
+
+## Historical SQLite procedure (retired)
+
 ## Ownership And Inventory
 
 Release owner approves recovery; deployment operator creates/restores snapshots; security/data owner manages encryption, access, retention and deletion. These are operational responsibilities, not new named application-role authority.

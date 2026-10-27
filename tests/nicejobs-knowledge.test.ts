@@ -2,9 +2,9 @@ import { beforeAll, beforeEach, afterAll, describe, it, expect } from "vitest";
 import { createKnowledgeService } from "@/server/nicejobs/knowledge";
 import { knowledgeCommand } from "@/server/nicejobs/knowledge-input";
 import { createAccessContext } from "@/server/authorization/engine";
-import { PrismaClient } from "@prisma/client";
-import { DatabaseSync } from "node:sqlite";
-import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import type { PrismaClient } from "@prisma/client";
+import { createPostgresFixture } from "./helpers/postgres-fixture";
+import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { initializeGroupStructure } from "@/server/group/structure";
@@ -23,10 +23,11 @@ import { createContentFiles } from "@/server/nicejobs/content-files";
 import { privateContentStorage } from "@/server/nicejobs/content-storage";
 import { unavailableAttachments } from "@/server/communications/providers";
 
-const directory = mkdtempSync(join(tmpdir(), "nicejobs-phase07-")), file = join(directory, "test.db");
-const db = new PrismaClient({ datasourceUrl: "file:" + file.replaceAll("\\", "/"), log: [{ level: "query", emit: "event" }] });
+const directory = mkdtempSync(join(tmpdir(), "nicejobs-phase07-"));
+const postgres = createPostgresFixture({ log: [{ level: "query", emit: "event" }] });
+const db = postgres.db;
 let capturedQueries: string[] | null = null;
-db.$on("query", e => { capturedQueries?.push(e.query); });
+(db as PrismaClient<{ log: [{ emit: "event"; level: "query" }] }>).$on("query", e => { capturedQueries?.push(e.query); });
 const leads = createLeadService(db, () => clock);
 const knowledge = createKnowledgeService(db, () => clock);
 const employee = createEmployeeService(db, () => clock), sia = createSiaService(db);
@@ -75,7 +76,7 @@ async function reviewed(ref: string, key: string, outcome: string, feedback = "R
   return act(ref, "REVIEW", { submissionId: s.id, outcome, feedback }, mentor, false);
 }
 beforeAll(async () => {
-  const sql = new DatabaseSync(file); for (const folder of readdirSync("prisma/migrations").filter(f => /^\d/.test(f)).sort()) sql.exec(readFileSync(join("prisma/migrations", folder, "migration.sql"), "utf8")); sql.close();
+  await postgres.initialize();
   await db.$transaction(initializeGroupStructure);
   for (const p of workforcePermissions) await db.permission.upsert({ where: { key: p.key }, update: {}, create: p });
   await db.permission.upsert({ where: { key: "notification.manage" }, update: {}, create: { key: "notification.manage", name: "Explicit notification management", scope: "GROUP" } });
@@ -93,7 +94,7 @@ beforeAll(async () => {
     await db.membership.create({ data: { personId: user.personId!, organizationId: labs, roles: { create: { roleId: role.id } } } });
   }
   controlId = (await operations.saveControl(manager, { organizationId: labs, name: "Fixture independent approval", kind: "HUMAN_DECISION", requiredPermission: "nicejobs.management.approve", stages: [[{ approverUserId: approver, requiredPermission: "nicejobs.management.approve" }]] })).id;
-}, 30000);
+}, 120000);
 beforeEach(async () => {
   await db.niceJobsKnowledgeReceipt.deleteMany(); await db.niceJobsKnowledgeWorkLink.deleteMany(); await db.niceJobsSopStep.deleteMany(); await db.niceJobsKnowledgeVersion.updateMany({data:{relatedVersionId:null}}); await db.niceJobsKnowledgeVersion.deleteMany(); await db.niceJobsKnowledge.deleteMany(); await db.communicationTemplate.deleteMany();
   await db.siaApproval.deleteMany({ where: { request: { resourceType: "NICE_JOBS_LEAD" } } });
@@ -108,7 +109,7 @@ beforeEach(async () => {
   await db.niceJobsTemplate.updateMany({ data: { publishedVersionId: null } }); await db.niceJobsVersionArea.deleteMany(); await db.niceJobsVersion.deleteMany(); await db.niceJobsTemplate.deleteMany();
   clock = new Date(); versionId = await publish();
 });
-afterAll(async () => { await db.$disconnect(); rmSync(directory, { recursive: true, force: true }); });
+afterAll(async () => { await postgres.dispose(); rmSync(directory, { recursive: true, force: true }); }, 30000);
 async function ready(user = candidate) {
   const ref = await accepted(user);
   await act(ref, "ENROLL", {}, user, true);
@@ -295,11 +296,11 @@ describe("Nice Jobs scoped knowledge and internal communications", () => {
     await db.user.update({ where: { id: manager }, data: { status: "SUSPENDED" } }); try { await expect(knowledge.mutate(manager, c)).rejects.toThrow(); } finally { await db.user.update({ where: { id: manager }, data: { status: "ACTIVE" } }); }
   });
   it("rolls back content and publication when audit persistence fails", async () => {
-    await db.$executeRawUnsafe("CREATE TRIGGER fail_knowledge_audit BEFORE INSERT ON AuditEvent WHEN NEW.action LIKE 'nicejobs.knowledge.%' BEGIN SELECT RAISE(ABORT,'fixture audit failure'); END");
-    try { await expect(draft()).rejects.toThrow(); expect(await db.niceJobsKnowledge.count()).toBe(0); } finally { await db.$executeRawUnsafe("DROP TRIGGER fail_knowledge_audit"); }
+    const restoreLegacyTrigger1 = await postgres.rejectInsert("AuditEvent", "nicejobs.knowledge.", "PREFIX");
+    try { await expect(draft()).rejects.toThrow(); expect(await db.niceJobsKnowledge.count()).toBe(0); } finally { await restoreLegacyTrigger1(); }
     const d = await draft("COMMUNICATION"); await contentAct(d.id, "SUBMIT"); await contentAct(d.id, "REVIEW", { reason: "Independent fixture review" }, approver);
-    await db.$executeRawUnsafe("CREATE TRIGGER fail_knowledge_audit BEFORE INSERT ON AuditEvent WHEN NEW.action='nicejobs.knowledge.publish' BEGIN SELECT RAISE(ABORT,'fixture audit failure'); END");
-    try { await expect(contentAct(d.id, "PUBLISH")).rejects.toThrow(); expect(await db.communicationTemplate.count()).toBe(0); expect((await db.niceJobsKnowledgeVersion.findUniqueOrThrow({ where: { id: d.id } })).status).toBe("IN_REVIEW"); } finally { await db.$executeRawUnsafe("DROP TRIGGER fail_knowledge_audit"); }
+    const restoreLegacyTrigger2 = await postgres.rejectInsert("AuditEvent", "nicejobs.knowledge.publish");
+    try { await expect(contentAct(d.id, "PUBLISH")).rejects.toThrow(); expect(await db.communicationTemplate.count()).toBe(0); expect((await db.niceJobsKnowledgeVersion.findUniqueOrThrow({ where: { id: d.id } })).status).toBe("IN_REVIEW"); } finally { await restoreLegacyTrigger2(); }
   });
   it("links exact SOP versions to assigned tasks, leads, follow-ups and SOP change messages", async () => {
     const fixture = await leadFixture(), sop = await published(), resource = await published("RESOURCE");
@@ -342,7 +343,8 @@ describe("Nice Jobs scoped knowledge and internal communications", () => {
 
   it("keeps large resource lists bounded and query count independent of page size", async () => {
     await activate(); const count=1001; await db.niceJobsKnowledge.createMany({data:Array.from({length:count},(_,i)=>({id:"scale-content-"+i,companyId:company,kind:"RESOURCE",createdByUserId:manager}))}); await db.niceJobsKnowledgeVersion.createMany({data:Array.from({length:count},(_,i)=>({id:"scale-version-"+String(i).padStart(4,"0"),contentId:"scale-content-"+i,number:1,organizationId:labs,audience:"DIVISION",ownerUserId:manager,title:"Scale fixture resource "+i,summary:"Scoped fixture",purpose:"Validation",body:"Bounded reference",resourceType:"REFERENCE",status:"PUBLISHED",current:true,publishedAt:clock}))});
-    capturedQueries=[];const started=Date.now(),first=await knowledge.list(candidate,{kind:"RESOURCE",search:"Scale fixture",limit:25});const queries25=capturedQueries.length;capturedQueries=[];const large=await knowledge.list(candidate,{kind:"RESOURCE",search:"Scale fixture",limit:100});const queries100=capturedQueries.length;capturedQueries=null;
+    await new Promise<void>(resolve=>setImmediate(resolve));
+    capturedQueries=[];const started=Date.now(),first=await knowledge.list(candidate,{kind:"RESOURCE",search:"Scale fixture",limit:25});await new Promise<void>(resolve=>setImmediate(resolve));const queries25=capturedQueries.length;capturedQueries=[];const large=await knowledge.list(candidate,{kind:"RESOURCE",search:"Scale fixture",limit:100});await new Promise<void>(resolve=>setImmediate(resolve));const queries100=capturedQueries.length;capturedQueries=null;
     expect(first.records).toHaveLength(25);expect(large.records).toHaveLength(100);expect(queries25).toBe(queries100);const next=await knowledge.list(candidate,{kind:"RESOURCE",search:"Scale fixture",after:first.nextCursor!});expect(next.records[0].id).not.toBe(first.records[0].id);
     console.log(JSON.stringify({fixtureResources:count,activatedWorkers:1,queries25,queries100,milliseconds:Date.now()-started}));
   });

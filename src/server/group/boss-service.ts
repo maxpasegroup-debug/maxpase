@@ -94,11 +94,28 @@ export function createBossService(client: PrismaClient = prisma) {
     const account = await createAccountPreferences(client).account(userId);
     const nexa = { initialized: !!(await client.nexaIdentity.findFirst({ where: { name: "NEXA", status: "ACTIVE" }, select: { id: true } })), directiveCount: await client.nexaDirective.count({ where: { bossUserId: userId } }) };
     const overview = buildBossOverview(snapshot, account.timezone, readable.decision);
+    const taskScopes = scoped.organizationIds("task.read");
+    const blockerScopes = scoped.organizationIds("blocker.read");
+    const decisionScopes = scoped.organizationIds("decision.read");
+    const openTaskFilter: Prisma.TaskWhereInput = { organizationId: { in: taskScopes }, status: { notIn: ["COMPLETED", "CANCELLED"] } };
+    const oversight = {
+      openTasks: taskScopes.length ? await client.task.count({ where: openTaskFilter }) : null,
+      overdueTasks: taskScopes.length ? await client.task.count({ where: { ...openTaskFilter, dueDate: { lt: now } } }) : null,
+      openBlockers: blockerScopes.length ? await client.executionBlocker.count({ where: { organizationId: { in: blockerScopes }, status: "OPEN" } }) : null,
+      pendingRecordedDecisions: decisionScopes.length ? await client.executiveRecord.count({ where: { organizationId: { in: decisionScopes }, kind: "DECISION", status: { in: ["PENDING", "DEFERRED"] } } }) : null,
+      calculatedAt: now,
+    };
+    const projectScopes = scoped.organizationIds("project.read");
+    const memberScopes = scoped.organizationIds("membership.read").filter(id => scoped.organizationIds("person.read").includes(id));
+    const headline = {
+      activeProjects: projectScopes.length ? await client.project.count({ where: { organizationId: { in: projectScopes }, status: "ACTIVE" } }) : null,
+      activePeople: memberScopes.length ? await client.person.count({ where: { status: "ACTIVE", memberships: { some: { organizationId: { in: memberScopes }, status: "ACTIVE" } } } }) : null,
+    };
     const nextActions = [];
     for (const [permission, label, href] of [["project.manage", "Plan work", "/app/execution/projects"], ["decision.manage", "Record a decision request", "/app/executive/decisions"], ["brand.manage", "Review domain records", "/app/business/brands"]]) if ((await scoped.decide(permission, scope)).allowed) nextActions.push({ label, href });
     const shortcuts = [];
     for (const [permission, label, href] of [["project.manage", "New project", "/app/execution/projects?create=true"], ["task.manage", "New task", "/app/execution/tasks?create=true"], ["goal.manage", "New goal", "/app/execution/goals?create=true"], ["request.manage", "New request", "/app/operations/requests?create=true"], ["approval.read", "Approval inbox", "/app/operations/approvals?status=PENDING"], ["task.read", "My assignments", "/app/operations/my-tasks"], ["reminder.read", "Reminders", "/app/operations/reminders?status=PENDING"], ["escalation.read", "Open escalations", "/app/operations/escalations?status=OPEN"], ["activity.read", "Activity history", "/app/operations/activity?sort=newest"]]) if ((await scoped.decide(permission, scope)).allowed) shortcuts.push({ label, href });
-    return { companies, cards, selectedCompanyId: companyId, groupId: root.id, executive: qualifiedExecutive, snapshot, overview, nextActions, shortcuts, readable, brands, products, nexa,
+    return { companies, cards, selectedCompanyId: companyId, groupId: root.id, executive: qualifiedExecutive, snapshot, overview, oversight, headline, nextActions, shortcuts, readable, brands, products, nexa,
       graph: { organizations: organizations.map(o => ({ id: o.id, name: "name" in o ? String(o.name) : "NO DATA", type: "type" in o ? String(o.type) : "", parentId: "parentId" in o ? o.parentId : null })), brands, products, ownership, relationships },
       members: people.map(m => ({ id: m.id, name: "person" in m ? (m.person as { displayName: string }).displayName : "NO DATA", organizationId: "organizationId" in m ? String(m.organizationId) : "", projectId: "projectId" in m ? m.projectId : null })),
       sia: { status: siaStatus, href: siaHref, canAsk, provider: provider.name, capabilities, autonomousExecution: false }, integrations, jobs, audit,

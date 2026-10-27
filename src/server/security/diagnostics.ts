@@ -5,7 +5,7 @@ export function failureReason(error: unknown, stage: FailureStage, env: NodeJS.P
   if (stage === "origin") return "origin_or_host_rejected";
   if (env.NODE_ENV === "production") {
     if (!env.AUTH_SECRET || env.AUTH_SECRET.length < 32 || /dev-only|replace-with|changeme/i.test(env.AUTH_SECRET)) return "auth_secret_invalid";
-    if (!/^file:(?:\/|[A-Za-z]:[\\/])/.test(env.DATABASE_URL ?? "")) return "persistent_sqlite_url_required";
+    if (!/^(?:postgresql|postgres):\/\//.test(env.DATABASE_URL ?? "")) return "postgresql_url_required";
     if (env.AUTH_COOKIE_SECURE === "false") return "secure_cookie_required";
     try { const url = new URL(env.APP_ORIGIN ?? ""); if (url.protocol !== "https:" || url.origin !== env.APP_ORIGIN) return "https_app_origin_required"; }
     catch { return "https_app_origin_required"; }
@@ -21,4 +21,13 @@ export function failureReason(error: unknown, stage: FailureStage, env: NodeJS.P
 export function safeDiagnostic(code: "authentication_failed" | "readiness_failed" | "operation_failed", correlationId: string = randomUUID(), detail?: { stage: FailureStage; reason: ReturnType<typeof failureReason> }) {
   console.error(JSON.stringify({ level: "error", code, correlationId, timestamp: new Date().toISOString(), ...detail }));
   return correlationId;
+}
+
+export type MigrationValidationStage = "target_configuration" | "baseline_checksum" | "target_identity" | "empty_database_check" | "initial_migration" | "repeat_deploy" | "migration_status" | "readiness_and_triggers" | "disconnect";
+export function migrationValidationDiagnostic(error: unknown, stage: MigrationValidationStage) {
+  const rawCode = error && typeof error === "object" && "code" in error ? error.code : undefined;
+  const prismaCode = typeof rawCode === "string" && /^P\d{4}$/.test(rawCode) ? rawCode : undefined;
+  const rawStatus = error && typeof error === "object" && "status" in error ? error.status : undefined;
+  const processExitCode = typeof rawStatus === "number" && Number.isInteger(rawStatus) ? rawStatus : undefined;
+  return { code: "postgresql_migration_validation_failed", stage, correlationId: randomUUID(), ...(prismaCode ? { prismaCode } : {}), ...(processExitCode !== undefined ? { processExitCode } : {}) };
 }

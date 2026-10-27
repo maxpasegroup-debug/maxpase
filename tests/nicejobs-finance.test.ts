@@ -1,9 +1,6 @@
 import { beforeAll, afterAll, describe, it, expect } from "vitest";
-import { PrismaClient } from "@prisma/client";
-import { DatabaseSync } from "node:sqlite";
-import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import type { PrismaClient } from "@prisma/client";
+import { createPostgresFixture } from "./helpers/postgres-fixture";
 import { initializeGroupStructure } from "@/server/group/structure";
 import { workforcePermissions } from "@/server/authorization/registry";
 import { createFinanceService } from "@/server/nicejobs/finance";
@@ -15,10 +12,10 @@ import { createAccessContext } from "@/server/authorization/engine";
 import { createEmployeeService } from "@/server/nicejobs/employee";
 import { workerQuestion } from "@/server/sia/worker-context";
 
-const directory = mkdtempSync(join(tmpdir(), "nicejobs-phase09-")), file = join(directory, "test.db");
-const db = new PrismaClient({ datasourceUrl: "file:" + file.replaceAll("\\", "/"), log: [{ level: "query", emit: "event" }] });
+const postgres = createPostgresFixture({ log: [{ level: "query", emit: "event" }] });
+const db = postgres.db;
 let captured: string[] | null = null;
-db.$on("query", e => captured?.push(e.query));
+(db as PrismaClient<{ log: [{ emit: "event"; level: "query" }] }>).$on("query", e => captured?.push(e.query));
 let clock = new Date("2026-10-09T12:00:00Z"), company: string, division: string, product: string, manager: string, reviewer: string, worker: string, outsider: string;
 const finance = createFinanceService(db, () => clock), operations = createOperationsService(db);
 const input = (operation: string, data = {}) => ({ operation, confirmed: true, idempotencyKey: crypto.randomUUID(), ...(!["POLICY_CREATE", "POLICY_EDIT"].includes(operation) ? { reason: "Isolated financial test" } : {}), ...data });
@@ -29,9 +26,8 @@ async function human(org: string, keys: string[], descendants = false) {
   await db.membership.create({ data: { personId: person.id, organizationId: org, scope: descendants ? "DESCENDANTS" : "ORGANIZATION", roles: { create: { roleId: role.id } } } }); return user.id;
 }
 beforeAll(async () => {
-  const sql = new DatabaseSync(file);
-  for (const folder of readdirSync("prisma/migrations").filter(f => /^\d/.test(f)).sort()) sql.exec(readFileSync(join("prisma/migrations", folder, "migration.sql"), "utf8"));
-  sql.close(); await db.$transaction(initializeGroupStructure);
+  await postgres.initialize();
+  await db.$transaction(initializeGroupStructure);
   for (const p of workforcePermissions) await db.permission.upsert({ where: { key: p.key }, update: {}, create: p });
   const org = async (slug: string) => (await db.organization.findUniqueOrThrow({ where: { slug } })).id;
   company = await org("aira-skill-city"); division = await org("aira-labs"); product = (await db.product.findUniqueOrThrow({ where: { organizationId_slug: { organizationId: company, slug: "nice-jobs" } } })).id;
@@ -39,8 +35,8 @@ beforeAll(async () => {
   manager = await human(company, all, true); reviewer = await human(division, all);
   worker = await human(division, ["nicejobs.finance.self.read", "notification.read", "nicejobs.workspace.self"]);
   outsider = await human(await org("pearn"), all, true);
-}, 30000);
-afterAll(async () => { await db.$disconnect(); rmSync(directory, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 }); });
+}, 120000);
+afterAll(() => postgres.dispose(), 30000);
 
 async function fixture(extra: Partial<IncentivePolicy> = {}) {
   clock = new Date("2026-10-09T12:00:00Z");
@@ -225,5 +221,39 @@ describe("Nice Jobs approval-backed financial control", () => {
     await expect(db.niceJobsSettlementStatement.update({ where: { id: s.id }, data: { amountMinor: 1n } })).rejects.toThrow(); await finance.mutate(manager, input("SETTLEMENT_SUBMIT", { periodId: p.id, revision: 1 })); await decide((await db.niceJobsSettlementPeriod.findUniqueOrThrow({ where: { id: p.id } })).requestId!); await finance.mutate(manager, input("SETTLEMENT_POST", { periodId: p.id, revision: 3 }));
     const intent = await finance.mutate(manager, input("PAYOUT_REQUEST", { statementId: s.id })); await finance.mutate(manager, input("PAYOUT_REQUEST", { statementId: s.id })); expect(await db.niceJobsPayoutIntent.count({ where: { statementId: s.id } })).toBe(1);
     await expect(db.niceJobsPayoutIntent.update({ where: { id: intent.id }, data: { status: "PAID", providerReference: "fake" } })).rejects.toThrow(); const detail = await finance.statementDetail(worker, s.id); expect(detail.lines).toHaveLength(1); expect(detail.amountMinor).toBe("12345"); expect(detail.transferredMinor).toBeNull(); await expect(finance.statementDetail(outsider, s.id)).rejects.toThrow();
+  });
+});
+
+// Direct PostgreSQL trigger assertions supplement the service-level business cases.
+describe("PostgreSQL direct financial safeguard enforcement", () => {
+  it("rejects wallet identity and adjustment proposal tampering", async () => {
+    const f = await calculated();
+    await expect(db.niceJobsWallet.update({where:{id:f.walletId},data:{currency:"USD"}})).rejects.toThrow("Wallet owner and currency are immutable");
+    const a = await finance.mutate(manager, input("ADJUSTMENT_CREATE", {walletId:f.walletId,policyVersionId:f.versionId,direction:"CREDIT",amountMinor:"10",description:"Isolated immutable proposal"}));
+    await expect(db.niceJobsWalletAdjustment.update({where:{id:a.id},data:{amountMinor:11n}})).rejects.toThrow("Financial proposal is immutable");
+  });
+  it("rejects unapproved sources and invalid ledger status, rolling back revision changes", async () => {
+    const f = await calculated();
+    const ledger = {walletId:f.walletId,type:"CREDIT",earningId:f.earningId,amountMinor:12345n,currency:"INR",reference:crypto.randomUUID(),description:"Isolated invalid posting",actorUserId:manager};
+    const before = await db.niceJobsWallet.findUniqueOrThrow({where:{id:f.walletId}});
+    await expect(db.niceJobsWalletLedger.create({data:ledger})).rejects.toThrow("Approved financial source and bounded funds required");
+    await finance.mutate(manager,input("EARNING_SUBMIT",{earningId:f.earningId,revision:0}));
+    await decide((await db.niceJobsIncentiveEarning.findUniqueOrThrow({where:{id:f.earningId}})).requestId!);
+    await expect(db.niceJobsWalletLedger.create({data:{...ledger,status:"DRAFT"}})).rejects.toThrow("Invalid financial ledger entry");
+    expect((await db.niceJobsWallet.findUniqueOrThrow({where:{id:f.walletId}})).revision).toBe(before.revision);
+    expect(await db.niceJobsWalletLedger.count({where:{walletId:f.walletId}})).toBe(0);
+  });
+  it("rejects a fabricated provider-backed payout at insertion", async () => {
+    await expect(db.niceJobsPayoutIntent.create({data:{statementId:"not-a-real-statement",amountMinor:1n,currency:"INR",status:"PAID",reference:crypto.randomUUID(),providerReference:"forged",creatorUserId:manager}})).rejects.toThrow("Invalid internal payout intent");
+  });
+  it("enforces both published automation triggers while permitting draft changes", async () => {
+    const personId = (await db.user.findUniqueOrThrow({where:{id:manager}})).personId!;
+    const rule=await db.automationRule.create({data:{organizationId:company,ownerUserId:manager,ownerPersonId:personId,name:"Isolated immutable automation",trigger:"TEST",action:"TEST",condition:"{}"}});
+    const draft=await db.niceJobsAutomationVersion.create({data:{ruleId:rule.id,number:1,definition:"{}"}});
+    await db.niceJobsAutomationVersion.update({where:{id:draft.id},data:{definition:"draft-edit"}});
+    await db.niceJobsAutomationVersion.delete({where:{id:draft.id}});
+    const published=await db.niceJobsAutomationVersion.create({data:{ruleId:rule.id,number:2,definition:"{}",publishedAt:clock}});
+    await expect(db.niceJobsAutomationVersion.update({where:{id:published.id},data:{definition:"tampered"}})).rejects.toThrow("published automation material is immutable");
+    await expect(db.niceJobsAutomationVersion.delete({where:{id:published.id}})).rejects.toThrow("published automation cannot be deleted");
   });
 });

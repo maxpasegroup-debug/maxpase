@@ -2,7 +2,7 @@
 
 ## Supported Target And Launch Gate
 
-Current Prisma datasource is SQLite. Deploy one Node.js application against an absolute persistent local-volume database path, not ephemeral/serverless storage or multiple independent filesystem replicas. Node 22 is the validated local toolchain. PostgreSQL conversion, distributed workers and hosting-specific integration were not implemented. No Railway, Vercel, Hostinger or production infrastructure validation is claimed.
+Current Prisma datasource is PostgreSQL. The single Next.js application serves the Boss and four AIRA portals by host name; all use the same PostgreSQL connection with scoped authorization and separate host-only session cookies. The new PostgreSQL baseline and safeguards must pass isolated database tests before production activation. Node 22 is the validated local toolchain. Railway production database and domain integration have not been verified from this workspace.
 
 Release owner and deployment operator must review PHASE_10_VALIDATION.md and clear its launch blockers. A successful local build is not a launch approval. An independent full-system audit is a separate later activity, not part of this build phase.
 
@@ -13,7 +13,9 @@ Supply configuration through deployment-owned secret management, not committed f
 | Variable | Requirement |
 | --- | --- |
 | NODE_ENV | `production` at runtime. |
-| DATABASE_URL | Explicit absolute persistent SQLite path, e.g. `file:/persistent/maxpase.db`; reviewed volume ownership and permissions. Do not deploy dev.db. |
+| DATABASE_URL | Private PostgreSQL connection for the verified Railway Postgres service, referenced from the MAXPASE application service. Never place its value in source or reports. |
+| BOSS_PIN | Six-digit Boss credential, supplied privately only for the explicit one-time `scripts/provision-boss.ts` step after migration. Do not hardcode or expose it. |
+| SKILLCITY_EMAIL_AUTH_ENABLED, SKILLCITY_AUTH_FROM, SKILLCITY_OTP_SECRET, RESEND_API_KEY | Required for employee invitation delivery, including Labs-only employees. The sender must be verified with Resend. |
 | AUTH_SECRET | Cryptographically generated secret with at least 32 characters. Production rejects missing/development/example values; operator must ensure entropy. Rotation invalidates signed cookies; deliberately revoke existing database sessions when responding to compromise. |
 | AUTH_COOKIE_SECURE | Must be `true` in production; defaults true there and explicit false is rejected. TLS is required. |
 | AUTH_COOKIE_NAME | Safe cookie token; default maxpase_session. Cookie is HttpOnly, SameSite=Lax, host-only, Path=/, seven-day expiry. |
@@ -48,7 +50,7 @@ Use no-store/private authenticated responses; exclude /app, session cookies, web
 
 ## Capacity And Protection Limits
 
-Login uses database-backed account budgets (8 attempts/15-minute fixed window) and global 120/minute. Authenticated guards use 300/minute per user; a page may consume more than one guard budget. SIA UI actions additionally use 20/minute per user. Public webhook bodies have a 600/minute shared budget plus integration-specific controls. Sending and automation retain Phase 09 durable scoped rate buckets. These share only the same SQLite file; they are not distributed protection across replicas. Fixed-window boundaries permit adjacent-window bursts; attackers can consume a global budget and deny availability. Trusted edge IP/network quotas, body/time limits and monitoring remain mandatory deployment controls. Nice Jobs now has gated Resend OTP authentication and Jobs-realm password reset; see [Email Authentication](NICE_JOBS_EMAIL_AUTHENTICATION.md) for its additional budgets, migration and unverified live-launch boundary. This does not introduce corporate password recovery or a public file-download endpoint.
+Login uses database-backed account budgets (8 attempts/15-minute fixed window) and global 120/minute. Authenticated guards use 300/minute per user; a page may consume more than one guard budget. SIA UI actions additionally use 20/minute per user. Public webhook bodies have a 600/minute shared budget plus integration-specific controls. Sending and automation retain durable scoped rate buckets in PostgreSQL. Fixed-window boundaries permit adjacent-window bursts; attackers can consume a global budget and deny availability. Trusted edge IP/network quotas, body/time limits and monitoring remain mandatory deployment controls. Nice Jobs has gated Resend OTP authentication and Jobs-realm password reset; see [Email Authentication](NICE_JOBS_EMAIL_AUTHENTICATION.md) for its additional budgets and unverified live-launch boundary. This does not introduce corporate password recovery or a public file-download endpoint.
 
 Operational data can still grow beyond display limits, especially executive aggregation and communication source authorization. Static query review and local regression/benchmarks do not establish enterprise capacity. Measure representative portfolios and source-filtered query plans before scale; do not add cross-request authorization caches that retain revoked visibility.
 

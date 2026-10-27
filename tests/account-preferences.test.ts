@@ -1,19 +1,11 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { DatabaseSync } from "node:sqlite";
-import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { PrismaClient } from "@prisma/client";
 import { createAccountPreferences } from "@/server/account/preferences";
-const directory = mkdtempSync(join(tmpdir(), "maxpase-preferences-")), file = join(directory, "test.db");
-const db = new PrismaClient({ datasourceUrl: "file:" + file.replaceAll("\\", "/") });
+import { createPostgresFixture } from "./helpers/postgres-fixture";
+const fixture = createPostgresFixture();
+const db = fixture.db;
 const preferences = createAccountPreferences(db);
-beforeAll(() => {
-  const sql = new DatabaseSync(file);
-  for (const folder of readdirSync("prisma/migrations").filter(f => /^\d/.test(f)).sort()) sql.exec(readFileSync(join("prisma/migrations", folder, "migration.sql"), "utf8"));
-  sql.close();
-});
-afterAll(async () => { await db.$disconnect(); rmSync(directory, { recursive: true, force: true }); });
+beforeAll(() => fixture.initialize(), 120000);
+afterAll(() => fixture.dispose(), 30000);
 describe("Own-account timezone preferences", () => {
   it("defaults Boss to IST, persists preferences per account and audits their actor", async () => {
     const boss = await db.user.create({ data: { email: "boss@maxpase.com" } }), other = await db.user.create({ data: { email: "other@test.invalid" } });
@@ -34,9 +26,15 @@ describe("Own-account timezone preferences", () => {
     const linked = await db.user.create({ data: { email: "linked@test.invalid", personId: person.id } });
     await expect(preferences.save(linked.id, { timezone: "UTC" })).rejects.toThrow("Account unavailable");
     const user = await db.user.create({ data: { email: "rollback@test.invalid", timezone: "UTC" } });
-    await db.$executeRawUnsafe("CREATE TRIGGER reject_preference_audit BEFORE INSERT ON AuditEvent WHEN NEW.action = 'account.timezone_updated' BEGIN SELECT RAISE(ABORT, 'audit unavailable'); END");
+    await db.$executeRawUnsafe(`CREATE FUNCTION reject_preference_audit_fn() RETURNS trigger LANGUAGE plpgsql AS $$
+      BEGIN IF NEW."action" = 'account.timezone_updated' THEN RAISE EXCEPTION 'audit unavailable' USING ERRCODE = '23514'; END IF; RETURN NEW; END; $$`);
+    await db.$executeRawUnsafe(`CREATE TRIGGER reject_preference_audit BEFORE INSERT ON "AuditEvent"
+      FOR EACH ROW EXECUTE FUNCTION reject_preference_audit_fn()`);
     try { await expect(preferences.save(user.id, { timezone: "Asia/Kolkata" })).rejects.toThrow(); }
-    finally { await db.$executeRawUnsafe("DROP TRIGGER reject_preference_audit"); }
+    finally {
+      await db.$executeRawUnsafe(`DROP TRIGGER reject_preference_audit ON "AuditEvent"`);
+      await db.$executeRawUnsafe("DROP FUNCTION reject_preference_audit_fn()");
+    }
     expect((await preferences.account(user.id)).timezone).toBe("UTC");
   });
 });

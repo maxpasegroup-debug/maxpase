@@ -1,9 +1,6 @@
 import { beforeAll, beforeEach, afterAll, describe, it, expect } from "vitest";
-import { PrismaClient } from "@prisma/client";
-import { DatabaseSync } from "node:sqlite";
-import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import type { PrismaClient } from "@prisma/client";
+import { createPostgresFixture } from "./helpers/postgres-fixture";
 import { initializeGroupStructure } from "@/server/group/structure";
 import { workforcePermissions } from "@/server/authorization/registry";
 import { createNiceJobsService } from "@/server/nicejobs/service";
@@ -22,10 +19,10 @@ import { createAccountPreferences } from "@/server/account/preferences";
 import { createKnowledgeService } from "@/server/nicejobs/knowledge";
 import { createFinanceService } from "@/server/nicejobs/finance";
 
-const directory = mkdtempSync(join(tmpdir(), "nicejobs-phase05-")), file = join(directory, "test.db");
-const db = new PrismaClient({ datasourceUrl: "file:" + file.replaceAll("\\", "/"), log: [{ level: "query", emit: "event" }] });
+const postgres = createPostgresFixture({ log: [{ level: "query", emit: "event" }] });
+const db = postgres.db;
 let capturedQueries: string[] | null = null;
-db.$on("query", e => { capturedQueries?.push(e.query); });
+(db as PrismaClient<{ log: [{ emit: "event"; level: "query" }] }>).$on("query", e => { capturedQueries?.push(e.query); });
 const employee = createEmployeeService(db, () => clock), sia = createSiaService(db);
 const jobs = createNiceJobsService(db), applications = createApplicationService(db), operations = createOperationsService(db);
 let clock = new Date();
@@ -72,7 +69,7 @@ async function reviewed(ref: string, key: string, outcome: string, feedback = "R
   return act(ref, "REVIEW", { submissionId: s.id, outcome, feedback }, mentor, false);
 }
 beforeAll(async () => {
-  const sql = new DatabaseSync(file); for (const folder of readdirSync("prisma/migrations").filter(f => /^\d/.test(f)).sort()) sql.exec(readFileSync(join("prisma/migrations", folder, "migration.sql"), "utf8")); sql.close();
+  await postgres.initialize();
   await db.$transaction(initializeGroupStructure);
   for (const p of workforcePermissions) await db.permission.upsert({ where: { key: p.key }, update: {}, create: p });
   await db.permission.upsert({ where: { key: "organization.read" }, update: {}, create: { key: "organization.read", name: "Read", scope: "GROUP" } });
@@ -90,7 +87,7 @@ beforeAll(async () => {
     await db.membership.create({ data: { personId: user.personId!, organizationId: labs, roles: { create: { roleId: role.id } } } });
   }
   controlId = (await operations.saveControl(manager, { organizationId: labs, name: "Fixture independent approval", kind: "HUMAN_DECISION", requiredPermission: "nicejobs.management.approve", stages: [[{ approverUserId: approver, requiredPermission: "nicejobs.management.approve" }]] })).id;
-}, 30000);
+}, 120000);
 beforeEach(async () => {
   await db.niceJobsDailyReport.updateMany({ data: { supersedesId: null } });
   await db.niceJobsDailyReport.deleteMany(); await db.taskEvidence.deleteMany(); await db.executionBlocker.deleteMany(); await db.task.deleteMany(); await db.goal.deleteMany(); await db.niceJobsAssignment.deleteMany(); await db.niceJobsWorkerProfile.deleteMany();
@@ -99,7 +96,7 @@ beforeEach(async () => {
   await db.niceJobsTemplate.updateMany({ data: { publishedVersionId: null } }); await db.niceJobsVersionArea.deleteMany(); await db.niceJobsVersion.deleteMany(); await db.niceJobsTemplate.deleteMany();
   clock = new Date(); versionId = await publish();
 });
-afterAll(async () => { await db.$disconnect(); rmSync(directory, { recursive: true, force: true }); });
+afterAll(() => postgres.dispose(), 30000);
 async function ready(user = candidate) {
   const ref = await accepted(user);
   await act(ref, "ENROLL", {}, user, true);
@@ -189,9 +186,9 @@ describe("Nice Jobs active worker environment and governed SIA", () => {
     await goals.mutate(candidate, { ...cmd("SUBMIT", { controlPointId: point.id }), goalId: changed.id });
     const approval = (await goals.list(candidate)).records.find(r => r.id === changed.id)!.approvals[0];
     await goals.mutate(manager, { ...cmd("DECIDE", { approvalId: approval.id, decision: "APPROVED", reason: "Reviewed material change" }), goalId: changed.id });
-    const sql = new DatabaseSync(file); sql.exec("CREATE TRIGGER fail_goal_apply BEFORE INSERT ON AuditEvent WHEN NEW.action = 'nicejobs.goal.apply' BEGIN SELECT RAISE(ABORT, 'Fixture failure'); END;"); sql.close();
+    const restore = await postgres.rejectInsert("AuditEvent", "nicejobs.goal.apply");
     try { await expect(goals.mutate(manager, { ...cmd("APPLY"), goalId: changed.id })).rejects.toThrow(); expect((await db.goal.findUniqueOrThrow({ where: { id: g.id } })).status).toBe("ACTIVE"); expect((await db.goal.findUniqueOrThrow({ where: { id: changed.id } })).status).toBe("DRAFT"); }
-    finally { const clean = new DatabaseSync(file); clean.exec("DROP TRIGGER fail_goal_apply"); clean.close(); }
+    finally { await restore(); }
     await goals.mutate(manager, { ...cmd("APPLY"), goalId: changed.id });
     expect((await db.goal.findUniqueOrThrow({ where: { id: g.id } })).status).toBe("ARCHIVED");
     const latest = await db.goal.findUniqueOrThrow({ where: { id: changed.id } });
@@ -205,9 +202,9 @@ describe("Nice Jobs active worker environment and governed SIA", () => {
     await activate(); const goals = createGoalService(db, () => clock);
     const c = { operation: "PROPOSE", confirmed: true, idempotencyKey: crypto.randomUUID(), outcome: { outcome: "Fixture target", target: 10, unit: "outcomes" } };
     await expect(goals.mutate(candidate, { ...c, siaId: "unconfigured" })).rejects.toThrow();
-    const sql = new DatabaseSync(file); sql.exec("CREATE TRIGGER fail_goal_audit BEFORE INSERT ON AuditEvent WHEN NEW.action = 'nicejobs.goal.propose' BEGIN SELECT RAISE(ABORT, 'Fixture failure'); END;"); sql.close();
+    const restore = await postgres.rejectInsert("AuditEvent", "nicejobs.goal.propose");
     try { await expect(goals.mutate(candidate, c)).rejects.toThrow(); expect(await db.goal.count()).toBe(0); }
-    finally { const clean = new DatabaseSync(file); clean.exec("DROP TRIGGER fail_goal_audit"); clean.close(); }
+    finally { await restore(); }
     const identity = await agent(), assignment = (await employee.day(candidate)).assignment;
     const task = await workTask(assignment.id);
     const assisted = await goals.mutate(candidate, { ...c, siaId: identity });
@@ -219,9 +216,9 @@ describe("Nice Jobs active worker environment and governed SIA", () => {
     const point = await operations.saveControl(manager, { organizationId: labs, name: "Fixture independent goal", kind: "HUMAN_DECISION", requiredPermission: "nicejobs.work.manage", stages: [[{ approverUserId: manager, requiredPermission: "nicejobs.work.manage" }]] });
     const g = await goals.mutate(candidate, { operation: "PROPOSE", confirmed: true, idempotencyKey: crypto.randomUUID(), outcome: { outcome: "Fixture target", target: 10, unit: "outcomes" } });
     const submit = { operation: "SUBMIT", confirmed: true, idempotencyKey: crypto.randomUUID(), goalId: g.id, controlPointId: point.id };
-    const before = await db.operationalRequest.count(); const sql = new DatabaseSync(file); sql.exec("CREATE TRIGGER fail_goal_submit BEFORE INSERT ON AuditEvent WHEN NEW.action = 'nicejobs.goal.submit' BEGIN SELECT RAISE(ABORT, 'Fixture failure'); END;"); sql.close();
+    const before = await db.operationalRequest.count(); const restore = await postgres.rejectInsert("AuditEvent", "nicejobs.goal.submit");
     try { await expect(goals.mutate(candidate, submit)).rejects.toThrow(); expect(await db.operationalRequest.count()).toBe(before); expect(JSON.parse((await db.goal.findUniqueOrThrow({ where: { id: g.id } })).metadata!).requestId).toBeNull(); }
-    finally { const clean = new DatabaseSync(file); clean.exec("DROP TRIGGER fail_goal_submit"); clean.close(); }
+    finally { await restore(); }
     await goals.mutate(candidate, submit);
     const row = (await goals.list(candidate)).records[0];
     await db.niceJobsAssignment.update({ where: { id: (await employee.day(candidate)).assignment.id }, data: { managerId: (await db.user.findUniqueOrThrow({ where: { id: approver } })).personId } });
@@ -229,14 +226,14 @@ describe("Nice Jobs active worker environment and governed SIA", () => {
     expect((await db.siaApproval.findUniqueOrThrow({ where: { id: row.approvals[0].id } })).status).toBe("PENDING");
   });
   it("rolls back activation and profile creation when canonical audit fails", async () => {
-    const ref = await ready(), command = await activationInput(ref), sql = new DatabaseSync(file); sql.exec("CREATE TRIGGER fail_activation_audit BEFORE INSERT ON AuditEvent WHEN NEW.action = 'nicejobs.work.activate' BEGIN SELECT RAISE(ABORT, 'Fixture audit failure'); END;"); sql.close();
+    const ref = await ready(), command = await activationInput(ref), restore = await postgres.rejectInsert("AuditEvent", "nicejobs.work.activate");
     try { await expect(employee.mutate(manager, command)).rejects.toThrow(); expect(await db.niceJobsAssignment.count()).toBe(0); expect(await db.niceJobsWorkerProfile.count()).toBe(0); }
-    finally { const clean = new DatabaseSync(file); clean.exec("DROP TRIGGER fail_activation_audit"); clean.close(); }
+    finally { await restore(); }
   });
   it("rolls back task creation when notification persistence fails", async () => {
-    const a = await activate(), sql = new DatabaseSync(file); sql.exec("CREATE TRIGGER fail_work_notification BEFORE INSERT ON Notification WHEN NEW.type = 'NICE_JOBS_WORK' BEGIN SELECT RAISE(ABORT, 'Fixture notification failure'); END;"); sql.close();
+    const a = await activate(), restore = await postgres.rejectInsert("Notification", "NICE_JOBS_WORK");
     try { await expect(workTask(a.assignmentId)).rejects.toThrow(); expect(await db.task.count()).toBe(0); }
-    finally { const clean = new DatabaseSync(file); clean.exec("DROP TRIGGER fail_work_notification"); clean.close(); }
+    finally { await restore(); }
   });
   it("revokes live worker access and rejects arbitrary manager identity changes", async () => {
     const a = await activate(), person = (await db.user.findUniqueOrThrow({ where: { id: candidate } })).personId!;

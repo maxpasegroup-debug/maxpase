@@ -48,7 +48,7 @@ export function createAuthenticationService(client: PrismaClient = prisma, now =
       }
       const expiresAt = new Date(now().getTime() + lifetimeMs);
       const session = await db.session.create({ data: { userId, expiresAt } });
-      const token = await new SignJWT({ sessionId: session.id, ...(portal === "jobs" ? { verifiedEmail: user.email } : {}) }).setProtectedHeader({ alg: "HS256" }).setSubject(userId).setIssuer(issuer).setAudience(portal ? `${audience}:portal:${portal}` : audience).setIssuedAt(Math.floor(now().getTime() / 1000)).setExpirationTime(Math.floor(expiresAt.getTime() / 1000)).sign(new TextEncoder().encode(secret));
+      const token = await new SignJWT({ sessionId: session.id, ...(portal === "jobs" ? { verifiedEmail: user.email } : {}), ...(portal === "skillcity" ? { verifiedEmail: user.email, verifiedAt: user.emailVerifiedAt?.toISOString() } : {}) }).setProtectedHeader({ alg: "HS256" }).setSubject(userId).setIssuer(issuer).setAudience(portal ? `${audience}:portal:${portal}` : audience).setIssuedAt(Math.floor(now().getTime() / 1000)).setExpirationTime(Math.floor(expiresAt.getTime() / 1000)).sign(new TextEncoder().encode(secret));
       await db.auditEvent.create({ data: buildAuditEventData({ actorUserId: user.id, actorPersonId: user.personId, organizationId: portalScope?.divisionId, action: passwordHash === undefined ? "auth.session_created" : "auth.login", entityType: "Session", entityId: session.id, result: "SUCCESS", ...(portal ? { metadata: { portal } } : {}) }) });
       return { session, token };
     });
@@ -73,7 +73,7 @@ export function createAuthenticationService(client: PrismaClient = prisma, now =
     }
     const candidate = await client.user.findUnique({ where: { email: parsed.data.email }, include: { person: { select: { status: true, metadata: true } } } });
     const valid = await verifyPassword(parsed.data.password, candidate?.passwordHash ?? await dummyHash);
-    if (!candidate?.passwordHash || !valid || candidate.status !== "ACTIVE" || candidate.person && candidate.person.status !== "ACTIVE" || accountPortalRealm(candidate.person?.metadata) && portal !== accountPortalRealm(candidate.person?.metadata) || boss && JSON.parse(candidate.person?.metadata ?? "{}").credentialKind !== "BOSS_PIN") {
+    if (!candidate?.passwordHash || !valid || candidate.status !== "ACTIVE" || candidate.person && candidate.person.status !== "ACTIVE" || accountPortalRealm(candidate.person?.metadata) && portal !== accountPortalRealm(candidate.person?.metadata) || boss && JSON.parse(candidate.person?.metadata ?? "{}").credentialKind !== "BOSS_PIN" || portal === "labs" && (!candidate.emailVerifiedAt || JSON.parse(candidate.person?.metadata ?? "{}").credentialKind !== "STAFF_PASSWORD")) {
       await client.auditEvent.create({ data: buildAuditEventData({ action: "auth.login", entityType: "User", result: "DENIED", metadata: { accountReference: securityKey("account", parsed.data.email) } }) });
       return null;
     }
@@ -116,6 +116,7 @@ export function createAuthenticationService(client: PrismaClient = prisma, now =
     if (!payload?.sub || typeof payload.sessionId !== "string") return null;
     const session = await client.session.findFirst({ where: { id: payload.sessionId, userId: payload.sub, expiresAt: { gt: now() }, user: { status: "ACTIVE", OR: [{ personId: null }, { person: { status: "ACTIVE" } }] } }, include: { user: { select: { email: true, emailVerifiedAt: true, jobsPinHash: true, personId: true, person: { select: { metadata: true } } } } } });
     if (portal === "jobs" && (!session?.user.emailVerifiedAt || payload.verifiedEmail !== session.user.email)) return null;
+    if (portal === "skillcity" && (!session?.user.emailVerifiedAt || payload.verifiedEmail !== session.user.email || payload.verifiedAt !== session.user.emailVerifiedAt.toISOString())) return null;
     const accountRealm = accountPortalRealm(session?.user.person?.metadata);
     if (accountRealm && portal !== accountRealm) return null;
     return session ? { userId: session.userId, sessionId: session.id, email: session.user.email, personId: session.user.personId, needsPinChange: portal === "labs" && JSON.parse(session.user.person?.metadata ?? "{}").labsPinChangeRequired === true, needsJobsPinActivation: portal === "jobs" && JSON.parse(session.user.person?.metadata ?? "{}").identitySource === "SELF_REGISTRATION" && !session.user.jobsPinHash } : null;

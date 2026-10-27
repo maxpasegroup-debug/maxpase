@@ -1,23 +1,20 @@
-import { describe, it, expect } from "vitest";
-import { DatabaseSync } from "node:sqlite";
-import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { createPostgresFixture } from "./helpers/postgres-fixture";
 
-describe("Nice Jobs phone/PIN additive migration", () => {
-  it("preserves legacy users and outstanding email challenges", () => {
-    const directory = mkdtempSync(join(tmpdir(), "nicejobs-pin-migration-"));
-    const file = join(directory, "test.db"), sql = new DatabaseSync(file);
-    try {
-      const folders = readdirSync("prisma/migrations").filter(name => /^\d/.test(name)).sort();
-      for (const folder of folders.filter(name => name !== "20261020090000_nicejobs_phone_pin")) sql.exec(readFileSync(join("prisma/migrations", folder, "migration.sql"), "utf8"));
-      sql.prepare('INSERT INTO "User" ("id", "email", "passwordHash", "status", "createdAt", "updatedAt") VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)').run("legacy-user", "legacy@test.invalid", "existing-hash", "ACTIVE");
-      sql.prepare('INSERT INTO "EmailAuthChallenge" ("id", "userId", "email", "purpose", "otpHash", "credentialHash", "status", "attempts", "expiresAt") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)').run("legacy-challenge", "legacy-user", "legacy@test.invalid", "LOGIN", "existing-otp-hash", "existing-hash", "SENT", 2, "2026-10-20 12:00:00");
-      sql.exec(readFileSync("prisma/migrations/20261020090000_nicejobs_phone_pin/migration.sql", "utf8"));
-      expect(sql.prepare('SELECT "id", "email", "passwordHash", "jobsPhone", "jobsPinHash" FROM "User" WHERE "id" = ?').get("legacy-user")).toEqual({ id: "legacy-user", email: "legacy@test.invalid", passwordHash: "existing-hash", jobsPhone: null, jobsPinHash: null });
-      expect(sql.prepare('SELECT "id", "userId", "purpose", "otpHash", "attempts" FROM "EmailAuthChallenge" WHERE "id" = ?').get("legacy-challenge")).toEqual({ id: "legacy-challenge", userId: "legacy-user", purpose: "LOGIN", otpHash: "existing-otp-hash", attempts: 2 });
-      expect(() => sql.prepare('INSERT INTO "User" ("id", "email", "jobsPhone", "status", "createdAt", "updatedAt") VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)').run("duplicate", "other@test.invalid", "+919876543210", "ACTIVE")).not.toThrow();
-      expect(() => sql.prepare('INSERT INTO "User" ("id", "email", "jobsPhone", "status", "createdAt", "updatedAt") VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)').run("duplicate2", "other2@test.invalid", "+919876543210", "ACTIVE")).toThrow();
-    } finally { sql.close(); rmSync(directory, { recursive: true, force: true }); }
+const postgres = createPostgresFixture();
+const db = postgres.db;
+
+beforeAll(() => postgres.initialize(), 120000);
+afterAll(() => postgres.dispose(), 30000);
+
+describe("Nice Jobs PostgreSQL phone/PIN baseline", () => {
+  it("preserves password accounts and outstanding email challenges alongside phone uniqueness", async () => {
+    await db.user.create({ data: { id: "legacy-user", email: "legacy@test.invalid", passwordHash: "existing-hash", status: "ACTIVE" } });
+    await db.emailAuthChallenge.create({ data: { id: "legacy-challenge", userId: "legacy-user", email: "legacy@test.invalid", purpose: "LOGIN", otpHash: "existing-otp-hash", credentialHash: "existing-hash", status: "SENT", attempts: 2, expiresAt: new Date("2026-10-20T12:00:00Z") } });
+    expect(await db.user.findUniqueOrThrow({ where: { id: "legacy-user" }, select: { id: true, email: true, passwordHash: true, jobsPhone: true, jobsPinHash: true } })).toEqual({ id: "legacy-user", email: "legacy@test.invalid", passwordHash: "existing-hash", jobsPhone: null, jobsPinHash: null });
+    expect(await db.emailAuthChallenge.findUniqueOrThrow({ where: { id: "legacy-challenge" }, select: { id: true, userId: true, purpose: true, otpHash: true, attempts: true } })).toEqual({ id: "legacy-challenge", userId: "legacy-user", purpose: "LOGIN", otpHash: "existing-otp-hash", attempts: 2 });
+    await db.user.create({ data: { id: "duplicate", email: "other@test.invalid", jobsPhone: "+919876543210", status: "ACTIVE" } });
+    await expect(db.user.create({ data: { id: "duplicate2", email: "other2@test.invalid", jobsPhone: "+919876543210", status: "ACTIVE" } })).rejects.toThrow();
+    expect(await db.user.count({ where: { jobsPhone: "+919876543210" } })).toBe(1);
   });
 });

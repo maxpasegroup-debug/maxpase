@@ -8,9 +8,11 @@ import { safeDiagnostic } from "@/server/security/diagnostics";
 
 export type ActivationState = { message?: string; error?: string };
 export async function activateStaffAction(_state: ActivationState, form: FormData): Promise<ActivationState> {
-  await requestPortal("skillcity", true);
+  const site = String(form.get("site") ?? "");
+  if (site !== "skillcity" && site !== "labs") return { error: "Employee activation unavailable." };
+  await requestPortal(site, true);
   try {
-    await staffInvite.activate({ challengeId: String(form.get("challengeId") ?? ""), code: String(form.get("code") ?? ""), password: String(form.get("password") ?? ""), confirmPassword: String(form.get("confirmPassword") ?? "") });
+    await staffInvite.activate({ challengeId: String(form.get("challengeId") ?? ""), code: String(form.get("code") ?? ""), password: String(form.get("password") ?? ""), confirmPassword: String(form.get("confirmPassword") ?? ""), portal: site });
     return { message: "Your account is active. Sign in with your work email and new password." };
   } catch (error) {
     if (error instanceof AccessError || error instanceof RateLimitError) return { error: error.message };

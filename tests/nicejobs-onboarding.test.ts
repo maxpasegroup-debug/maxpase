@@ -1,9 +1,6 @@
 import { beforeAll, beforeEach, afterAll, describe, it, expect } from "vitest";
-import { PrismaClient } from "@prisma/client";
-import { DatabaseSync } from "node:sqlite";
-import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import type { PrismaClient } from "@prisma/client";
+import { createPostgresFixture } from "./helpers/postgres-fixture";
 import { initializeGroupStructure } from "@/server/group/structure";
 import { workforcePermissions } from "@/server/authorization/registry";
 import { createNiceJobsService } from "@/server/nicejobs/service";
@@ -25,10 +22,10 @@ import { createOfferDocumentService } from "@/server/nicejobs/offer-document";
 import { initialOpportunities } from "@/server/nicejobs/initial-opportunities";
 import { performance } from "node:perf_hooks";
 
-const directory = mkdtempSync(join(tmpdir(), "nicejobs-phase04-")), file = join(directory, "test.db");
-const db = new PrismaClient({ datasourceUrl: "file:" + file.replaceAll("\\", "/"),log:[{emit:"event",level:"query"}] });
+const postgres = createPostgresFixture({ log: [{ emit: "event", level: "query" }] });
+const db = postgres.db;
 let captureQueries=false,queryCount=0,databaseMs=0;
-db.$on("query",event=>{if(captureQueries){queryCount++;databaseMs+=event.duration;}});
+(db as PrismaClient<{ log: [{ emit: "event"; level: "query" }] }>).$on("query",event=>{if(captureQueries){queryCount++;databaseMs+=event.duration;}});
 const jobs = createNiceJobsService(db), applications = createApplicationService(db), operations = createOperationsService(db);
 let clock = new Date("2026-10-08T08:00:00Z");
 const recruitment = createRecruitmentService(db, () => clock), onboarding = createOnboardingService(db, () => clock);
@@ -93,7 +90,7 @@ async function controlledCurriculum(code="CONTROLLED-CURRICULUM",title="Syntheti
   return v.id;
 }
 beforeAll(async () => {
-  const sql = new DatabaseSync(file); for (const folder of readdirSync("prisma/migrations").filter(f => /^\d/.test(f)).sort()) sql.exec(readFileSync(join("prisma/migrations", folder, "migration.sql"), "utf8")); sql.close();
+  await postgres.initialize();
   await db.$transaction(initializeGroupStructure);
   for (const p of workforcePermissions) await db.permission.upsert({ where: { key: p.key }, update: {}, create: p });
   await db.permission.upsert({ where: { key: "organization.read" }, update: {}, create: { key: "organization.read", name: "Read", scope: "GROUP" } });
@@ -105,7 +102,7 @@ beforeAll(async () => {
   candidate = await human("candidate", career, ["organization.read", "nicejobs.application.self", "nicejobs.onboarding.self", "notification.read"]); other = await human("other", career, ["organization.read", "nicejobs.application.self", "nicejobs.onboarding.self", "notification.read"]);
   outsider = await human("outsider", await org("pearn"), all, true); reader = await human("reader", labs, ["nicejobs.onboarding.read"]);
   controlId = (await operations.saveControl(manager, { organizationId: labs, name: "Fixture independent approval", kind: "HUMAN_DECISION", requiredPermission: "nicejobs.management.approve", stages: [[{ approverUserId: approver, requiredPermission: "nicejobs.management.approve" }]] })).id;
-}, 30000);
+}, 120000);
 beforeEach(async () => {
   await db.reminder.deleteMany();
   await db.niceJobsTrainingReview.deleteMany(); await db.niceJobsTrainingSubmission.deleteMany(); await db.niceJobsTrainingProgress.deleteMany(); await db.niceJobsOnboarding.deleteMany(); await db.niceJobsTrainingPlan.deleteMany();
@@ -113,7 +110,7 @@ beforeEach(async () => {
   await db.niceJobsTemplate.updateMany({ data: { publishedVersionId: null } }); await db.niceJobsVersionArea.deleteMany(); await db.niceJobsVersion.deleteMany(); await db.niceJobsTemplate.deleteMany();
   clock = new Date("2026-10-08T08:00:00Z"); versionId = await publish();
 });
-afterAll(async () => { await db.$disconnect(); rmSync(directory, { recursive: true, force: true }); });
+afterAll(() => postgres.dispose(), 30000);
 describe("Nice Jobs orientation, OJT and human readiness", () => {
   // Role labels exercise shared mechanics, not the unapproved employer/content/terms for real jobs.
   it.each(initialOpportunities("fixture-company","NOT A VERIFIED PILOT EMPLOYER","fixture-brand").map(r=>({code:r.code,title:r.title})))("rehearses all 100 days for isolated $code without employment activation",async({code,title})=>{
@@ -252,8 +249,8 @@ describe("Nice Jobs orientation, OJT and human readiness", () => {
     const row=await progress(ref,"day_2"),dueAt=new Date(row.dueAt!.getTime()+86400000).toISOString();
     await act(ref,"PROPOSE_CONTROL",{control:{kind:"EXTEND",progressId:row.id,dueAt},feedback:"Extra time for evidence"},manager,false);
     const p=(await onboarding.detail(manager,ref,false)).control.proposals[0],decision=await command(ref,"DECIDE_CONTROL",{controlDecision:{proposalId:p.id,decision:"APPROVED"},feedback:"Approved extension"},controller,false),rev=(await onboarding.detail(manager,ref,false)).revision;
-    await db.$executeRawUnsafe("CREATE TRIGGER fail_training_control BEFORE INSERT ON OperationalEvent WHEN NEW.eventType = 'nicejobs.onboarding.decide_control' BEGIN SELECT RAISE(ABORT, 'control audit unavailable'); END");
-    try{await expect(onboarding.mutate(controller,decision,false)).rejects.toThrow();}finally{await db.$executeRawUnsafe("DROP TRIGGER IF EXISTS fail_training_control");}
+    const restoreLegacyTrigger1 = await postgres.rejectInsert("OperationalEvent", "nicejobs.onboarding.decide_control");
+    try{await expect(onboarding.mutate(controller,decision,false)).rejects.toThrow();}finally{await restoreLegacyTrigger1();}
     expect((await progress(ref,"day_2")).dueAt).toEqual(row.dueAt);expect((await onboarding.detail(manager,ref,false)).revision).toBe(rev);
     await onboarding.mutate(controller,decision,false);await onboarding.mutate(controller,decision,false);
     expect((await progress(ref,"day_2")).dueAt?.toISOString()).toBe(dueAt);
@@ -308,8 +305,8 @@ describe("Nice Jobs orientation, OJT and human readiness", () => {
   });
   it("rolls back daily report and revision if its mandatory audit fails",async()=>{
     const ref=await enroll();await act(ref,"START_ORIENTATION");const before=(await onboarding.detail(candidate,ref,true)).revision;
-    await db.$executeRawUnsafe("CREATE TRIGGER fail_daily_training_report BEFORE INSERT ON OperationalEvent WHEN NEW.eventType = 'nicejobs.onboarding.daily_report' BEGIN SELECT RAISE(ABORT, 'report audit unavailable'); END");
-    try{await expect(act(ref,"DAILY_REPORT",{report:{date:"2026-10-08",notes:"Must roll back"}})).rejects.toThrow();}finally{await db.$executeRawUnsafe("DROP TRIGGER IF EXISTS fail_daily_training_report");}
+    const restoreLegacyTrigger2 = await postgres.rejectInsert("OperationalEvent", "nicejobs.onboarding.daily_report");
+    try{await expect(act(ref,"DAILY_REPORT",{report:{date:"2026-10-08",notes:"Must roll back"}})).rejects.toThrow();}finally{await restoreLegacyTrigger2();}
     expect(await db.niceJobsTrainingProgress.count({where:{phase:"DAILY_REPORT"}})).toBe(0);expect((await onboarding.detail(candidate,ref,true)).revision).toBe(before);
   });
   it("requires visible rework instructions and records acknowledgement and comprehension as separate signals",async()=>{
@@ -380,11 +377,12 @@ describe("Nice Jobs orientation, OJT and human readiness", () => {
     for (const key of ["notification.read", "sia.access.read"]) await db.permission.upsert({ where: { key }, update: {}, create: { key, name: key, scope: "GROUP" } });
     process.env.NICEJOBS_PIN_PEPPER = "isolated-test-pepper-at-least-thirty-two-characters";
     const user = await createApplicantAccess(db).register({ displayName: "Rollback trainee", email: "rollback-trainee@phase03.invalid", country: "IN", nationalNumber: "9876543214", pin: "123456", confirmPin: "123456", acknowledge: true });
+    let restoreLegacyTrigger3: Awaited<ReturnType<typeof postgres.rejectInsert>> | undefined;
     try {
       await expect(accepted(user.userId, versionId, async () => {
-        await db.$executeRawUnsafe("CREATE TRIGGER fail_training_access BEFORE INSERT ON OperationalEvent WHEN NEW.eventType = 'nicejobs.participant.training_access' BEGIN SELECT RAISE(ABORT, 'training audit unavailable'); END");
+        restoreLegacyTrigger3 = await postgres.rejectInsert("OperationalEvent", "nicejobs.participant.training_access");
       })).rejects.toThrow();
-    } finally { await db.$executeRawUnsafe("DROP TRIGGER IF EXISTS fail_training_access"); }
+    } finally { if (restoreLegacyTrigger3) await restoreLegacyTrigger3(); }
     const app = await db.niceJobsApplication.findFirstOrThrow({ where: { candidate: { users: { some: { id: user.userId } } } } });
     expect(app.status).toBe("OFFER");
     expect(await db.niceJobsOffer.count({ where: { applicationId: app.id, status: "ACCEPTED" } })).toBe(0);
@@ -476,9 +474,9 @@ describe("Nice Jobs orientation, OJT and human readiness", () => {
     expect(await db.niceJobsTrainingSubmission.count()).toBe(1);
   });
   it("rolls back enrollment, progress and audit when notification persistence fails", async () => {
-    const ref = await accepted(), before = await db.auditEvent.count({ where: { action: "nicejobs.onboarding.enroll" } }), sql = new DatabaseSync(file); sql.exec("CREATE TRIGGER fail_training_notification BEFORE INSERT ON Notification WHEN NEW.type = 'NICE_JOBS_ONBOARDING' BEGIN SELECT RAISE(ABORT, 'Fixture notification failure'); END;"); sql.close();
+    const ref = await accepted(), before = await db.auditEvent.count({ where: { action: "nicejobs.onboarding.enroll" } }), restore = await postgres.rejectInsert("Notification", "NICE_JOBS_ONBOARDING");
     try { await expect(act(ref, "ENROLL")).rejects.toThrow(); expect(await db.niceJobsOnboarding.count()).toBe(0); expect(await db.niceJobsTrainingPlan.count()).toBe(0); expect(await db.auditEvent.count({ where: { action: "nicejobs.onboarding.enroll" } })).toBe(before); }
-    finally { const clean = new DatabaseSync(file); clean.exec("DROP TRIGGER fail_training_notification"); clean.close(); }
+    finally { await restore(); }
   });
   it("fails closed for private content/evidence and cross-scope record references", async () => {
     const ref = await enroll(); await oriented(ref); await assigned(ref); await act(ref, "START_OJT"); const p = await progress(ref, "evidence");
@@ -497,7 +495,7 @@ describe("Nice Jobs orientation, OJT and human readiness", () => {
     expect((await onboarding.list(candidate, true)).records).toHaveLength(1); expect((await onboarding.list(mentor, false, {}, true)).records.map(r => r.reference)).toEqual([a]);
     const first = await onboarding.list(manager, false, { limit: 1 }); expect(first.nextCursor).not.toBeNull(); const second = await onboarding.list(manager, false, { limit: 1, after: first.nextCursor! }); expect(second.records[0].reference).not.toBe(first.records[0].reference);
     expect((await onboarding.list(manager, false, { status: "READY" })).records).toHaveLength(0); expect((await onboarding.list(manager, false, { divisionId: labs, versionId, reviewerUserId: mentor })).records).toHaveLength(1);
-    const measured = new PrismaClient({ datasourceUrl: "file:" + file.replaceAll("\\", "/"), log: [{ emit: "event", level: "query" }] }); let reads = 0; measured.$on("query", () => reads++);
+    const measured = postgres.client({ log: [{ emit: "event", level: "query" }] }); let reads = 0; (measured as PrismaClient<{ log: [{ emit: "event"; level: "query" }] }>).$on("query", () => reads++);
     try { const projected = createOnboardingService(measured); await projected.list(manager, false, { limit: 1 }); const single = reads; reads = 0; await projected.list(manager, false, { limit: 25 }); expect(reads).toBeLessThanOrEqual(single + 2); }
     finally { await measured.$disconnect(); }
   });
@@ -520,9 +518,9 @@ describe("Nice Jobs orientation, OJT and human readiness", () => {
     const attempts = await db.niceJobsTrainingSubmission.findMany({ where: { progressId: p.id }, orderBy: { attempt: "asc" } }); expect(attempts.map(a => a.result)).toEqual(["FAIL", "FAIL"]); expect((await progress(ref, "check")).status).toBe("REWORK_REQUIRED");
   });
   it("rolls back status and audit when canonical audit persistence fails", async () => {
-    const ref = await enroll(), before = (await onboarding.detail(candidate, ref, true)).revision, sql = new DatabaseSync(file); sql.exec("CREATE TRIGGER fail_training_audit BEFORE INSERT ON AuditEvent WHEN NEW.action = 'nicejobs.onboarding.start_orientation' BEGIN SELECT RAISE(ABORT, 'Fixture audit failure'); END;"); sql.close();
+    const ref = await enroll(), before = (await onboarding.detail(candidate, ref, true)).revision, restore = await postgres.rejectInsert("AuditEvent", "nicejobs.onboarding.start_orientation");
     try { await expect(act(ref, "START_ORIENTATION")).rejects.toThrow(); expect(await onboarding.detail(candidate, ref, true)).toMatchObject({ status: "NOT_STARTED", revision: before }); }
-    finally { const clean = new DatabaseSync(file); clean.exec("DROP TRIGGER fail_training_audit"); clean.close(); }
+    finally { await restore(); }
   });
   it("requires separate company and area training capabilities when editing a draft", async () => {
     const editor = await human("plain-job-editor", company, ["nicejobs.job.create", "nicejobs.job.read", "nicejobs.job.edit"], true), v = await jobs.create(editor, { code: "PLAIN", title: "Plain draft", divisionIds: [labs] });

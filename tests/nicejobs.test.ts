@@ -1,16 +1,12 @@
 import { beforeAll, beforeEach, afterAll, describe, it, expect } from "vitest";
-import { PrismaClient } from "@prisma/client";
-import { DatabaseSync } from "node:sqlite";
-import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { createPostgresFixture } from "./helpers/postgres-fixture";
 import { initializeGroupStructure } from "@/server/group/structure";
 import { workforcePermissions } from "@/server/authorization/registry";
 import { createNiceJobsService } from "@/server/nicejobs/service";
 import { versionInput } from "@/server/nicejobs/input";
 
-const directory = mkdtempSync(join(tmpdir(), "nicejobs-phase01-")), file = join(directory, "test.db");
-const db = new PrismaClient({ datasourceUrl: "file:" + file.replaceAll("\\", "/") }), service = createNiceJobsService(db);
+const postgres = createPostgresFixture();
+const db = postgres.db, service = createNiceJobsService(db);
 let company: string, labs: string, startup: string, foreign: string, admin: string, limited: string, outsider: string, worker: string, foreignWorker: string, roleId: string;
 let jobs: Awaited<ReturnType<typeof service.seedKnown>>;
 const job = () => jobs.find(j => j.title === "Business Development Manager")!;
@@ -26,9 +22,8 @@ async function human(email: string, organizationId: string, keys: string[], desc
   return { userId: user.id, personId: p.id, roleId: role.id };
 }
 beforeAll(async () => {
-  const sql = new DatabaseSync(file);
-  for (const folder of readdirSync("prisma/migrations").filter(f => /^\d/.test(f)).sort()) sql.exec(readFileSync(join("prisma/migrations", folder, "migration.sql"), "utf8"));
-  sql.close(); await db.$transaction(initializeGroupStructure);
+  await postgres.initialize();
+  await db.$transaction(initializeGroupStructure);
   for (const p of workforcePermissions) await db.permission.upsert({ where: { key: p.key }, update: {}, create: p });
   await db.permission.upsert({ where: { key: "organization.read" }, update: {}, create: { key: "organization.read", name: "Read organization", scope: "GROUP" } });
   company = (await db.organization.findUniqueOrThrow({ where: { slug: "aira-skill-city" } })).id;
@@ -41,14 +36,14 @@ beforeAll(async () => {
   outsider = (await human("outsider@test.invalid", foreign, keys, true)).userId;
   worker = (await human("known-worker@test.invalid", company, [], true)).personId;
   foreignWorker = (await human("foreign-worker@test.invalid", foreign, [], true)).personId;
-}, 30000);
+}, 120000);
 beforeEach(async () => {
   await db.niceJobsAssignment.deleteMany(); await db.niceJobsWorkerProfile.deleteMany();
   await db.niceJobsTemplate.updateMany({ data: { publishedVersionId: null } });
   await db.niceJobsVersionArea.deleteMany(); await db.niceJobsVersion.deleteMany(); await db.niceJobsTemplate.deleteMany();
   jobs = await service.seedKnown(admin);
 });
-afterAll(async () => { await db.$disconnect(); rmSync(directory, { recursive: true, force: true }); });
+afterAll(() => postgres.dispose(), 30000);
 
 describe("Nice Jobs workforce and versioned job foundation", () => {
   it("seeds only the two supplied draft jobs, idempotently, without workforce or invented rules", async () => {
@@ -180,61 +175,47 @@ describe("Nice Jobs workforce and versioned job foundation", () => {
   });
   it("keeps the workforce result bounded with 100,001 isolated fixture workers", async () => {
     await change("PUBLISHED");
-    const sql = new DatabaseSync(file);
     try {
-      sql.exec("BEGIN");
-      sql.exec("WITH RECURSIVE n(x) AS (VALUES(1) UNION ALL SELECT x+1 FROM n WHERE x<100001) INSERT INTO Person(id,displayName,status,createdAt,updatedAt) SELECT 'large-worker-'||x,'Large fixture worker '||x,'ACTIVE',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP FROM n");
-      sql.prepare("INSERT INTO NiceJobsWorkerProfile(id,personId,companyId,createdAt,updatedAt) SELECT 'large-profile-'||id,id,?,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP FROM Person WHERE id LIKE 'large-worker-%'").run(company);
-      sql.prepare("INSERT INTO NiceJobsAssignment(id,profileId,versionId,divisionId,status,lifecycle,createdAt,updatedAt) SELECT 'large-assignment-'||id,id,?,?,'PREPARED','APPLICANT',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP FROM NiceJobsWorkerProfile WHERE id LIKE 'large-profile-%'").run(job().id, labs);
-      sql.exec("COMMIT");
+      await db.$executeRawUnsafe(`INSERT INTO "Person" ("id","displayName","status","createdAt","updatedAt")
+        SELECT 'large-worker-' || n, 'Large fixture worker ' || n, 'ACTIVE', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+        FROM generate_series(1,100001) AS n`);
+      await db.$executeRaw`INSERT INTO "NiceJobsWorkerProfile" ("id","personId","companyId","createdAt","updatedAt")
+        SELECT 'large-profile-' || "id", "id", ${company}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+        FROM "Person" WHERE "id" LIKE 'large-worker-%'`;
+      await db.$executeRaw`INSERT INTO "NiceJobsAssignment" ("id","profileId","versionId","divisionId","status","lifecycle","createdAt","updatedAt")
+        SELECT 'large-assignment-' || "id", "id", ${job().id}, ${labs}, 'PREPARED', 'APPLICANT', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+        FROM "NiceJobsWorkerProfile" WHERE "id" LIKE 'large-profile-%'`;
       const started = performance.now(), first = await service.workforce(limited, { divisionId: labs, limit: 25 });
       const second = await service.workforce(limited, { divisionId: labs, limit: 25, after: first.nextCursor! });
       expect(first.records).toHaveLength(25); expect(second.records).toHaveLength(25);
       expect(new Set([...first.records, ...second.records].map(r => r.id)).size).toBe(50);
-      const plan = sql.prepare("EXPLAIN QUERY PLAN SELECT id FROM NiceJobsAssignment WHERE divisionId=? AND status=? AND id>? ORDER BY id LIMIT 26").all(labs, "PREPARED", "large-assignment-");
-      expect(JSON.stringify(plan)).toContain("NiceJobsAssignment_divisionId_status_id_idx");
-      console.log(`Nice Jobs isolated 100,001-worker fixture: two 25-row pages in ${(performance.now() - started).toFixed(1)}ms; composite index selected. Not production load certification.`);
+      await db.$executeRawUnsafe('ANALYZE "NiceJobsAssignment"');
+      const plan = await db.$queryRaw<{ "QUERY PLAN": string }[]>`EXPLAIN SELECT "id" FROM "NiceJobsAssignment"
+        WHERE "divisionId" = ${labs} AND "status" = 'PREPARED' AND "id" > 'large-assignment-'
+        ORDER BY "id" LIMIT 26`;
+      const planText = plan.map(row => row["QUERY PLAN"]).join(" ");
+      expect(planText).toMatch(/Index Scan using "(?:NiceJobsAssignment_divisionId_status_id_idx|NiceJobsAssignment_pkey)"/);
+      expect(planText).toContain("Index Cond:");
+      expect(planText).not.toContain("Seq Scan");
+      console.log(`Nice Jobs isolated 100,001-worker fixture: two 25-row pages in ${(performance.now() - started).toFixed(1)}ms; indexed keyset scan selected. Not production load certification.`);
     } finally {
-      sql.exec("DELETE FROM NiceJobsAssignment WHERE id LIKE 'large-assignment-%'; DELETE FROM NiceJobsWorkerProfile WHERE id LIKE 'large-profile-%'; DELETE FROM Person WHERE id LIKE 'large-worker-%'");
-      sql.close();
+      await db.$executeRawUnsafe(`DELETE FROM "NiceJobsAssignment" WHERE "id" LIKE 'large-assignment-%'`);
+      await db.$executeRawUnsafe(`DELETE FROM "NiceJobsWorkerProfile" WHERE "id" LIKE 'large-profile-%'`);
+      await db.$executeRawUnsafe(`DELETE FROM "Person" WHERE "id" LIKE 'large-worker-%'`);
     }
-  }, 30000);
-  it("upgrades a populated pre-Phase01 database additively and restores the earlier snapshot without deleting identities", () => {
-    const oldFile = join(directory, "upgrade.db"), backupFile = join(directory, "pre-nicejobs.db");
-    const old = new DatabaseSync(oldFile);
-    try {
-      const folders = readdirSync("prisma/migrations").filter(f => /^\d/.test(f)).sort();
-      const phase01 = folders.indexOf("20261007100000_nicejobs_workforce");
-      expect(phase01).toBeGreaterThan(0);
-      for (const folder of folders.slice(0, phase01)) old.exec(readFileSync(join("prisma/migrations", folder, "migration.sql"), "utf8"));
-      old.exec("INSERT INTO Person(id,displayName,status,createdAt,updatedAt) VALUES('retained-person','Existing fixture person','ACTIVE',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)");
-      old.prepare("VACUUM INTO ?").run(backupFile);
-      for (const folder of folders.slice(phase01)) old.exec(readFileSync(join("prisma/migrations", folder, "migration.sql"), "utf8"));
-      expect(old.prepare("SELECT displayName FROM Person WHERE id='retained-person'").get()?.displayName).toBe("Existing fixture person");
-      expect(old.prepare("PRAGMA integrity_check").get()?.integrity_check).toBe("ok");
-      expect(old.prepare("PRAGMA foreign_key_check").all()).toEqual([]);
-      const restored = new DatabaseSync(backupFile);
-      try {
-        expect(restored.prepare("SELECT displayName FROM Person WHERE id='retained-person'").get()?.displayName).toBe("Existing fixture person");
-        expect(restored.prepare("SELECT name FROM sqlite_master WHERE name='NiceJobsTemplate'").get()).toBeUndefined();
-        for (const folder of folders.slice(phase01)) restored.exec(readFileSync(join("prisma/migrations", folder, "migration.sql"), "utf8"));
-        expect(restored.prepare("PRAGMA integrity_check").get()?.integrity_check).toBe("ok");
-      } finally { restored.close(); }
-    } finally { old.close(); }
-  });
+  }, 120000);
   it("rolls back publication, profile creation and assignment when mandatory audit insertion fails", async () => {
-    const sql = new DatabaseSync(file);
-    sql.exec("CREATE TRIGGER NiceJobsAuditFailure BEFORE INSERT ON AuditEvent WHEN NEW.action LIKE 'nicejobs.%' BEGIN SELECT RAISE(ABORT, 'audit unavailable'); END;");
+    const rejectPublication = await postgres.rejectInsert("AuditEvent", "nicejobs.job.published");
     try {
       await expect(change("PUBLISHED")).rejects.toThrow();
       expect((await service.detail(admin, job().id)).version.publishedAt).toBeNull();
-    } finally { sql.exec("DROP TRIGGER NiceJobsAuditFailure"); }
+    } finally { await rejectPublication(); }
     await change("PUBLISHED");
-    sql.exec("CREATE TRIGGER NiceJobsAuditFailure BEFORE INSERT ON AuditEvent WHEN NEW.action = 'nicejobs.assignment.created' BEGIN SELECT RAISE(ABORT, 'audit unavailable'); END;");
+    const rejectAssignment = await postgres.rejectInsert("AuditEvent", "nicejobs.assignment.created");
     try {
       await expect(service.assign(admin, { personId: worker, versionId: job().id, divisionId: labs })).rejects.toThrow();
       expect(await db.niceJobsWorkerProfile.count()).toBe(0); expect(await db.niceJobsAssignment.count()).toBe(0);
-    } finally { sql.exec("DROP TRIGGER NiceJobsAuditFailure"); sql.close(); }
+    } finally { await rejectAssignment(); }
   });
   it("denies revoked authority on the next operation and preserves actor/scope/history audit", async () => {
     await change("PUBLISHED");

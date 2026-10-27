@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowRight, BookOpenCheck, BriefcaseBusiness, ClipboardList, Compass, FileText, Store, Target, Wallet } from "lucide-react";
+import { ArrowRight, BookOpenCheck, BriefcaseBusiness, CircleHelp, ClipboardList, Compass, FileText, Target, Wallet } from "lucide-react";
 import { participantDashboard, type DashboardResult } from "@/server/nicejobs/participant-dashboard";
 import { applicationStage } from "@/lib/nicejobs-application-stage";
 import styles from "./candidate-space.module.css";
@@ -17,11 +17,13 @@ export async function CandidateSpace({ userId, base, name, worker = false }: { u
     { label: "My Workspace", view: "home", icon: BriefcaseBusiness, note: "Your next step" },
     { label: "Explore Opportunities", view: "opportunities", icon: Compass, note: "Approved openings" },
     { label: "My Applications", view: "my-applications", icon: ClipboardList, note: "Decisions and offers" },
-    { label: "My Work", view: "my-work", icon: BriefcaseBusiness, note: worker ? "Assigned work" : "After activation" },
     { label: "Training", view: "my-onboarding", icon: BookOpenCheck, note: "Assigned learning" },
-    { label: "Daily Reports", view: "worker-reports", icon: FileText, note: worker ? "Record your day" : "After activation" },
-    { label: "Marketplace", view: "opportunities", icon: Store, note: "Browse jobs" },
-    { label: "My Wallet", view: "worker-wallet", icon: Wallet, note: "Recorded earnings" }
+    ...(worker ? [
+      { label: "My Work", view: "my-work", icon: BriefcaseBusiness, note: "Assigned work" },
+      { label: "Daily Reports", view: "worker-reports", icon: FileText, note: "Record your day" },
+      { label: "My Wallet", view: "worker-wallet", icon: Wallet, note: "Recorded earnings" }
+    ] : []),
+    { label: "Help", view: "worker-help", icon: CircleHelp, note: "Your next step and support" }
   ] as const;
   return <div className={styles.space}>
     <header className={styles.heading}><p>NICE JOBS</p><h1>My Workspace</h1><span>{name ? `Hello, ${name}. ` : ""}Your opportunities, applications and work stay in one place.</span></header>
