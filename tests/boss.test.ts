@@ -133,6 +133,12 @@ describe("MAXPASE group and Boss controls", () => {
     const brands = await db.brand.findMany({ orderBy: { website: "asc" } });
     expect(brands.filter(b => b.website).map(b => b.website).sort()).toEqual(["airaskillcity.com", "airastartupskool.com", "airalabs.online", "nicejobs.online", "teachx.guru", "learnx.guru"].map(d => "https://" + d).sort());
     expect(brands.find(b => b.slug === "top-rank-ai")?.website).toBeNull();
+    const bySlug = new Map(brands.map(brand => [brand.slug, brand]));
+    expect(brands.filter(brand => brand.organizationId === airaId && !brand.parentBrandId).map(brand => brand.name).sort()).toEqual(["AIRA SKILL CITY", "AIRA STARTUP SKOOL", "AIRA LABS", "AIRA CAREER HUB"].sort());
+    expect(brands.filter(brand => brand.parentBrandId === bySlug.get("aira-labs")?.id).map(brand => brand.name).sort()).toEqual(["MY SOLAR SOLUTIONS", "NTE NAADU", "HAPPINOTES", "TALKIN LABS", "BGOS"].sort());
+    expect(bySlug.get("nice-jobs")?.parentBrandId).toBe(bySlug.get("aira-career-hub")?.id);
+    expect(brands.filter(brand => brand.organizationId === pearnId).map(brand => brand.name).sort()).toEqual(["TEACHX GURU", "LEARNX GURU"]);
+    expect(bySlug.get("top-rank-ai")?.name).toBe("TOP TANK AI");
     expect(await db.role.count({ where: { organizationId: airaId, canonical: true } })).toBe(60);
     expect(await db.ownershipRelationship.count()).toBe(0);
     const nice = await db.product.findUniqueOrThrow({ where: { organizationId_slug: { organizationId: airaId, slug: "nice-jobs" } }, include: { division: true } });
@@ -172,8 +178,10 @@ describe("MAXPASE group and Boss controls", () => {
     expect(aira.divisions.map(item => !!item.productRow)).toEqual([true, true, true, true]);
     expect(aira.divisions.slice(0, 3).every(item => item.productRow?.status === "INACTIVE" && item.productRow.lifecycle === "CONCEPT")).toBe(true);
     expect(aira.divisions[3].productRow?.lifecycle).toBe("CONCEPT");
-    expect(aira.brands.map(item => item.name)).toEqual(["OnSpeak Mentor Hub", "HappiNotes", "Lifeskool", "The Skool Of Joy", "Pocket Doctor", "Queen's Club"]);
-    expect(aira.brands.every(item => !item.row)).toBe(true);
+    expect(aira.brands.map(item => item.name)).toEqual(["AIRA SKILL CITY", "AIRA STARTUP SKOOL", "AIRA LABS", "AIRA CAREER HUB"]);
+    expect(aira.brands.every(item => !!item.row)).toBe(true);
+    expect(aira.subBrands.map(item => item.name)).toEqual(["MY SOLAR SOLUTIONS", "NTE NAADU", "HAPPINOTES", "TALKIN LABS", "BGOS", "NICEJOBS"]);
+    expect(aira.subBrands.every(item => !!item.row)).toBe(true);
     expect(mapped[1].products.map(item => item.row?.name)).toEqual(["TeachX Guru", "LearnX Guru"]);
     const bgos = await db.product.findUniqueOrThrow({ where: { organizationId_slug: { organizationId: airaId, slug: "bgos" } } });
     await db.product.update({ where: { id: bgos.id }, data: { divisionId: aira.divisions[0].row!.id } });

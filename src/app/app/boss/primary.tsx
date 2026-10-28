@@ -26,7 +26,7 @@ function CompanySummary({data,query}:{data:Data;query:Query}) {
 }
 
 function CompanyBrowser({data,query}:{data:Data;query:Query}) {
-  const brands = data.brands.flatMap(row => "organizationId" in row && "name" in row && "status" in row ? [{ id: row.id, organizationId: String(row.organizationId), name: String(row.name), status: String(row.status), website: "website" in row && row.website ? String(row.website) : null }] : []);
+  const brands = data.brands.flatMap(row => "organizationId" in row && "name" in row && "status" in row ? [{ id: row.id, organizationId: String(row.organizationId), parentBrandId: "parentBrandId" in row && row.parentBrandId ? String(row.parentBrandId) : null, name: String(row.name), status: String(row.status), website: "website" in row && row.website ? String(row.website) : null }] : []);
   const products = data.products.flatMap(row => "organizationId" in row && "name" in row && "type" in row && "status" in row && "lifecycle" in row ? [{ id: row.id, organizationId: String(row.organizationId), name: String(row.name), type: String(row.type), status: String(row.status), lifecycle: String(row.lifecycle), brandId: "brandId" in row ? String(row.brandId || "") : null, divisionId: "divisionId" in row ? String(row.divisionId || "") : null }] : []);
   const root = buildBossHierarchy({ groupId: data.groupId, organizations: data.graph.organizations, companies: data.companies, brands, products });
   return <BossHierarchy root={root} selectedCompanyId={data.selectedCompanyId} initialSearch={typeof query.hierarchySearch === "string" ? query.hierarchySearch : ""} initialStatus={typeof query.hierarchyStatus === "string" ? query.hierarchyStatus : ""} brandReadable={data.readable.brand} productReadable={data.readable.product}/>;

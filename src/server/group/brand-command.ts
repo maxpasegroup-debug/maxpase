@@ -10,8 +10,10 @@ export function commandUnit(companySlug: string, unitSlug: string) {
   if (companySlug === "aira-skill-city" && unitSlug === companySlug) return { company, label: "AIRA Skill City", brandSlug: unitSlug };
   const division = company.divisions.find(item => item.slug === unitSlug);
   if (division) return { company, label: division.label, divisionSlug: division.slug, productSlug: division.productSlug, productName: division.product };
-  const brand = company.brands.find(name => name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") === unitSlug);
-  if (brand) return { company, label: brand, brandSlug: unitSlug };
+  const brand = company.brands.find(item => item.slug === unitSlug);
+  if (brand) return { company, label: brand.name, brandSlug: unitSlug };
+  const subBrand = "subBrands" in company ? company.subBrands.find(item => item.slug === unitSlug) : undefined;
+  if (subBrand) return { company, label: subBrand.name, brandSlug: unitSlug };
   const product = "products" in company ? company.products.find(name => name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") === unitSlug) : undefined;
   return product ? { company, label: product, productSlug: unitSlug, productName: product } : null;
 }

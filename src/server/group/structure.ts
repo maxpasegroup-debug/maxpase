@@ -9,14 +9,26 @@ export const groupCompanies = [
   { slug: "top-rank-ai", name: "TOP RANK AI PRIVATE LIMITED", shortName: "Top Rank AI" }
 ] as const;
 const brands = [
-  { company: "aira-skill-city", slug: "aira-skill-city", name: "Aira Skill City", domain: "airaskillcity.com" },
-  { company: "aira-skill-city", slug: "startup-school", name: "Startup School", domain: "airastartupskool.com" },
-  { company: "aira-skill-city", slug: "aira-labs", name: "AIRA Labs", domain: "airalabs.online" },
-  { company: "aira-skill-city", slug: "nice-jobs", name: "Nice Jobs", domain: "nicejobs.online" },
-  { company: "pearn", slug: "teachx-guru", name: "TeachX Guru", domain: "teachx.guru" },
-  { company: "pearn", slug: "learnx-guru", name: "LearnX Guru", domain: "learnx.guru" },
-  { company: "top-rank-ai", slug: "top-rank-ai", name: "Top Rank AI", domain: null }
+  { company: "aira-skill-city", slug: "aira-skill-city", name: "AIRA SKILL CITY", parentSlug: null, domain: "airaskillcity.com" },
+  { company: "aira-skill-city", slug: "startup-school", name: "AIRA STARTUP SKOOL", parentSlug: null, domain: "airastartupskool.com" },
+  { company: "aira-skill-city", slug: "aira-labs", name: "AIRA LABS", parentSlug: null, domain: "airalabs.online" },
+  { company: "aira-skill-city", slug: "aira-career-hub", name: "AIRA CAREER HUB", parentSlug: null, domain: null },
+  { company: "aira-skill-city", slug: "my-solar-solutions", name: "MY SOLAR SOLUTIONS", parentSlug: "aira-labs", domain: null },
+  { company: "aira-skill-city", slug: "nte-naadu", name: "NTE NAADU", parentSlug: "aira-labs", domain: null },
+  { company: "aira-skill-city", slug: "happinotes", name: "HAPPINOTES", parentSlug: "aira-labs", domain: null },
+  { company: "aira-skill-city", slug: "talkin-labs", name: "TALKIN LABS", parentSlug: "aira-labs", domain: null },
+  { company: "aira-skill-city", slug: "bgos", name: "BGOS", parentSlug: "aira-labs", domain: null },
+  { company: "aira-skill-city", slug: "nice-jobs", name: "NICEJOBS", parentSlug: "aira-career-hub", domain: "nicejobs.online" },
+  { company: "pearn", slug: "teachx-guru", name: "TEACHX GURU", parentSlug: null, domain: "teachx.guru" },
+  { company: "pearn", slug: "learnx-guru", name: "LEARNX GURU", parentSlug: null, domain: "learnx.guru" },
+  { company: "top-rank-ai", slug: "top-rank-ai", name: "TOP TANK AI", parentSlug: null, domain: null }
 ] as const;
+const previousBrandNames: Record<string, string[]> = {
+  "aira-skill-city": ["Aira Skill City"], "startup-school": ["Startup School"],
+  "aira-labs": ["AIRA Labs"], "nice-jobs": ["Nice Jobs"],
+  "teachx-guru": ["TeachX Guru"], "learnx-guru": ["LearnX Guru"], "top-rank-ai": ["Top Rank AI"],
+  happinotes: ["HappiNotes"]
+};
 
 // Explicit operator initialization, never called by a page or application startup.
 export async function initializeGroupStructure(db: Prisma.TransactionClient) {
@@ -39,14 +51,27 @@ export async function initializeGroupStructure(db: Prisma.TransactionClient) {
   await seedAiraStructure(db, aira.id);
   for (const definition of brands) {
     const company = companies.find(c => c.slug === definition.company)!;
+    const parent = definition.parentSlug ? await db.brand.findUnique({ where: { organizationId_slug: { organizationId: company.id, slug: definition.parentSlug } } }) : null;
+    if (definition.parentSlug && (!parent || parent.parentBrandId)) throw new Error("Parent brand is missing or nested unexpectedly");
     const existing = await db.brand.findUnique({ where: { organizationId_slug: { organizationId: company.id, slug: definition.slug } } });
-    if (existing && existing.name !== definition.name) throw new Error("Existing brand identity conflicts with initialization");
-    const brand = await db.brand.upsert({ where: { organizationId_slug: { organizationId: company.id, slug: definition.slug } }, update: {}, create: { organizationId: company.id, slug: definition.slug, name: definition.name, website: definition.domain ? "https://" + definition.domain : undefined, metadata: JSON.stringify({ structureSource: "USER_CONFIRMED", domainStatus: "NOT VERIFIED" }) } });
+    if (existing && existing.name !== definition.name && !previousBrandNames[definition.slug]?.includes(existing.name)) throw new Error("Existing brand identity conflicts with initialization");
+    if (existing?.parentBrandId && existing.parentBrandId !== parent?.id) throw new Error("Existing brand parent conflicts with confirmed hierarchy");
+    const brand = await db.brand.upsert({ where: { organizationId_slug: { organizationId: company.id, slug: definition.slug } }, update: { name: definition.name, parentBrandId: parent?.id ?? null }, create: { organizationId: company.id, slug: definition.slug, name: definition.name, parentBrandId: parent?.id ?? null, status: definition.parentSlug || definition.slug === "aira-career-hub" ? "INACTIVE" : "ACTIVE", website: definition.domain ? "https://" + definition.domain : undefined, metadata: JSON.stringify({ structureSource: "USER_CONFIRMED", domainStatus: "NOT VERIFIED" }) } });
+    if (existing && (existing.name !== brand.name || existing.parentBrandId !== brand.parentBrandId)) await db.auditEvent.create({ data: { organizationId: company.id, action: "group.brand_hierarchy_corrected", entityType: "Brand", entityId: brand.id, result: "SUCCESS", metadata: JSON.stringify({ previousName: existing.name, nextName: brand.name, previousParentBrandId: existing.parentBrandId, nextParentBrandId: brand.parentBrandId, source: "OWNER_CONFIRMED" }) } });
     if (definition.domain && brand.website !== "https://" + definition.domain) await db.brand.update({ where: { id: brand.id }, data: { website: "https://" + definition.domain } });
-    if (definition.slug === "nice-jobs") await db.product.updateMany({ where: { organizationId: company.id, slug: "nice-jobs", brandId: null }, data: { brandId: brand.id } });
+    if (definition.slug === "nice-jobs" || definition.slug === "bgos") {
+      const product = await db.product.findUnique({ where: { organizationId_slug: { organizationId: company.id, slug: definition.slug } } });
+      const expectedPreviousBrandId = definition.slug === "bgos" ? parent!.id : null;
+      if (product && product.brandId !== brand.id) {
+        if (product.brandId !== expectedPreviousBrandId) throw new Error("Existing product brand conflicts with confirmed hierarchy");
+        await db.product.update({ where: { id: product.id }, data: { brandId: brand.id } });
+        await db.auditEvent.create({ data: { organizationId: company.id, action: "group.product_brand_corrected", entityType: "Product", entityId: product.id, result: "SUCCESS", metadata: JSON.stringify({ previousBrandId: product.brandId, nextBrandId: brand.id, source: "OWNER_CONFIRMED" }) } });
+      }
+    }
     if (["teachx-guru", "learnx-guru", "top-rank-ai"].includes(definition.slug)) {
-      const product = await db.product.upsert({ where: { organizationId_slug: { organizationId: company.id, slug: definition.slug } }, update: {}, create: { organizationId: company.id, brandId: brand.id, name: definition.name, slug: definition.slug, type: "PLATFORM", lifecycle: "CONCEPT" } });
-      if (product.name !== definition.name || product.brandId !== brand.id) throw new Error("Existing product identity conflicts with initialization");
+      const productName = definition.slug === "top-rank-ai" ? "Top Rank AI" : definition.slug === "teachx-guru" ? "TeachX Guru" : "LearnX Guru";
+      const product = await db.product.upsert({ where: { organizationId_slug: { organizationId: company.id, slug: definition.slug } }, update: {}, create: { organizationId: company.id, brandId: brand.id, name: productName, slug: definition.slug, type: "PLATFORM", lifecycle: "CONCEPT" } });
+      if (product.name !== productName || product.brandId !== brand.id) throw new Error("Existing product identity conflicts with initialization");
     }
   }
   await registerAiraProductDrafts(db, aira.id);

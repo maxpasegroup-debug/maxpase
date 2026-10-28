@@ -228,11 +228,25 @@ export function createBusinessService(client: PrismaClient = prisma, createAcces
           }
           if (kind === "brands") {
             const d = input.brandInput.parse(raw);
+            const parent = d.parentBrandId ? await db.brand.findUnique({ where: { id: d.parentBrandId } }) : null;
+            if (d.parentBrandId && (!parent || parent.organizationId !== org.id)) throw new BusinessError("Related resource belongs to a different organization");
+            if (parent) ctx.requireAccess("brand.read", parent.organizationId);
+            if (recordId && parent?.id === recordId) throw new BusinessError("A brand cannot parent itself");
+            if (parent) {
+              const visited = new Set<string>();
+              let cursor: typeof parent | null = parent;
+              while (cursor) {
+                if (visited.has(cursor.id) || cursor.id === recordId || visited.size >= 50) throw new BusinessError("Brand hierarchy contains a cycle");
+                visited.add(cursor.id);
+                cursor = cursor.parentBrandId ? await db.brand.findUnique({ where: { id: cursor.parentBrandId } }) : null;
+                if (cursor && cursor.organizationId !== org.id) throw new BusinessError("Related resource belongs to a different organization");
+              }
+            }
             if (recordId && (await db.brand.findUniqueOrThrow({ where: { id: recordId } })).status === "ARCHIVED" && d.status !== "ARCHIVED") throw new BusinessError("Archived brand reactivation requires controlled review");
             if (recordId && d.status === "ARCHIVED") {
               const old = await db.brand.findUniqueOrThrow({ where: { id: recordId } });
               if (old.status !== "ARCHIVED") {
-                const linked = await Promise.all([db.product.count({ where: { brandId: recordId } }), db.project.count({ where: { brandId: recordId } }), db.program.count({ where: { brandId: recordId } })]);
+                const linked = await Promise.all([db.product.count({ where: { brandId: recordId } }), db.project.count({ where: { brandId: recordId } }), db.program.count({ where: { brandId: recordId } }), db.brand.count({ where: { parentBrandId: recordId } })]);
                 if (linked.some(Boolean)) throw new BusinessError("Brand has linked work; archive requires a separate controlled review");
               }
             }

@@ -1,7 +1,7 @@
 import type { Prisma } from "@prisma/client";
 
 export const airaProductDrafts = [
-  { slug: "bgos", name: "BGOS", divisionSlug: "aira-labs", brandSlug: "aira-labs" },
+  { slug: "bgos", name: "BGOS", divisionSlug: "aira-labs", brandSlug: "bgos" },
   { slug: "pba", name: "PBA", divisionSlug: "aira-startup-school", brandSlug: "startup-school" },
   { slug: "genz-builder", name: "GenZ Builder", divisionSlug: "aira-skill-studio", brandSlug: null }
 ] as const;
