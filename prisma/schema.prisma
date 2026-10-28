@@ -1763,6 +1763,9 @@ model Brand {
   id             String          @id @default(cuid())
   organizationId String
   organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  parentBrandId  String?
+  parentBrand    Brand?          @relation("BrandHierarchy", fields: [parentBrandId], references: [id], onDelete: Restrict)
+  childBrands    Brand[]         @relation("BrandHierarchy")
   name           String
   slug           String
   description    String?
@@ -1776,6 +1779,7 @@ model Brand {
   updatedAt      DateTime        @updatedAt
 
   @@unique([organizationId, slug])
+  @@index([parentBrandId])
 }
 
 model Product {
