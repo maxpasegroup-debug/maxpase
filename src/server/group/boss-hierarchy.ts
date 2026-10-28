@@ -11,7 +11,7 @@ export type HierarchyNode = {
 
 type Organization = { id: string; parentId: string | null; name: string; slug?: string; type: string; status?: string };
 type Company = { id?: string; organizationId: string; legalName?: string | null; displayName: string; status: string };
-type Brand = { id: string; organizationId: string; name: string; status: string; website?: string | null };
+type Brand = { id: string; organizationId: string; parentBrandId?: string | null; name: string; status: string; website?: string | null };
 type Product = { id: string; organizationId: string; divisionId?: string | null; brandId?: string | null; name: string; type: string; lifecycle: string; status: string };
 export type HierarchySource = { groupId: string; organizations: Organization[]; companies: Company[]; brands: Brand[]; products: Product[] };
 
@@ -43,11 +43,21 @@ export function buildBossHierarchy(source: HierarchySource): HierarchyNode {
     if (!attached) break;
     pending = unresolved;
   }
-  for (const brand of source.brands) {
-    const parent = nodes.get(brand.organizationId);
-    if (!parent || !["COMPANY", "UNIT"].includes(parent.kind)) continue;
-    const node: HierarchyNode = { id: `brand:${brand.id}`, kind: "BRAND", name: brand.name, status: brand.status, detail: brand.website || undefined, href: `/app/boss/brands/${encodeURIComponent(brand.id)}`, children: [] };
-    parent.children.push(node); nodes.set(node.id, node);
+  const brandsById = new Map(source.brands.map(brand => [brand.id, brand]));
+  let pendingBrands = source.brands;
+  while (pendingBrands.length) {
+    let attached = 0;
+    const unresolved: Brand[] = [];
+    for (const brand of pendingBrands) {
+      const parentBrand = brand.parentBrandId ? brandsById.get(brand.parentBrandId) : null;
+      if (brand.parentBrandId && (!parentBrand || parentBrand.organizationId !== brand.organizationId)) continue;
+      const parent = nodes.get(brand.parentBrandId ? `brand:${brand.parentBrandId}` : brand.organizationId);
+      if (!parent || !(brand.parentBrandId ? parent.kind === "BRAND" : parent.kind === "COMPANY")) { unresolved.push(brand); continue; }
+      const node: HierarchyNode = { id: `brand:${brand.id}`, kind: "BRAND", name: brand.name, status: brand.status, detail: brand.website || undefined, href: `/app/boss/brands/${encodeURIComponent(brand.id)}`, children: [] };
+      parent.children.push(node); nodes.set(node.id, node); attached++;
+    }
+    if (!attached) break;
+    pendingBrands = unresolved;
   }
   for (const product of source.products) {
     const brand = product.brandId ? nodes.get(`brand:${product.brandId}`) : undefined;

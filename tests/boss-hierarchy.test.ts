@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildBossHierarchy, filterBossHierarchy, selectCompanyHierarchy, visibleHierarchyIds, type HierarchySource } from "@/server/group/boss-hierarchy";
+import { bossStructure } from "@/server/group/boss-structure";
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { runInNewContext } from "node:vm";
@@ -46,6 +47,14 @@ const source: HierarchySource = {
 };
 
 describe("Boss registry hierarchy", () => {
+  it("keeps the owner-confirmed company, brand and sub-brand map", () => {
+    expect(bossStructure.map(company => company.legalName)).toEqual(["AIRA SKILL CITY PRIVATE LIMITED", "TEARN PRIVATE LIMITED", "TOP RANK AI PRIVATE LIMITED"]);
+    expect(bossStructure[0].brands.map(brand => brand.name)).toEqual(["AIRA SKILL CITY", "AIRA STARTUP SKOOL", "AIRA LABS", "AIRA CAREER HUB"]);
+    expect(bossStructure[0].subBrands.filter(brand => brand.parentSlug === "aira-labs").map(brand => brand.name)).toEqual(["MY SOLAR SOLUTIONS", "NTE NAADU", "HAPPINOTES", "TALKIN LABS", "BGOS"]);
+    expect(bossStructure[0].subBrands.filter(brand => brand.parentSlug === "aira-career-hub").map(brand => brand.name)).toEqual(["NICEJOBS"]);
+    expect(bossStructure[1].brands.map(brand => brand.name)).toEqual(["TEACHX GURU", "LEARNX GURU"]);
+    expect(bossStructure[2].brands.map(brand => brand.name)).toEqual(["TOP TANK AI"]);
+  });
   it("uses verified parent IDs and excludes records outside authorized companies", () => {
     const root = buildBossHierarchy(source);
     expect(root.children.map(node => node.id)).toEqual(["aira", "tearn"]);
@@ -55,6 +64,22 @@ describe("Boss registry hierarchy", () => {
     expect(aira.children[0].children.map(node => node.id)).toEqual(["product:service"]);
     expect(aira.children[1].children[0]).toMatchObject({ status: "INACTIVE", lifecycle: "CONCEPT", href: "/app/business/products?recordId=bgos" });
     expect(JSON.stringify(root)).not.toContain("Hidden");
+  });
+
+  it("nests sub-brands by recorded parent ID and rejects foreign or cyclic parents", () => {
+    const nested: HierarchySource = { ...source, brands: [
+      ...source.brands,
+      { id: "solar", organizationId: "aira", parentBrandId: "brand-labs", name: "MY SOLAR SOLUTIONS", status: "INACTIVE" },
+      { id: "foreign-child", organizationId: "tearn", parentBrandId: "brand-labs", name: "Foreign child", status: "ACTIVE" },
+      { id: "cycle-a", organizationId: "aira", parentBrandId: "cycle-b", name: "Cycle A", status: "ACTIVE" },
+      { id: "cycle-b", organizationId: "aira", parentBrandId: "cycle-a", name: "Cycle B", status: "ACTIVE" }
+    ] };
+    const tree = buildBossHierarchy(nested);
+    const labs = tree.children[0].children.find(node => node.id === "brand:brand-labs");
+    expect(labs?.children.some(node => node.id === "brand:solar" && node.href === "/app/boss/brands/solar")).toBe(true);
+    expect(JSON.stringify(tree)).not.toContain("Foreign child");
+    expect(JSON.stringify(tree)).not.toContain("Cycle A");
+    expect(JSON.stringify(filterBossHierarchy(tree, "solar", ""))).toContain("MY SOLAR SOLUTIONS");
   });
 
   it("isolates the selected company without changing the registry source", () => {

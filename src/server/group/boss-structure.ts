@@ -11,10 +11,21 @@ export const bossStructure = [
       { slug: "aira-skill-studio", label: "AIRA Skill Studio", product: "GenZ Builder", productSlug: "genz-builder" },
       { slug: "aira-career-hub", label: "AIRA Career Hub", product: "Nice Jobs", productSlug: "nice-jobs" }
     ],
-    brands: ["OnSpeak Mentor Hub", "HappiNotes", "Lifeskool", "The Skool Of Joy", "Pocket Doctor", "Queen's Club"]
+    brands: [
+      { slug: "aira-skill-city", name: "AIRA SKILL CITY" }, { slug: "startup-school", name: "AIRA STARTUP SKOOL" },
+      { slug: "aira-labs", name: "AIRA LABS" }, { slug: "aira-career-hub", name: "AIRA CAREER HUB" }
+    ],
+    subBrands: [
+      { slug: "my-solar-solutions", name: "MY SOLAR SOLUTIONS", parentSlug: "aira-labs" },
+      { slug: "nte-naadu", name: "NTE NAADU", parentSlug: "aira-labs" },
+      { slug: "happinotes", name: "HAPPINOTES", parentSlug: "aira-labs" },
+      { slug: "talkin-labs", name: "TALKIN LABS", parentSlug: "aira-labs" },
+      { slug: "bgos", name: "BGOS", parentSlug: "aira-labs" },
+      { slug: "nice-jobs", name: "NICEJOBS", parentSlug: "aira-career-hub" }
+    ]
   },
-  { slug: "pearn", legalName: "TEARN PRIVATE LIMITED", divisions: [], brands: [], products: ["TeachX Guru", "LearnX Guru"] },
-  { slug: "top-rank-ai", legalName: "TOP RANK AI PRIVATE LIMITED", divisions: [], brands: [], products: ["Top Rank AI"] }
+  { slug: "pearn", legalName: "TEARN PRIVATE LIMITED", divisions: [], brands: [{ slug: "teachx-guru", name: "TEACHX GURU" }, { slug: "learnx-guru", name: "LEARNX GURU" }], products: ["TeachX Guru", "LearnX Guru"] },
+  { slug: "top-rank-ai", legalName: "TOP RANK AI PRIVATE LIMITED", divisions: [], brands: [{ slug: "top-rank-ai", name: "TOP TANK AI" }], products: ["Top Rank AI"] }
 ] as const;
 
 type NamedRow = { id: string; organizationId: string; name: string; slug?: string; status?: string; lifecycle?: string; divisionId?: string | null };
@@ -47,7 +58,8 @@ export function projectBossStructure(data: BossData) {
         row: division(item.slug),
         productRow: division(item.slug) ? namedRow(data.products, card.organizationId, item.product, item.productSlug, division(item.slug)!.id) : undefined
       })),
-      brands: spec.brands.map(name => ({ name, row: namedRow(data.brands, card.organizationId, name) })),
+      brands: spec.brands.map(item => ({ name: item.name, slug: item.slug, row: namedRow(data.brands, card.organizationId, item.name, item.slug) })),
+      subBrands: "subBrands" in spec ? spec.subBrands.map(item => ({ ...item, row: namedRow(data.brands, card.organizationId, item.name, item.slug) })) : [],
       products
     }];
   });
