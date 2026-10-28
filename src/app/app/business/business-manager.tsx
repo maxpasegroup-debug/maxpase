@@ -1,5 +1,6 @@
 "use client";
 import { useActionState, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Plus, Pencil, X, Check, Building2, ChevronRight, Eye } from "lucide-react";
 import type { BusinessKind } from "@/server/domain/business-input";
 import { saveBusinessAction, setMembershipRoleAction } from "./actions";
@@ -15,12 +16,13 @@ function label(value: unknown): string {
   }
   return String(value).replaceAll("_", " ");
 }
-function Editor({ kind, row, options, close }: { kind: BusinessKind; row?: Row; options: Options; close: () => void }) {
+function Editor({ kind, row, options, close, initialOrganizationId }: { kind: BusinessKind; row?: Row; options: Options; close: () => void; initialOrganizationId?: string }) {
+  const router = useRouter();
   const [state, action, pending] = useActionState(saveBusinessAction, {});
-  const [scope, setScope] = useState(String(row?.organizationId ?? ""));
+  const [scope, setScope] = useState(String(row?.organizationId ?? initialOrganizationId ?? ""));
   const [ownerType, setOwnerType] = useState(row?.ownerOrgId ? "organization" : "person");
   const [roleState, roleAction, rolePending] = useActionState(setMembershipRoleAction, {});
-  useEffect(() => { if (state.success) close(); }, [state.success, close]);
+  useEffect(() => { if (state.success) { close(); router.refresh(); } }, [state.success, close, router]);
   return <div className="editor-band">
     <div className="view-heading"><h2>{row ? "Edit record" : "New record"}</h2><button className="icon-button" onClick={close} title="Close editor" aria-label="Close editor"><X size={18}/></button></div>
     <form action={action} className="business-form">
@@ -29,7 +31,7 @@ function Editor({ kind, row, options, close }: { kind: BusinessKind; row?: Row; 
       {fields[kind].filter(f => kind !== "ownership" || (f.key !== "ownerPersonId" || ownerType === "person") && (f.key !== "ownerOrgId" || ownerType === "organization")).map(f => {
         const source = f.source ? options[f.source] ?? [] : [];
         const choices = source.filter(o => !scope || !["brands", "products", "projects"].includes(f.source ?? "") || o.organizationId === scope);
-        let value = row?.[f.key] ?? (f.key === "progress" ? 0 : "");
+        let value = row?.[f.key] ?? (f.key === "organizationId" ? initialOrganizationId : undefined) ?? (f.key === "progress" ? 0 : "");
         if (f.type === "date" && value) value = String(value).slice(0,10);
         const isScope = f.key === "organizationId";
         const fixedGroup = !!row && f.key === "groupOrganizationId";
@@ -55,10 +57,10 @@ function Editor({ kind, row, options, close }: { kind: BusinessKind; row?: Row; 
   </div>;
 }
 const titles: Record<BusinessKind, string> = { groups: "MAXPASE Group", companies: "Companies", organizations: "Organization structure", relationships: "Company relationships", ownership: "Ownership", people: "People", memberships: "Memberships", brands: "Brands", products: "Products & services", projects: "Projects", goals: "Goals" };
-export function BusinessManager({ kind, rows, options, canManage, initialRecordId }: { kind: BusinessKind; rows: Row[]; options: Options; canManage: boolean; initialRecordId?: string }) {
-  const [editing, setEditing] = useState<Row | null | undefined>();
+export function BusinessManager({ kind, rows, options, canManage, initialRecordId, initialOrganizationId, initialCreate = false }: { kind: BusinessKind; rows: Row[]; options: Options; canManage: boolean; initialRecordId?: string; initialOrganizationId?: string; initialCreate?: boolean }) {
+  const [editing, setEditing] = useState<Row | null | undefined>(canManage && initialCreate ? null : undefined);
   const [search, setSearch] = useState("");
-  const [scope, setScope] = useState("");
+  const [scope, setScope] = useState(initialOrganizationId ?? "");
   const [inspecting, setInspecting] = useState<Row | undefined>(() => rows.find(row => row.id === initialRecordId));
   const orgName = (id: unknown) => options.organizations.find(o => o.id === id)?.name ?? "Not recorded";
   const shown = rows.filter(r => JSON.stringify(r).toLowerCase().includes(search.toLowerCase()) && (!scope || r.organizationId === scope));
@@ -68,7 +70,7 @@ export function BusinessManager({ kind, rows, options, canManage, initialRecordI
   };
   return <>
     <div className="view-heading"><div><p className="eyebrow">Business universe</p><h1>{titles[kind]}</h1></div>{canManage && <button className="button" onClick={() => setEditing(null)}><Plus size={16}/>New record</button>}</div>
-    {editing !== undefined && <Editor key={editing?.id ?? "new"} kind={kind} row={editing ?? undefined} options={options} close={() => setEditing(undefined)}/>}
+    {editing !== undefined && <Editor key={editing?.id ?? "new"} kind={kind} row={editing ?? undefined} options={options} initialOrganizationId={initialOrganizationId} close={() => setEditing(undefined)}/>}
     {inspecting && <section className="editor-band"><div className="view-heading"><h2>{label(inspecting.displayName ?? inspecting.name ?? inspecting.title ?? inspecting.person ?? inspecting.company)}</h2><button className="icon-button" onClick={() => setInspecting(undefined)} title="Close details" aria-label="Close details"><X size={18}/></button></div><dl className="record-details">{fields[kind].map(f => <div key={f.key}><dt>{f.label}</dt><dd>{f.source ? options[f.source]?.find(o => o.id === inspecting[f.key])?.name ?? "Not recorded" : label(inspecting[f.key])}</dd></div>)}{kind === "memberships" && <div><dt>Assigned roles</dt><dd>{(inspecting.roles as { role: { name: string } }[]).map(r => r.role.name).join(", ") || "No roles"}</dd></div>}</dl></section>}
     <div className="list-toolbar"><input aria-label="Search records" type="search" placeholder="Search records" value={search} onChange={e => setSearch(e.target.value)}/>{!["groups", "companies", "organizations", "relationships", "ownership", "people"].includes(kind) && <select aria-label="Filter organization" value={scope} onChange={e => setScope(e.target.value)}><option value="">All organizations</option>{options.organizations.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}</select>}<span className="muted">{shown.length} records</span></div>
     {kind === "organizations" && !search && rows.length > 0 && <ul className="organization-tree">{tree(null)}</ul>}

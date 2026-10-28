@@ -1,7 +1,7 @@
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient, type Prisma } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "@/server/db";
-import { AccessError } from "@/server/authorization/engine";
+import { AccessError, createAccessContext } from "@/server/authorization/engine";
 import { requirePortalAccess } from "@/server/portals/policy";
 import { operationalEvent } from "@/server/domain/operational-events";
 import { leadPayload, quotePayload } from "./input";
@@ -9,6 +9,15 @@ import { leadPayload, quotePayload } from "./input";
 const grantInput = z.object({ leadId: z.string().min(1), customerEmail: z.string().trim().email().transform(value => value.toLowerCase()), evidence: z.string().trim().min(10).max(1000) }).strict();
 
 export function createLabsCustomerService(client: PrismaClient = prisma) {
+  async function operatorAccess(db: Prisma.TransactionClient, operatorId: string) {
+    const employee = await requirePortalAccess(db, operatorId, "skillcity");
+    const division = await db.organization.findUnique({ where: { slug: "aira-labs" }, select: { id: true, parentId: true, status: true } });
+    if (!division || division.parentId !== employee.companyId || division.status !== "ACTIVE") throw new AccessError("Labs scope unavailable");
+    const ctx = await createAccessContext(operatorId, db, undefined, { organizationId: division.id });
+    await ctx.requireAccess("organization.read", { organizationId: division.id });
+    await ctx.requireAccess("labs.customer.manage", { organizationId: division.id });
+    return { divisionId: division.id, ctx };
+  }
   async function isCustomer(userId: string) {
     const access = await requirePortalAccess(client, userId, "labs");
     const scope = { organizationId: access.divisionId };
@@ -18,8 +27,7 @@ export function createLabsCustomerService(client: PrismaClient = prisma) {
   async function grant(operatorId: string, raw: unknown) {
     const input = grantInput.parse(raw);
     return client.$transaction(async db => {
-      const access = await requirePortalAccess(db, operatorId, "labs");
-      await access.ctx.requireAccess("labs.customer.manage", { organizationId: access.divisionId });
+      const access = await operatorAccess(db, operatorId);
       const lead = await db.executiveRecord.findFirst({ where: { id: input.leadId, organizationId: access.divisionId, kind: "LABS_LEAD" } });
       const customer = await db.user.findUnique({ where: { email: input.customerEmail }, include: { person: true } });
       if (!lead || !customer || customer.status !== "ACTIVE" || customer.person?.status !== "ACTIVE" || !customer.emailVerifiedAt) throw new AccessError("Verified customer and enquiry required");
@@ -38,8 +46,7 @@ export function createLabsCustomerService(client: PrismaClient = prisma) {
 
   async function revoke(operatorId: string, grantId: string) {
     return client.$transaction(async db => {
-      const access = await requirePortalAccess(db, operatorId, "labs");
-      await access.ctx.requireAccess("labs.customer.manage", { organizationId: access.divisionId });
+      const access = await operatorAccess(db, operatorId);
       const row = await db.labsCustomerGrant.findFirst({ where: { id: grantId, organizationId: access.divisionId } });
       if (!row) throw new AccessError("Customer access unavailable");
       if (row.status !== "ACTIVE") return;
@@ -68,8 +75,7 @@ export function createLabsCustomerService(client: PrismaClient = prisma) {
     return records;
   }
   async function grantsForLead(operatorId: string, leadId: string) {
-    const access = await requirePortalAccess(client, operatorId, "labs");
-    await access.ctx.requireAccess("labs.customer.manage", { organizationId: access.divisionId });
+    const access = await operatorAccess(client, operatorId);
     return client.labsCustomerGrant.findMany({ where: { leadId, organizationId: access.divisionId }, select: { id: true, status: true, customer: { select: { email: true } } }, take: 25 });
   }
   return { isCustomer, grant, revoke, grantsForLead, dashboard };

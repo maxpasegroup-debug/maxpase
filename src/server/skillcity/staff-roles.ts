@@ -38,8 +38,8 @@ const requiredCapabilities: Record<string, string[]> = {
   "labs-business-development-manager": ["organization.read", "notification.read", "labs.sales.self", "labs.sales.read", "labs.sales.manage"]
 };
 
-export function staffPortalForRole(key: string): "labs" | "skillcity" {
-  return labsStaffRoleKeys.some(role => role === key) ? "labs" : "skillcity";
+export function staffPortalForRole(_key: string): "skillcity" {
+  return "skillcity";
 }
 
 export function isPreparedStaffRole(key: string, organizationSlug: string) {

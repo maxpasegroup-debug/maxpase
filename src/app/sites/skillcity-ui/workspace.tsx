@@ -16,9 +16,10 @@ import { ManagerDesk } from "./manager-desk";
 import { DeveloperWorkspace } from "./developer-workspace";
 import { DeveloperAssignments } from "./developer-assignments";
 import { CrossBrandQueue } from "./cross-brand-queue";
+import { LabsBusinessDevelopment } from "./labs-business-development";
 
 type Dashboard = Awaited<ReturnType<typeof skillCityEmployeeDashboard.dashboard>>;
-const labels: Record<EmployeeView,string> = { advisor: "Advisory", director: "Director", manager: "Manager desk", developer: "Labs delivery" };
+const labels: Record<EmployeeView,string> = { advisor: "Advisory", director: "Director", manager: "Manager desk", developer: "Labs delivery", "business-development": "Labs business development" };
 const leadNext: Record<string,string[]> = { NEW: ["NEW", "CONTACTED", "LOST"], CONTACTED: ["CONTACTED", "QUALIFIED", "LOST"], QUALIFIED: ["QUALIFIED", "AUDIT", "LOST"], AUDIT: ["AUDIT", "QUOTATION_READY", "LOST"], QUOTATION_READY: ["QUOTATION_READY", "LOST"] };
 const date = (value: Date | string | null | undefined) => value ? new Date(value).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" }) + " IST" : "Not scheduled";
 
@@ -40,12 +41,15 @@ export function SkillCityWorkspace({ data, email, userId, base, home }: { data: 
         <ManagerDesk userId={userId}/>
         <CrossBrandQueue userId={userId} mode="TEAM"/>
         <DeveloperAssignments userId={userId}/>
+        <section className="sc-section"><h2>Startup Skool operations</h2><p>Programme decisions require verified authority and separate enrollment evidence.</p><p><Link href={`${base}?view=startup-applications`}>Application reviews</Link> · <Link href={`${base}?view=founder-management`}>Founder learning desk</Link> · <Link href={`${base}?view=pilot`}>Kerala pilot register</Link></p></section>
+        {data.data.canManageLabsCustomers && <section className="sc-section"><h2>Labs customer access</h2><p>Grant a verified existing Labs customer account access to its matching enquiry. The account must already have a dedicated PIN, verified email, consent and customer role. An email match alone is insufficient.</p><WorkForm actionName="LABS_CUSTOMER_GRANT" reference={randomUUID()} label="Grant verified access" confirm="Have you independently verified the customer identity, consent and enquiry relationship?"><label>Enquiry ID<input name="leadId" required/></label><label>Verified customer email<input name="customerEmail" type="email" required/></label><label>Verification evidence<textarea name="evidence" required minLength={10} maxLength={1000}/></label></WorkForm></section>}
         <section className="sc-section"><h2>Divisions and exceptions</h2><div className="sc-pipelines">{data.data.divisions.map(division=><article key={division.id}><h3>{division.name}</h3><dl><div><dt>Open projects</dt><dd>{division.projects??"Not authorized"}</dd></div><div><dt>Open tasks</dt><dd>{division.tasks??"Not authorized"}</dd></div><div><dt>Active programs</dt><dd>{division.programs??"Not authorized"}</dd></div><div><dt>Division memberships</dt><dd>{division.people??"Not authorized"}</dd></div><div><dt>Blocked projects</dt><dd>{division.blockers??"Not authorized"}</dd></div><div><dt>Open sales leads</dt><dd>{division.sales??"Not configured or not authorized"}</dd></div></dl></article>)}</div></section>
         <DirectorDirectives userId={userId} organizationId={data.companyId}/>
         {"crm" in data.data && <DirectorCrm pipelines={data.data.crm}/>}
         {"staff" in data.data && data.data.staff.length > 0 && <section className="sc-section"><h2>Employee onboarding</h2>{data.data.staff.map(scope => <details key={scope.organizationId}><summary>{scope.name}</summary><StaffDraftForm action={skillCityStaffDraftAction} organizationId={scope.organizationId} roles={scope.roles} managers={scope.managers} existingPeople={scope.existingPeople}/><StaffInvitePanel rows={scope.drafts} action={skillCityStaffInviteAction} deliveryReady={data.data.inviteDeliveryReady}/></details>)}</section>}
       </>}
       {data.view==="developer"&&data.data&&"projects" in data.data&&<DeveloperWorkspace desk={data.data}/>}
+      {data.view==="business-development"&&data.data&&"records" in data.data&&<LabsBusinessDevelopment desk={data.data}/>}
     </div></div>
   </main>;
 }

@@ -112,7 +112,12 @@ export function createBusinessService(client: PrismaClient = prisma, createAcces
             const existing = await company(recordId);
             organizationId = existing.organizationId;
             const org = await db.organization.findUniqueOrThrow({ where: { id: organizationId } });
+            if (existing.status === "ARCHIVED" && data.status !== "ARCHIVED") throw new BusinessError("Archived company reactivation requires controlled review");
             if (groupOrganizationId !== undefined && (groupOrganizationId ?? null) !== org.parentId) throw new BusinessError("Moving a company between groups requires a future controlled migration");
+            if (data.status === "ARCHIVED" && existing.status !== "ARCHIVED") {
+              const linked = await Promise.all([db.organization.count({ where: { parentId: organizationId } }), db.brand.count({ where: { organizationId } }), db.product.count({ where: { organizationId } }), db.membership.count({ where: { organizationId } })]);
+              if (linked.some(Boolean)) throw new BusinessError("Company has linked records; registry archive requires a separate controlled review");
+            }
             resource = await db.companyProfile.update({ where: { id: recordId }, data: profile });
             await db.organization.update({ where: { id: organizationId }, data });
           } else {
@@ -221,7 +226,18 @@ export function createBusinessService(client: PrismaClient = prisma, createAcces
               if (programs.some(p => divisionId && p.organizationId !== divisionId || p.brandId && p.brandId !== brandId)) throw new BusinessError("Product relationship conflicts with a linked program");
             }
           }
-          if (kind === "brands") { const d = input.brandInput.parse(raw); resource = recordId ? await db.brand.update({ where: { id: recordId }, data: d }) : await db.brand.create({ data: d }); }
+          if (kind === "brands") {
+            const d = input.brandInput.parse(raw);
+            if (recordId && (await db.brand.findUniqueOrThrow({ where: { id: recordId } })).status === "ARCHIVED" && d.status !== "ARCHIVED") throw new BusinessError("Archived brand reactivation requires controlled review");
+            if (recordId && d.status === "ARCHIVED") {
+              const old = await db.brand.findUniqueOrThrow({ where: { id: recordId } });
+              if (old.status !== "ARCHIVED") {
+                const linked = await Promise.all([db.product.count({ where: { brandId: recordId } }), db.project.count({ where: { brandId: recordId } }), db.program.count({ where: { brandId: recordId } })]);
+                if (linked.some(Boolean)) throw new BusinessError("Brand has linked work; archive requires a separate controlled review");
+              }
+            }
+            resource = recordId ? await db.brand.update({ where: { id: recordId }, data: d }) : await db.brand.create({ data: d });
+          }
           else {
             const d = input.productInput.parse(raw);
             const prior = recordId ? await db.product.findUniqueOrThrow({ where: { id: recordId } }) : null;

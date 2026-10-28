@@ -2,7 +2,6 @@ import type { Prisma } from "@prisma/client";
 import { AccessError, createAccessContext } from "@/server/authorization/engine";
 import { siteById, type PortalId } from "./sites";
 import { accountPortalRealm } from "@/server/auth/account-realm";
-import { labsStaffRoleKeys } from "@/server/skillcity/staff-roles";
 
 const skillCityStaffRoles = new Set(["Director", "Division Director", "Business Development & Operations Manager", "Senior Academic Advisor", "Junior Academic Advisor", "Software Developer", "Full Stack Developer", "Junior Developer"]);
 
@@ -38,10 +37,7 @@ export async function requirePortalAccess(db: Prisma.TransactionClient, userId: 
   if (id === "labs") {
     const user = await db.user.findUnique({ where: { id: userId }, select: { personId: true, emailVerifiedAt: true, person: { select: { metadata: true } } } });
     const metadata = JSON.parse(user?.person?.metadata ?? "{}");
-    if (metadata.credentialKind === "STAFF_PASSWORD") {
-      if (accountPortalRealm(user?.person?.metadata) !== "labs" || !user?.emailVerifiedAt || !user.personId ||
-        !(await db.membership.findFirst({ where: { personId: user.personId, organizationId: division.id, status: "ACTIVE", roles: { some: { role: { status: "ACTIVE", principalType: "HUMAN", key: { in: [...labsStaffRoleKeys] } } } } } }))) throw new AccessError("Verified Labs employee appointment required");
-    }
+    if (accountPortalRealm(user?.person?.metadata) !== "labs" || metadata.credentialKind !== "LABS_PIN") throw new AccessError("Labs is for verified customer accounts; employees use Skill City");
   }
   if (id === "labs" && !credentialSetup) {
     const user = await db.user.findUnique({ where: { id: userId }, select: { person: { select: { metadata: true } } } });

@@ -25,15 +25,14 @@ import { BossWorkspace } from "@/app/app/nicejobs/boss-workspace";
 import { isNiceJobsControlView } from "@/lib/nicejobs-control-navigation";
 import { ParticipantDashboard } from "@/app/app/nicejobs/participant-dashboard";
 import { isParticipantDashboardView } from "@/lib/nicejobs-dashboard";
-import { LabsWorkspace } from "../../labs-ui/workspace";
 import { LabsCustomerWorkspace } from "../../labs-ui/customer-workspace";
 import { labsCustomerService } from "@/server/labs/customer";
 import { StartupStudentWorkspace } from "../../startup-ui/student-workspace";
+import { StartupApplicantWorkspace, StartupReviewWorkspace } from "../../startup-ui/applicant-workspace";
+import { StartupFounderWorkspace, StartupFounderManagerWorkspace } from "../../startup-ui/founder-workspace";
+import { StartupPilotRegisterWorkspace } from "../../startup-ui/pilot-register-workspace";
 import { skillCityEmployeeDashboard, employeeViews } from "@/server/skillcity/employee-dashboard";
 import { SkillCityWorkspace } from "../../skillcity-ui/workspace";
-import { skillCityDeveloperDesk } from "@/server/skillcity/developer-desk";
-import { DeveloperWorkspace } from "../../skillcity-ui/developer-workspace";
-import { labsDeveloperRoleKeys, labsStaffRoleKeys, labsStaffViewsForRole } from "@/server/skillcity/staff-roles";
 const views = ["overview", "programs", "projects", "tasks", "goals"];
 export default async function Gateway({ params, searchParams }: { params: Promise<{ site: string }>; searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const { site, paths } = await requestPortal((await params).site), query = await searchParams;
@@ -42,6 +41,10 @@ export default async function Gateway({ params, searchParams }: { params: Promis
   if(site.id==="labs"&&session.needsPinChange)redirect(paths.gateway.replace(/\/gateway$/,"")+"/pin");
   await consumeSecurityBudget(securityKey("authenticated", session.userId), 300, 60);
   const view = typeof query.view === "string" ? query.view : "overview";
+  let startupCanReview = false;
+  if (site.id === "skillcity" && view === "startup-applications") return <StartupReviewWorkspace userId={session.userId} email={session.email} home={paths.gateway}/>;
+  if (site.id === "skillcity" && view === "founder-management") return <StartupFounderManagerWorkspace userId={session.userId} email={session.email} home={paths.gateway}/>;
+  if (site.id === "skillcity" && view === "pilot") return <StartupPilotRegisterWorkspace userId={session.userId} email={session.email} home={paths.gateway} gateway={paths.gateway}/>;
   if (site.id === "skillcity" && (!query.view || employeeViews.includes(view as typeof employeeViews[number]))) {
     let data;
     try { data = await skillCityEmployeeDashboard.dashboard(session.userId, typeof query.view === "string" ? view : undefined); }
@@ -52,29 +55,24 @@ export default async function Gateway({ params, searchParams }: { params: Promis
     return <SkillCityWorkspace data={data} email={session.email} userId={session.userId} base={paths.gateway} home={paths.home}/>;
   }
   if (site.id === "skillcity") notFound();
-  if (site.id === "labs") {
-    const staff = await prisma.membership.findFirst({ where: { person: { users: { some: { id: session.userId, status: "ACTIVE", emailVerifiedAt: { not: null } } } }, organization: { slug: "aira-labs" }, status: "ACTIVE", roles: { some: { role: { status: "ACTIVE", principalType: "HUMAN", key: { in: [...labsStaffRoleKeys] } } } } }, select: { roles: { where: { role: { status: "ACTIVE", principalType: "HUMAN", key: { in: [...labsStaffRoleKeys] } } }, select: { role: { select: { key: true } } } } } });
-    const developerRole = staff?.roles.find(item => labsDeveloperRoleKeys.some(key => key === item.role.key));
-    if (developerRole) {
-      if (query.view && !labsStaffViewsForRole(developerRole.role.key).includes(view)) notFound();
-      const desk = await skillCityDeveloperDesk.workspace(session.userId);
-      return <main className="sc-workspace portal-labs"><header className="portal-header"><Link href={paths.home}>AIRA Labs</Link><span>{session.email}</span><form action={portalLogoutAction}><input type="hidden" name="site" value="labs"/><button>Sign out</button></form></header><DeveloperWorkspace desk={desk} portal="labs"/></main>;
-    }
-    if (staff?.roles.some(item => item.role.key === "labs-business-development-manager")) {
-      if (!labsStaffViewsForRole("labs-business-development-manager").includes(view)) notFound();
-      return <LabsWorkspace userId={session.userId} email={session.email} base={paths.gateway} home={paths.home} query={query} businessDevelopmentManager/>;
-    }
-  }
   if (site.id === "labs" && await labsCustomerService.isCustomer(session.userId)) {
     if (view !== "overview") notFound();
     return <LabsCustomerWorkspace userId={session.userId} email={session.email} home={paths.home}/>;
   }
-  if(site.id==="labs"&&["overview","sales","projects","people","finance","settings"].includes(view))return <LabsWorkspace userId={session.userId} email={session.email} base={paths.gateway} home={paths.home} query={query}/>;
+  if (site.id === "labs") notFound();
   if (site.id === "startup") {
     const access = await requirePortalAccess(prisma, session.userId, "startup");
-    if (!(await access.ctx.decide("program.manage", { organizationId: access.divisionId })).allowed) {
+    startupCanReview = (await access.ctx.decide("program.manage", { organizationId: access.divisionId })).allowed;
+    const identity = await prisma.user.findUnique({ where: { id: session.userId }, select: { person: { select: { metadata: true } } } });
+    if (JSON.parse(identity?.person?.metadata ?? "{}").authenticationRealm === "startup") {
+      if (view === "founder") return <StartupFounderWorkspace userId={session.userId} email={session.email} home={paths.home}/>;
       if (view !== "overview") notFound();
-      return <StartupStudentWorkspace userId={session.userId} email={session.email} home={paths.home}/>;
+      return <StartupApplicantWorkspace userId={session.userId} email={session.email} home={paths.home} gateway={paths.gateway}/>;
+    }
+    if (view === "founder") return <StartupFounderWorkspace userId={session.userId} email={session.email} home={paths.home}/>;
+    if (!startupCanReview) {
+      if (view !== "overview") notFound();
+      return <StartupStudentWorkspace userId={session.userId} email={session.email} home={paths.home} gateway={paths.gateway}/>;
     }
   }
   if (site.id === "jobs" && (isNiceJobsControlView(view, query) || !query.view && (await employeeService.navigation(session.userId)).command)) {
@@ -114,5 +112,5 @@ export default async function Gateway({ params, searchParams }: { params: Promis
   const programs = view === "programs", rows = programs ? data.programs.map(p => ({ ...p, title: p.name, dueAt: null })) : data.records;
   const workspaceName = { skillcity: "SKILL CITY WORKSPACE", startup: "STARTUP WORKSPACE", labs: "LABS WORKSPACE", jobs: "CAREER HUB" }[site.id];
   const training = site.id === "jobs" ? await onboardingService.navigation(session.userId) : null;
-  return <main className={`portal-workspace portal-${site.theme}`}><header className="portal-header"><Link className="portal-wordmark" href={paths.home}>{site.name}<span>GATEWAY</span></Link><form action={portalLogoutAction}><input type="hidden" name="site" value={site.id} /><button className="portal-button">Sign out</button></form></header><div className="portal-workspace-inner"><header className="portal-workspace-heading"><p className="portal-kicker">{workspaceName}</p><h1>{view === "overview" ? "Your gateway" : view[0].toUpperCase() + view.slice(1)}</h1><p className="muted">{session.email}</p></header><nav className="portal-workspace-nav" aria-label="Gateway views">{(site.id === "jobs" ? [...views, "opportunities", "my-applications", "applications", "templates", "workforce"] : views).map(v => <Link key={v} href={`${paths.gateway}?view=${v}`} aria-current={view === v ? "page" : undefined}>{v[0].toUpperCase() + v.slice(1)}</Link>)}{training && [["my-onboarding", "My Onboarding", training.own], ["onboarding", "Onboarding", training.manage], ["my-reviews", "My Reviews", training.reviews]].filter(([, , allowed]) => allowed).map(([key, label]) => <Link key={String(key)} href={`${paths.gateway}?view=${key}`}>{label}</Link>)}</nav><section className="portal-records"><h2>{view === "overview" ? "Your available work" : programs ? "Programs" : "Records"}</h2>{!rows.length && <p className="executive-empty">NO DATA</p>}<ul>{rows.map(r => <li key={r.id}><div><strong>{r.title}</strong><span>{r.status.replaceAll("_", " ")}</span></div>{r.dueAt && <time dateTime={r.dueAt.toISOString()}>{r.dueAt.toISOString().slice(0, 10)} UTC</time>}</li>)}</ul>{data.nextCursor && <Link className="portal-button" href={`${paths.gateway}?view=${view}&cursor=${encodeURIComponent(data.nextCursor)}`}>Next page</Link>}</section></div></main>;
+  return <main className={`portal-workspace portal-${site.theme}`}><header className="portal-header"><Link className="portal-wordmark" href={paths.home}>{site.name}<span>GATEWAY</span></Link><form action={portalLogoutAction}><input type="hidden" name="site" value={site.id} /><button className="portal-button">Sign out</button></form></header><div className="portal-workspace-inner"><header className="portal-workspace-heading"><p className="portal-kicker">{workspaceName}</p><h1>{view === "overview" ? "Your gateway" : view[0].toUpperCase() + view.slice(1)}</h1><p className="muted">{session.email}</p></header><nav className="portal-workspace-nav" aria-label="Gateway views">{(site.id === "jobs" ? [...views, "opportunities", "my-applications", "applications", "templates", "workforce"] : site.id === "startup" && startupCanReview ? [...views, "applications", "founder-management", "pilot"] : views).map(v => <Link key={v} href={`${paths.gateway}?view=${v}`} aria-current={view === v ? "page" : undefined}>{v[0].toUpperCase() + v.slice(1)}</Link>)}{training && [["my-onboarding", "My Onboarding", training.own], ["onboarding", "Onboarding", training.manage], ["my-reviews", "My Reviews", training.reviews]].filter(([, , allowed]) => allowed).map(([key, label]) => <Link key={String(key)} href={`${paths.gateway}?view=${String(key)}`}>{label}</Link>)}</nav><section className="portal-records"><h2>{view === "overview" ? "Your available work" : programs ? "Programs" : "Records"}</h2>{!rows.length && <p className="executive-empty">NO DATA</p>}<ul>{rows.map(r => <li key={r.id}><div><strong>{r.title}</strong><span>{r.status.replaceAll("_", " ")}</span></div>{r.dueAt && <time dateTime={r.dueAt.toISOString()}>{r.dueAt.toISOString().slice(0, 10)} UTC</time>}</li>)}</ul>{data.nextCursor && <Link className="portal-button" href={`${paths.gateway}?view=${view}&cursor=${encodeURIComponent(data.nextCursor)}`}>Next page</Link>}</section></div></main>;
 }

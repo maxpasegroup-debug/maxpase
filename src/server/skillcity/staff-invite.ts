@@ -13,7 +13,7 @@ import { hasStaffWorkspaceCapabilities, isPreparedStaffRole, staffPortalForRole 
 const settings = z.object({ SKILLCITY_EMAIL_AUTH_ENABLED: z.literal("true"), RESEND_API_KEY: z.string().min(10), SKILLCITY_AUTH_FROM: z.email(), SKILLCITY_OTP_SECRET: z.string().min(32).refine(v => !/replace-with|changeme|dev-only/i.test(v)) });
 const sendInput = z.object({ userId: z.string().min(1), verificationEvidence: z.string().trim().min(10).max(1000) }).strict();
 const password = z.string().min(12).max(72).refine(v => Buffer.byteLength(v, "utf8") <= 72);
-const activateInput = z.object({ challengeId: z.uuid(), code: z.string().regex(/^[0-9]{6}$/), password, confirmPassword: z.string(), portal: z.enum(["skillcity", "labs"]).default("skillcity") }).strict().refine(v => v.password === v.confirmPassword);
+const activateInput = z.object({ challengeId: z.uuid(), code: z.string().regex(/^[0-9]{6}$/), password, confirmPassword: z.string(), portal: z.literal("skillcity").default("skillcity") }).strict().refine(v => v.password === v.confirmPassword);
 const otpHash = (id: string, code: string, secret: string) => createHash("sha256").update(`${id}:${code}:${secret}`).digest("hex");
 
 export function createStaffInvite(client: PrismaClient = prisma, env: Record<string, string | undefined> = process.env, now = () => new Date(), transport: typeof fetch = fetch) {
@@ -45,7 +45,7 @@ export function createStaffInvite(client: PrismaClient = prisma, env: Record<str
       const ctx = await createAccessContext(actorUserId, db, undefined, { organizationId: membership.organizationId });
       for (const permission of ["user.update", "person.update", "membership.manage", "membership.assign_role"]) await ctx.requireAccess(permission, { organizationId: membership.organizationId });
       const role = membership.roles[0]?.role;
-      if (!role || !memberScope || !isPreparedStaffRole(role.key, memberScope.slug) || metadata.authenticationRealm !== staffPortalForRole(role.key) || role.organizationId !== membership.organizationId || !hasStaffWorkspaceCapabilities(role.key, role.permissions.map(item => item.permission.key))) throw new AccessError("Role permissions are not prepared");
+      if (!role || !memberScope || !isPreparedStaffRole(role.key, memberScope.slug) || !((metadata.authenticationRealm === "skillcity" || memberScope.slug === "aira-labs" && metadata.authenticationRealm === "labs") && metadata.credentialKind === "STAFF_PASSWORD") || role.organizationId !== membership.organizationId || !hasStaffWorkspaceCapabilities(role.key, role.permissions.map(item => item.permission.key))) throw new AccessError("Role permissions are not prepared");
       if (role.name === "Director" || role.name === "Division Director") {
         await createBossService(client).authority(actorUserId, db);
         if (membership.scope !== (role.name === "Director" ? "DESCENDANTS" : "ORGANIZATION") || !role.permissions.some(item => item.permission.key === "decision.decide")) throw new AccessError("Director authority is not prepared");
@@ -61,12 +61,12 @@ export function createStaffInvite(client: PrismaClient = prisma, env: Record<str
       if (await db.emailAuthChallenge.findFirst({ where: { userId: user.id, purpose: "STAFF_INVITE", createdAt: { gt: new Date(now().getTime() - 60000) } } })) throw new AccessError("Wait before requesting another invitation");
       await db.emailAuthChallenge.updateMany({ where: { userId: user.id, purpose: "STAFF_INVITE", status: { in: ["PENDING", "SENT"] } }, data: { status: "CANCELLED" } });
       await db.emailAuthChallenge.create({ data: { id, userId: user.id, email: user.email, purpose: "STAFF_INVITE", otpHash: otpHash(id, code, config.SKILLCITY_OTP_SECRET), credentialHash: "", expiresAt: new Date(now().getTime() + 86400000) } });
-      await db.person.update({ where: { id: user.personId! }, data: { metadata: JSON.stringify({ ...metadata, identityVerification: "MANAGER_ATTESTED", staffOnboarding: "INVITED", verificationEvidence: data.verificationEvidence }) } });
+      await db.person.update({ where: { id: user.personId! }, data: { metadata: JSON.stringify({ ...metadata, authenticationRealm: "skillcity", identityVerification: "MANAGER_ATTESTED", staffOnboarding: "INVITED", verificationEvidence: data.verificationEvidence }) } });
       await operationalEvent(db, { actorUserId, actorPersonId: ctx.user!.personId, organizationId: membership.organizationId, action: "staff.invitation_requested", entityType: "User", entityId: user.id, result: "SUCCESS", metadata: { challengeId: id, roleId: role.id } });
-      return { email: user.email, organizationId: membership.organizationId, portal: staffPortalForRole(role.key) };
+      return { email: user.email, organizationId: membership.organizationId };
     });
     try {
-      const domain = target.portal === "labs" ? "airalabs.online" : "airaskillcity.com";
+      const domain = "airaskillcity.com";
       const response = await transport("https://api.resend.com/emails", { method: "POST", redirect: "error", signal: AbortSignal.timeout(8000), headers: { Authorization: `Bearer ${config.RESEND_API_KEY}`, "Content-Type": "application/json", "Idempotency-Key": `staff-invite/${id}` }, body: JSON.stringify({ from: config.SKILLCITY_AUTH_FROM, to: [target.email], subject: "Activate your AIRA workplace account", text: `Your AIRA workplace activation code is ${code}. Open https://${domain}/activate?challenge=${id} and enter this code. It expires in 24 hours. Do not share it.` }) });
       if (!response.ok) throw new Error("Email provider unavailable");
       const receipt = z.object({ id: z.string().min(1) }).parse(await response.json());

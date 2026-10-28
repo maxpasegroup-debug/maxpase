@@ -16,6 +16,7 @@ import { advisorCrm } from "@/server/skillcity/crm";
 import { staffInvite } from "@/server/skillcity/staff-invite";
 import { skillCityManagerDesk } from "@/server/skillcity/manager-desk";
 import { skillCityDeveloperDesk } from "@/server/skillcity/developer-desk";
+import { labsCustomerService } from "@/server/labs/customer";
 
 export type SkillCityActionState = { error?: string; message?: string };
 const field = (form: FormData, name: string) => String(form.get(name) ?? "");
@@ -36,6 +37,15 @@ export async function skillCityWorkAction(_state: SkillCityActionState, form: Fo
     } else if (field(form, "action") === "CRM_CREATE") {
       await skillCityEmployeeDashboard.dashboard(session.userId, "director");
       await advisorCrm.create(session.userId, { product: field(form, "product"), ownerUserId: field(form, "ownerUserId"), name: field(form, "name"), email: field(form, "email"), phone: field(form, "phone"), need: field(form, "need"), consent: form.get("consent") === "true", reference });
+    } else if (field(form, "action") === "LABS_CREATE") {
+      await skillCityEmployeeDashboard.dashboard(session.userId, "business-development");
+      await skillCityLabsService.createLead(session.userId, { company: field(form, "company"), name: field(form, "name"), email: field(form, "email"), phone: field(form, "phone"), need: field(form, "need"), source: "MANUAL", consent: form.get("consent") === "on" });
+    } else if (field(form, "action") === "LABS_UPDATE") {
+      await skillCityEmployeeDashboard.dashboard(session.userId, "business-development");
+      await skillCityLabsService.updateLead(session.userId, { id: field(form, "id"), version: Number(field(form, "version")), reference, status: field(form, "status"), outcome: field(form, "outcome"), qualification: field(form, "qualification"), nextFollowUp: field(form, "nextFollowUp") || null });
+    } else if (field(form, "action") === "LABS_CUSTOMER_GRANT") {
+      await skillCityEmployeeDashboard.dashboard(session.userId, "director");
+      await labsCustomerService.grant(session.userId, { leadId: field(form, "leadId"), customerEmail: field(form, "customerEmail"), evidence: field(form, "evidence") });
     } else if (field(form, "action") === "TASK") {
       await skillCityEmployeeDashboard.dashboard(session.userId, "developer");
       await skillCityDeveloperDesk.updateOwnTask(session.userId, { taskId: field(form, "taskId"), revision: Number(field(form, "revision")), description: field(form, "description"), status: field(form, "status"), reference });

@@ -96,7 +96,7 @@ export function createStaffOnboardingService(client: PrismaClient = prisma) {
       if (invited.length !== 1 || invited[0].roles.length !== 1) throw new AccessError("Staff scope requires review");
       const membership = invited[0], role = membership.roles[0].role;
       const scope = await db.organization.findUnique({ where: { id: membership.organizationId }, select: { slug: true, parent: { select: { slug: true } } } });
-      if (!scope || !(scope.slug === "aira-skill-city" || scope.parent?.slug === "aira-skill-city") || !isPreparedStaffRole(role.key, scope.slug) || metadata.authenticationRealm !== staffPortalForRole(role.key) || role.organizationId !== membership.organizationId || role.status !== "ACTIVE") throw new AccessError("Staff role requires review");
+      if (!scope || !(scope.slug === "aira-skill-city" || scope.parent?.slug === "aira-skill-city") || !isPreparedStaffRole(role.key, scope.slug) || (metadata.authenticationRealm !== staffPortalForRole(role.key) && !(scope.slug === "aira-labs" && metadata.authenticationRealm === "labs" && metadata.credentialKind === "STAFF_PASSWORD")) || role.organizationId !== membership.organizationId || role.status !== "ACTIVE") throw new AccessError("Staff role requires review");
       const ctx = await createAccessContext(actorUserId, db, undefined, { organizationId: membership.organizationId });
       for (const key of ["person.update", "user.update", "membership.manage", "reporting.manage"]) await ctx.requireAccess(key, { organizationId: membership.organizationId });
       if (!["Director", "Division Director"].includes(role.name) && !input.managerUserId) throw new AccessError("Manager decision required");

@@ -10,6 +10,8 @@ Phase 2 extends the explicit `initializeGroupStructure` operator transaction. It
 
 These records express reviewed **ownership and draft identity**, not reviewed selling terms. The generic business editor cannot change these controlled slugs to `ACTIVE` or `LIVE`, or silently change their names, division or brand. A future publication workflow must validate approved terms, legal issuer, product owner, independent approver and audit evidence before enabling sales. No prices, benefits, targets, tax rules or external messages are configured here.
 
+Later owner direction proposes AIRA Startup Skool as a standalone entity and three PBA tiers. Its legal identity, issuer, tax treatment and transfer of this existing draft remain unverified; see [Startup Skool Phase 1 business foundation](STARTUP_SKOOL_BUSINESS_FOUNDATION.md). This historical Phase 2 record is not authorization to move the PBA draft or publish the proposed fees.
+
 ## In-house position requirement
 
 `Senior Academic Advisor` is recorded in source-controlled draft configuration for AIRA SKILL CITY PRIVATE LIMITED. The owner-stated salary is **INR 18,000 per month** (`INR` 1,800,000 minor units). Its intended scope is BGOS, PBA and GenZ Builder. This is **not** a Nice Jobs part-time opportunity, employee account, employment agreement, payroll entry or wage obligation. Its manager person ID, agreement approval and payroll configuration are null. The existing canonical designation remains available, but assigning it to a person is a separate authorized action.

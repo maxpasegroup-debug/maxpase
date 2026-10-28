@@ -5,8 +5,8 @@ import { prisma } from "@/server/db";
 import { createAuthenticationService } from "@/server/auth/service";
 import { hashPassword, verifyPassword } from "@/server/auth/password";
 import { requirePortalAccess } from "@/server/portals/policy";
+import { AccessError, createAccessContext } from "@/server/authorization/engine";
 import { createSecurityLimiter, securityKey } from "@/server/security/rate-limit";
-import { AccessError } from "@/server/authorization/engine";
 import { operationalEvent } from "@/server/domain/operational-events";
 import { buildAuditEventData } from "@/server/audit/audit-service";
 
@@ -50,9 +50,13 @@ export function createLabsPin(client: PrismaClient = prisma) {
     pin.parse(initialPin);
     const hash = await hashPassword(initialPin);
     await client.$transaction(async db => {
-      const operator = await requirePortalAccess(db, operatorId, "labs");
-      await operator.ctx.requireAccess("user.update", { organizationId: operator.divisionId });
-      await operator.ctx.requireAccess("person.update", { organizationId: operator.divisionId });
+      const employee = await requirePortalAccess(db, operatorId, "skillcity");
+      const division = await db.organization.findUnique({ where: { slug: "aira-labs" }, select: { id: true, parentId: true, status: true } });
+      if (!division || division.parentId !== employee.companyId || division.status !== "ACTIVE") throw new AccessError("Labs scope unavailable");
+      const ctx = await createAccessContext(operatorId, db, undefined, { organizationId: division.id });
+      await ctx.requireAccess("organization.read", { organizationId: division.id });
+      await ctx.requireAccess("user.update", { organizationId: division.id });
+      await ctx.requireAccess("person.update", { organizationId: division.id });
       await requirePortalAccess(db, targetUserId, "labs", true);
       const target = await db.user.findUniqueOrThrow({ where: { id: targetUserId }, include: { person: true } });
       const metadata = JSON.parse(target.person?.metadata ?? "{}");
@@ -62,7 +66,7 @@ export function createLabsPin(client: PrismaClient = prisma) {
       await db.user.update({ where: { id: targetUserId }, data: { passwordHash: hash } });
       await db.person.update({ where: { id: target.person.id }, data: { metadata: JSON.stringify({ ...metadata, authenticationRealm: "labs", credentialKind: "LABS_PIN", labsPinChangeRequired: true }) } });
       await db.session.deleteMany({ where: { userId: targetUserId } });
-      await operationalEvent(db, { actorUserId: operatorId, actorPersonId: operator.ctx.user!.personId, organizationId: operator.divisionId, action: "labs.pin_provisioned", entityType: "User", entityId: targetUserId, result: "SUCCESS" });
+      await operationalEvent(db, { actorUserId: operatorId, actorPersonId: ctx.user!.personId, organizationId: division.id, action: "labs.pin_provisioned", entityType: "User", entityId: targetUserId, result: "SUCCESS" });
     });
   }
   return { login, rotate, provision };

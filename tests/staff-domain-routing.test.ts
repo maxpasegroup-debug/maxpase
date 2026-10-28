@@ -3,11 +3,11 @@ import { staffPortalForRole, isPreparedStaffRole, labsStaffViewsForRole, hasStaf
 import { siteByHost } from "@/server/portals/sites";
 
 describe("AIRA staff domain routing", () => {
-  it("routes Labs-only employees to the Labs authentication realm", () => {
+  it("routes Labs employees through Skill City while keeping Labs as a customer domain", () => {
     for (const key of ["labs-software-developer", "labs-full-stack-developer", "labs-junior-developer", "labs-business-development-manager"]) {
       expect(isPreparedStaffRole(key, "aira-labs")).toBe(true);
       expect(isPreparedStaffRole(key, "aira-startup-school")).toBe(false);
-      expect(staffPortalForRole(key)).toBe("labs");
+      expect(staffPortalForRole(key)).toBe("skillcity");
     }
     expect(siteByHost("airalabs.online")?.id).toBe("labs");
   });

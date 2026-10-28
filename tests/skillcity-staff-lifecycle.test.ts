@@ -45,15 +45,15 @@ describe("Skill City Boss employee lifecycle", () => {
     expect((await db.reportingRelationship.findFirstOrThrow({ where: { personId: user.personId!, organizationId: labsId } })).status).toBe("INACTIVE");
     expect(await db.auditEvent.count({ where: { entityId: user.id, action: "staff.onboarding_draft_created" } })).toBe(1);
     await invite.send(bossId, { userId: user.id, verificationEvidence: "synthetic identity checked" });
-    expect(invitationText).toContain("https://airalabs.online/activate");
+    expect(invitationText).toContain("https://airaskillcity.com/activate");
     const challenge = await db.emailAuthChallenge.findFirstOrThrow({ where: { userId: user.id, purpose: "STAFF_INVITE" } });
     expect(challenge.status).toBe("SENT");
-    await expect(invite.activate({ challengeId: challenge.id, code, password: "synthetic-password-123", confirmPassword: "synthetic-password-123", portal: "skillcity" })).rejects.toThrow();
-    await invite.activate({ challengeId: challenge.id, code, password: "synthetic-password-123", confirmPassword: "synthetic-password-123", portal: "labs" });
+    await expect(invite.activate({ challengeId: challenge.id, code, password: "synthetic-password-123", confirmPassword: "synthetic-password-123", portal: "labs" })).rejects.toThrow();
+    await invite.activate({ challengeId: challenge.id, code, password: "synthetic-password-123", confirmPassword: "synthetic-password-123", portal: "skillcity" });
     expect((await db.user.findUniqueOrThrow({ where: { id: user.id } })).status).toBe("ACTIVE");
     expect((await db.reportingRelationship.findFirstOrThrow({ where: { personId: user.personId!, organizationId: labsId } })).status).toBe("ACTIVE");
-    expect(await createAuthenticationService(db).loginPortal({ email: address, password: "synthetic-password-123" }, secret, "labs")).not.toBeNull();
-    expect(await createAuthenticationService(db).loginPortal({ email: address, password: "synthetic-password-123" }, secret, "skillcity")).toBeNull();
+    expect(await createAuthenticationService(db).loginPortal({ email: address, password: "synthetic-password-123" }, secret, "labs")).toBeNull();
+    expect(await createAuthenticationService(db).loginPortal({ email: address, password: "synthetic-password-123" }, secret, "skillcity")).not.toBeNull();
     await expect(invite.activate({ challengeId: challenge.id, code, password: "synthetic-password-123", confirmPassword: "synthetic-password-123", portal: "labs" })).rejects.toThrow();
   });
   it("reuses an eligible unclaimed AIRA Person but refuses duplicate and foreign identities", async () => {

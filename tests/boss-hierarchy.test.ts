@@ -14,7 +14,7 @@ const Icon = () => createElement("span", null);
 runInNewContext(code, { module: target, exports: target.exports, require: (name: string) => ({
   "next/link": { __esModule: true, default: ({ href, children }: { href: string; children: ReactNode }) => createElement("a", { href }, children) },
   "next/navigation": { useRouter: () => ({ push: () => undefined }) },
-  "lucide-react": { ChevronDown: Icon, ChevronRight: Icon, Search: Icon, X: Icon },
+  "lucide-react": { Boxes: Icon, Building2: Icon, ChevronDown: Icon, ChevronRight: Icon, Layers3: Icon, List: Icon, Search: Icon, Shield: Icon, X: Icon },
   "@/components/ui/status": { Status: ({ value }: { value: string }) => createElement("span", null, value) },
   "@/server/group/boss-hierarchy": { filterBossHierarchy, selectCompanyHierarchy, visibleHierarchyIds }
 } as Record<string, unknown>)[name] ?? require(name) });
@@ -90,11 +90,11 @@ describe("Boss registry hierarchy", () => {
     expect(JSON.stringify(filterBossHierarchy(root, "", "CONCEPT"))).not.toContain("Automation review");
   });
 
-  it("uses authorized registry detail routes and does not invent missing descendants", () => {
+  it("opens company and brand workspaces while preserving verified parent relationships", () => {
     const root = buildBossHierarchy(source);
-    expect(root.children[0].href).toBe("/app/business/companies?recordId=company-aira");
+    expect(root.children[0].href).toBe("/app/boss/companies/aira");
     expect(root.children[0].children[0].href).toBe("/app/business/organizations?recordId=labs");
-    expect(root.children[0].children[1].href).toBe("/app/business/brands?recordId=brand-labs");
+    expect(root.children[0].children[1].href).toBe("/app/boss/brands/brand-labs");
     expect(root.children[1].children).toEqual([]);
     expect(buildBossHierarchy({ ...source, organizations: [], companies: [], brands: [], products: [] }).children).toEqual([]);
   });
@@ -104,6 +104,9 @@ describe("Boss registry hierarchy", () => {
     const overview = renderToStaticMarkup(createElement(BossHierarchy, { root, brandReadable: true, productReadable: true }));
     expect(overview).toContain('aria-label="Expand AIRA Skill City Private Limited"');
     expect(overview).toContain('aria-expanded="false"');
+    expect(overview).toContain('boss-hierarchy-company-grid');
+    expect(overview).toContain('2 brands / units · 2 products / services');
+    expect(overview).toContain('href="/app/business/companies"');
     expect(overview).not.toContain("BGOS");
     expect(overview).toContain("All Companies");
     const searched = renderToStaticMarkup(createElement(BossHierarchy, { root, brandReadable: true, productReadable: true, initialSearch: "BGOS" }));

@@ -7,8 +7,9 @@ import { staffOnboardingService } from "./staff-onboarding";
 import { advisorCrm } from "./crm";
 import { staffInvite } from "./staff-invite";
 import { createSkillCityDeveloperDesk } from "./developer-desk";
+import { skillCityLabsService } from "@/server/labs/service";
 
-export const employeeViews = ["advisor", "director", "manager", "developer"] as const;
+export const employeeViews = ["advisor", "director", "manager", "developer", "business-development"] as const;
 export type EmployeeView = typeof employeeViews[number];
 
 export function createSkillCityEmployeeDashboard(client: PrismaClient = prisma) {
@@ -25,7 +26,8 @@ export function createSkillCityEmployeeDashboard(client: PrismaClient = prisma) 
       director: hasRole([companyId], "Director") && await can("executive.read", companyId) && await can("decision.decide", companyId) || (await Promise.all(divisions.map(async division => hasRole([division.id], "Division Director") && await can("executive.read", division.id) && await can("decision.decide", division.id)))).some(Boolean),
       manager: hasRole([companyId, ...divisions.map(d => d.id)], "Director", "Division Director", "Business Development & Operations Manager") && (await Promise.all([companyId, ...divisions.map(d => d.id)].map(async id => await can("reporting.read", id) && await can("person.read", id) && await can("responsibility.read", id)))).some(Boolean),
       advisor: hasRole([companyId, ...divisions.map(d => d.id)], "Senior Academic Advisor", "Junior Academic Advisor") && (await Promise.all(divisions.map(async d => d.slug === "aira-labs" ? await can("labs.sales.self", d.id) : await can("aira.crm.self", d.id)))).some(Boolean),
-      developer: !!labs && hasRole([companyId, labs.id], "Software Developer", "Full Stack Developer", "Junior Developer") && await can("labs.delivery.assignee", labs.id) && await can("organization.read", labs.id)
+      developer: !!labs && hasRole([companyId, labs.id], "Software Developer", "Full Stack Developer", "Junior Developer") && await can("labs.delivery.assignee", labs.id) && await can("organization.read", labs.id),
+      "business-development": !!labs && hasRole([labs.id], "Business Development Manager") && await can("labs.sales.read", labs.id) && await can("organization.read", labs.id)
     };
     const available = employeeViews.filter(view => allowed[view]);
     if (requested && !employeeViews.includes(requested as EmployeeView)) throw new AccessError("Employee view unavailable");
@@ -56,6 +58,7 @@ export function createSkillCityEmployeeDashboard(client: PrismaClient = prisma) 
       const data = await createSkillCityDeveloperDesk(client).workspace(userId);
       return { view, available, companyId, name: "Labs Developer", data };
     }
+    if (view === "business-development") return { view, available, companyId, name: "AIRA Labs Business Development", data: await skillCityLabsService.list(userId) };
     const divisionRows = [];
     for (const division of divisions) {
       divisionRows.push({ id: division.id, name: division.name,
@@ -79,7 +82,7 @@ export function createSkillCityEmployeeDashboard(client: PrismaClient = prisma) 
       const division = divisions.find(d => d.slug === target.divisionSlug);
       if (division && await can("aira.crm.manage", division.id)) crm.push({ slug: target.slug, label: target.label, owners: await advisorCrm.eligibleOwners(userId, target.slug), pipeline: await advisorCrm.list(userId, target.slug) });
     }
-    return { view, available, companyId, name: "Director", data: { divisions: divisionRows, decisions, staff, crm, inviteDeliveryReady: staffInvite.deliveryReady() } };
+    return { view, available, companyId, name: "Director", data: { divisions: divisionRows, decisions, staff, crm, canManageLabsCustomers: !!labs && await can("labs.customer.manage", labs.id), inviteDeliveryReady: staffInvite.deliveryReady() } };
   }
   return { dashboard };
 }
