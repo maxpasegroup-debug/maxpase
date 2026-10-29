@@ -124,7 +124,7 @@ describe("Phase 06 AIRA company OS", () => {
     expect(await db.batchParticipant.count({ where: { batchId: b.id } })).toBe(0);
     expect(await db.user.count({ where: { personId: first.id } })).toBe(0);
     await expect(service.save(admin, "participants", { batchId: b.id, personId: second.id })).rejects.toThrow("Approved PBA programme required");
-    await expect(service.save(admin, "participants", { batchId: b.id, personId: first.id, status: "ACTIVE" })).rejects.toThrow("Approved PBA programme required");
+    await expect(service.save(admin, "participants", { batchId: b.id, personId: first.id, status: "ACTIVE" })).rejects.toThrow("active batch");
     const nonPilot = await program(labs, { capacity: 1 });
     const nonPilotBatch = await service.save(admin, "batches", { programId: nonPilot.id, name: unique() });
     await db.membership.create({ data: { organizationId: labs, personId: first.id } });

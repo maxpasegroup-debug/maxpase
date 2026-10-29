@@ -9,7 +9,8 @@ export async function labsReminderGuard(db: Prisma.TransactionClient, ctx: Await
   await ctx.requireAccess("labs.sales.manage", { organizationId: row.organizationId });
   if (cancel) return;
   const p = leadPayload.parse(JSON.parse(lead.payload));
-  const owner = await requirePortalAccess(db, row.recipientUserId, "labs");
-  if (owner.divisionId !== row.organizationId || p.ownerUserId !== row.recipientUserId || lead.ownerPersonId !== owner.ctx.user!.personId || !p.nextFollowUp || new Date(p.nextFollowUp).getTime() !== row.remindAt.getTime() || ["WON", "LOST"].includes(lead.status)) throw new AccessError("Labs follow-up changed or recipient revoked");
+  const owner = await requirePortalAccess(db, row.recipientUserId, "skillcity");
+  const division = await db.organization.findUnique({ where: { id: row.organizationId }, select: { slug: true, parentId: true, status: true } });
+  if (!division || division.slug !== "aira-labs" || division.parentId !== owner.companyId || division.status !== "ACTIVE" || !(await owner.ctx.decide("organization.read", { organizationId: row.organizationId })).allowed || p.ownerUserId !== row.recipientUserId || lead.ownerPersonId !== owner.ctx.user!.personId || !p.nextFollowUp || new Date(p.nextFollowUp).getTime() !== row.remindAt.getTime() || ["WON", "LOST"].includes(lead.status)) throw new AccessError("Labs follow-up changed or recipient revoked");
   if (!(await owner.ctx.decide("labs.sales.self", { organizationId: row.organizationId })).allowed && !(await owner.ctx.decide("labs.sales.read", { organizationId: row.organizationId })).allowed) throw new AccessError("Recipient cannot read the lead");
 }
