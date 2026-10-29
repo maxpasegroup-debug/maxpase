@@ -10,7 +10,7 @@ import { operationalEvent } from "@/server/domain/operational-events";
 import { createOperationsService } from "@/server/domain/operations-service";
 import { inspectSiaToolAccess } from "@/server/sia/access";
 import * as input from "./input";
-import { environmentCredentials, registeredAdapter, type CredentialResolver, type CommunicationAdapter, type DeliveryResult } from "./providers";
+import { environmentCredentials, registeredAdapter, verifiedResendBinding, type CredentialResolver, type CommunicationAdapter, type DeliveryResult } from "./providers";
 
 export const fingerprint = (v: unknown) => createHash("sha256").update(JSON.stringify(v)).digest("hex");
 export async function rateLimit(db: DB, organizationId: string, key: string, limit: number, windowMs: number, now = new Date()) {
@@ -28,6 +28,7 @@ export function createCommunicationsService(client: PrismaClient = prisma, optio
   const adapterFor = (key: string) => options.adapters?.find(a => a.key === key) ?? registeredAdapter(key);
   const now = options.now ?? (() => new Date());
   const ops = createOperationsService(client);
+  const verifiedResend = (integration: Pick<Integration, "id" | "organizationId" | "credentialReference" | "configuration">) => verifiedResendBinding(integration, credentials);
   async function context(db: DB, userId: string, scope: { organizationId: string; projectId?: string | null }, permission: string, agent?: AgentConstraint) {
     const ctx = await createAccessContext(userId, db, agent);
     if (!ctx.user?.personId) throw new AccessError("Active human required");
@@ -42,14 +43,15 @@ export function createCommunicationsService(client: PrismaClient = prisma, optio
   }
   async function saveIntegration(userId: string, raw: unknown, id?: string, expectedVersion?: number) {
     const v = input.integrationInput.parse(raw); input.addressFor(v.channel, v.configuration.sender);
-    if (v.provider === "EMAIL_UNCONFIGURED" && v.channel !== "EMAIL" || v.provider === "TALKINLABS" && v.channel !== "WHATSAPP") throw new AccessError("Provider channel mismatch");
-    if (v.enabled && v.provider !== "MOCK") throw new AccessError("Live provider is NOT CONFIGURED");
+    if (["EMAIL_UNCONFIGURED", "RESEND"].includes(v.provider) && v.channel !== "EMAIL" || v.provider === "TALKINLABS" && v.channel !== "WHATSAPP") throw new AccessError("Provider channel mismatch");
     return client.$transaction(async db => {
       const ctx = await context(db, userId, v, "integration.manage");
       if (!["GROUP", "COMPANY"].includes(ctx.nodes.find(n => n.id === v.organizationId)?.type ?? "")) throw new AccessError("Integration needs an actual company or group scope");
       const data = { ...v, status: v.provider === "MOCK" ? (v.enabled ? "MOCK_READY" : "DISABLED") : "NOT_CONFIGURED", configuration: JSON.stringify(v.configuration) };
       const previous = id ? await db.integration.findUnique({ where: { id } }) : null;
       if (id && (!previous || previous.organizationId !== v.organizationId || previous.provider !== v.provider || previous.channel !== v.channel)) throw new AccessError("Integration scope and provider are immutable");
+      if (v.enabled && v.provider !== "MOCK" && (v.provider !== "RESEND" || !previous || !await verifiedResend({ ...previous, configuration: data.configuration, credentialReference: v.credentialReference ?? previous.credentialReference }))) throw new AccessError("Live provider is NOT CONFIGURED");
+      if (v.provider === "RESEND") data.status = v.enabled ? "READY" : previous && await verifiedResend({ ...previous, configuration: data.configuration, credentialReference: v.credentialReference ?? previous.credentialReference }) ? "DISABLED" : "NOT_CONFIGURED";
       let row: Integration;
       if (previous) {
         if ((await db.integration.updateMany({ where: { id, version: expectedVersion }, data: { ...data, version: { increment: 1 } } })).count !== 1 || expectedVersion === undefined) throw new AccessError("Stale integration");
@@ -165,6 +167,7 @@ export function createCommunicationsService(client: PrismaClient = prisma, optio
     const hours = checked.configuration.businessHoursUtc;
     if (hours && (now().getUTCHours() < hours.start || now().getUTCHours() >= hours.end)) throw new AccessError("Outside permitted UTC business hours");
     if (!checked.integration.enabled || checked.integration.status !== "MOCK_READY" && checked.integration.status !== "READY") throw new AccessError("Provider is NOT CONFIGURED or disabled");
+    if (checked.integration.provider === "RESEND" && !await verifiedResend(checked.integration)) throw new AccessError("Verified sender or provider credential unavailable");
     return checked;
   }
   async function confirm(userId: string, id: string, version: number, confirmed: boolean) {
@@ -295,7 +298,7 @@ export function createCommunicationsService(client: PrismaClient = prisma, optio
     const ids = organizationId ? [organizationId] : ctx.organizationIds("communication.read");
     const scope = { organizationId: { in: ids } };
     const organizations = await boundedRead(take => client.organization.findMany({ take, where: { id: { in: ctx.organizationIds("communication.read").filter(id => ctx.organizationIds("organization.read").includes(id)) } }, select: { id: true, name: true, type: true } }));
-    const integrations = (await boundedRead(take => client.integration.findMany({ take, where: { organizationId: { in: ids.filter(id => ctx.organizationIds("integration.read").includes(id)) } }, orderBy: { name: "asc" } }))).map(safeIntegration);
+    const integrations = await Promise.all((await boundedRead(take => client.integration.findMany({ take, where: { organizationId: { in: ids.filter(id => ctx.organizationIds("integration.read").includes(id)) } }, orderBy: { name: "asc" } }))).map(async row => ({ ...safeIntegration(row), status: row.provider === "RESEND" && !await verifiedResend(row) ? "NOT_CONFIGURED" : row.status })));
     const messages: CommunicationMessage[] = [], threads: import("@prisma/client").CommunicationThread[] = [];
     for (const thread of await boundedRead(take => client.communicationThread.findMany({ take, where: { ...scope, ...(filter.channel ? { channel: filter.channel } : {}), ...(filter.threadId ? { id: filter.threadId } : {}) }, orderBy: { lastActivityAt: "desc" } }))) {
       try { await boundResource(client, ctx, thread, "communication.read");

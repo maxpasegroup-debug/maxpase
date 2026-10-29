@@ -1,5 +1,13 @@
 # Communications, Integrations And Automation
 
+## Phase 6 commercial email connection
+
+The existing scoped communication preview, consent, independent approval, human confirmation, outbox and audit remain authoritative. `RESEND` is an optional plain-text email adapter. A newly created integration stays disabled. An operator may enable it only after verifying sender ownership in Resend and configuring all three deployment-owned values: an integration `env:<KEY>` credential reference, `MAXPASE_CREDENTIAL_BINDING_<integration-id>=<organization-id>:<KEY>`, and `MAXPASE_VERIFIED_SENDER_<integration-id>=<organization-id>:<exact-sender-email>`. `<KEY>` holds a Resend API key in the private deployment environment. The sender binding is an operator attestation, not automated domain verification. Existing authentication/OTP Resend configuration is separate; its presence alone never enables operational email. Never put these values in source or a report.
+
+The send adapter calls only the fixed Resend email endpoint with a message ID idempotency key and plain text. HTTP success with a valid provider ID means **ACCEPTED by provider**, not sent or delivered. Definite rejection is FAILED. Timeout or an ambiguous response is UNKNOWN and never retried automatically. The current adapter does not ingest Resend delivery webhooks or reconcile accepted messages; provider delivery must be verified separately before any delivered claim. Resend's idempotency retention is [24 hours](https://resend.com/changelog/idempotency-keys), so this adapter does not automatically retry failed sends after an uncertain outcome. Provider status is rechecked against the deployment bindings at authorization and workspace display. No live send or sender/domain verification was performed in this phase.
+
+WhatsApp/TalkinLabs remains NOT CONFIGURED pending verified account ownership, consent policy, provider API and signed callback contracts. Internal mock delivery remains SIMULATED. The delivery view shows current consent, attempts, retry time, provider reference and safe failure code; UNKNOWN requires manual reconciliation. No external service beyond the optional Resend adapter is activated by this code change.
+
 ## Wave 03 Configuration Readiness
 
 No live provider, TalkinLabs, private document delivery or autonomous SIA capability was activated. Configuration remains disabled-first and deployment-owned, with exact organization-bound credential binding, reviewed adapter contract, current consent/policy/source authority and independent human approval plus explicit confirmation. Provider status is separate from application liveness/readiness; PROVIDER_NOT_CONFIGURED and SIMULATED are never successful external delivery. Real provider credential rotation/configuration, callback/proxy validation and reconciliation remain NOT VERIFIED. Follow PRODUCTION_DEPLOYMENT.md and the unexecuted deployed/browser acceptance matrix; historical jobs require accountable owner review, not automatic catch-up.
@@ -18,7 +26,7 @@ Credentials resolve server-side through an injected CredentialResolver. The envi
 
 ## Provider Adapters
 
-CommunicationAdapter owns fixed provider identity, live/simulation classification, idempotent-send support, send, optional delivery lookup, webhook verification and strict normalization. No provider code appears in business modules. The registered adapters are MOCK, EMAIL_UNCONFIGURED and TALKINLABS. Adapters cannot be selected by arbitrary URLs or uploaded executable code. Injected adapters/credentials are internal test/deployment seams, never request parameters.
+CommunicationAdapter owns fixed provider identity, live/simulation classification, idempotent-send support, send, optional delivery lookup, webhook verification and strict normalization. No provider code appears in business modules. The registered adapters are MOCK, RESEND, EMAIL_UNCONFIGURED and TALKINLABS. Adapters cannot be selected by arbitrary URLs or uploaded executable code. Injected adapters/credentials are internal test/deployment seams, never request parameters.
 
 MOCK is an explicit development protocol: sends and inbound fixtures are SIMULATED, with no sent/delivered timestamp or live-delivery claim. Non-live adapters cannot turn ACCEPTED/SENT responses into real send states. Unavailable live adapters cannot be activated. No email SMTP/API or TalkinLabs contract is invented.
 
