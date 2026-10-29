@@ -120,11 +120,19 @@ describe("Phase 06 AIRA company OS", () => {
     const p = await program(school, { capacity: 1 }), b = await service.save(admin, "batches", { programId: p.id, name: unique() });
     const first = await db.person.create({ data: { displayName: unique(), memberships: { create: { organizationId: school } } } });
     const second = await db.person.create({ data: { displayName: unique(), memberships: { create: { organizationId: school } } } });
-    const a = await service.save(admin, "participants", { batchId: b.id, personId: first.id });
-    expect((await service.save(admin, "participants", { batchId: b.id, personId: first.id })).id).toBe(a.id);
+    await expect(service.save(admin, "participants", { batchId: b.id, personId: first.id })).rejects.toThrow("Approved PBA programme required");
+    expect(await db.batchParticipant.count({ where: { batchId: b.id } })).toBe(0);
     expect(await db.user.count({ where: { personId: first.id } })).toBe(0);
-    await expect(service.save(admin, "participants", { batchId: b.id, personId: second.id })).rejects.toThrow("capacity");
-    await expect(service.save(admin, "participants", { batchId: b.id, personId: first.id, status: "ACTIVE" })).rejects.toThrow("active batch");
+    await expect(service.save(admin, "participants", { batchId: b.id, personId: second.id })).rejects.toThrow("Approved PBA programme required");
+    await expect(service.save(admin, "participants", { batchId: b.id, personId: first.id, status: "ACTIVE" })).rejects.toThrow("Approved PBA programme required");
+    const nonPilot = await program(labs, { capacity: 1 });
+    const nonPilotBatch = await service.save(admin, "batches", { programId: nonPilot.id, name: unique() });
+    await db.membership.create({ data: { organizationId: labs, personId: first.id } });
+    await db.membership.create({ data: { organizationId: labs, personId: second.id } });
+    const admitted = await service.save(admin, "participants", { batchId: nonPilotBatch.id, personId: first.id });
+    expect((await service.save(admin, "participants", { batchId: nonPilotBatch.id, personId: first.id })).id).toBe(admitted.id);
+    await expect(service.save(admin, "participants", { batchId: nonPilotBatch.id, personId: second.id })).rejects.toThrow("capacity");
+    await expect(service.save(admin, "participants", { batchId: nonPilotBatch.id, personId: first.id, status: "ACTIVE" })).rejects.toThrow("active batch");
   });
   it("links programs to shared projects/tasks/goals and rejects cross-scope links", async () => {
     const p = await program();

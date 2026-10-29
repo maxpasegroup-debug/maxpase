@@ -13,6 +13,7 @@ import { portalSites, siteByHost, portalHostAllowed, validatePortalOrigin } from
 import { signPortalContext, verifyPortalContext } from "@/server/portals/context-proof";
 import { createSkillCityEmployeeDashboard } from "@/server/skillcity/employee-dashboard";
 import { createLabsService } from "@/server/labs/service";
+import { createLabsPin } from "@/server/labs/pin";
 
 const postgres = createPostgresFixture();
 const db = postgres.db;
@@ -101,7 +102,7 @@ describe("Separate brand domains and authenticated gateways", () => {
     const person = await db.user.findUniqueOrThrow({ where: { id: userId }, select: { personId: true } });
     const permission = await db.permission.findUniqueOrThrow({ where: { key: "organization.read" } });
     const members: string[] = [], roles: string[] = [];
-    const realms = [undefined, "skillcity", "startup", "labs", "jobs"] as const;
+    const realms = [undefined, "skillcity", "startup", "jobs"] as const;
     const tokens: string[] = [];
     try {
       await db.user.update({ where: { id: userId }, data: { emailVerifiedAt: new Date() } });
@@ -235,12 +236,13 @@ describe("Separate brand domains and authenticated gateways", () => {
     finally { await db.membership.update({ where: { id: membershipId }, data: { status: "ACTIVE" } }); }
   });
   it("keeps concurrent brand sessions separate and revokes only the matching brand session", async () => {
-    const labsPerson = await db.person.create({ data: { displayName: "Labs session member", metadata: JSON.stringify({ authenticationRealm: "labs", credentialKind: "STAFF_PASSWORD" }) } });
+    const labsPerson = await db.person.create({ data: { displayName: "Labs session member", metadata: JSON.stringify({ authenticationRealm: "labs", credentialKind: "LABS_PIN", labsPinChangeRequired: false }) } });
     const labsEmail = "labs-session-member@test.invalid";
-    const labsUser = await db.user.create({ data: { email: labsEmail, personId: labsPerson.id, passwordHash: await hashPassword(password), emailVerifiedAt: new Date() } });
+    const labsPin = "736284";
+    const labsUser = await db.user.create({ data: { email: labsEmail, personId: labsPerson.id, passwordHash: await hashPassword(labsPin), emailVerifiedAt: new Date() } });
     const labsRole = await db.role.create({ data: { organizationId: labsId, key: "labs-business-development-manager", name: "Labs business development manager", permissions: { create: { permission: { connect: { key: "organization.read" } } } } } });
     await db.membership.create({ data: { personId: labsPerson.id, organizationId: labsId, roles: { create: { roleId: labsRole.id } } } });
-    const startup = await auth.loginPortal(credentials(), secret, "startup"), labs = await auth.loginPortal({ email: labsEmail, password }, secret, "labs");
+    const startup = await auth.loginPortal(credentials(), secret, "startup"), labs = await createLabsPin(db).login({ email: labsEmail, pin: labsPin }, secret);
     expect(labs).not.toBeNull();
     expect(startup).not.toBeNull();
     expect(await auth.validate(labs!.token, secret, "startup")).toBeNull();

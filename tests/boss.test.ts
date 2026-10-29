@@ -137,7 +137,7 @@ describe("MAXPASE group and Boss controls", () => {
     expect(brands.filter(brand => brand.organizationId === airaId && !brand.parentBrandId).map(brand => brand.name).sort()).toEqual(["AIRA SKILL CITY", "AIRA STARTUP SKOOL", "AIRA LABS", "AIRA CAREER HUB"].sort());
     expect(brands.filter(brand => brand.parentBrandId === bySlug.get("aira-labs")?.id).map(brand => brand.name).sort()).toEqual(["MY SOLAR SOLUTIONS", "NTE NAADU", "HAPPINOTES", "TALKIN LABS", "BGOS"].sort());
     expect(bySlug.get("nice-jobs")?.parentBrandId).toBe(bySlug.get("aira-career-hub")?.id);
-    expect(brands.filter(brand => brand.organizationId === pearnId).map(brand => brand.name).sort()).toEqual(["TEACHX GURU", "LEARNX GURU"]);
+    expect(brands.filter(brand => brand.organizationId === pearnId).map(brand => brand.name).sort()).toEqual(["LEARNX GURU", "TEACHX GURU"]);
     expect(bySlug.get("top-rank-ai")?.name).toBe("TOP TANK AI");
     expect(await db.role.count({ where: { organizationId: airaId, canonical: true } })).toBe(60);
     expect(await db.ownershipRelationship.count()).toBe(0);

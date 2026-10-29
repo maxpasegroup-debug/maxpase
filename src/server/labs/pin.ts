@@ -57,11 +57,12 @@ export function createLabsPin(client: PrismaClient = prisma) {
       await ctx.requireAccess("organization.read", { organizationId: division.id });
       await ctx.requireAccess("user.update", { organizationId: division.id });
       await ctx.requireAccess("person.update", { organizationId: division.id });
-      await requirePortalAccess(db, targetUserId, "labs", true);
       const target = await db.user.findUniqueOrThrow({ where: { id: targetUserId }, include: { person: true } });
       const metadata = JSON.parse(target.person?.metadata ?? "{}");
-      if (!target.person || metadata.authenticationRealm && metadata.authenticationRealm !== "labs") throw new AccessError("Account belongs to another realm");
+      if (!target.person || target.status !== "ACTIVE" || target.person.status !== "ACTIVE" || !target.emailVerifiedAt || metadata.authenticationRealm && metadata.authenticationRealm !== "labs") throw new AccessError("Verified Labs account required");
       if(metadata.credentialKind&&metadata.credentialKind!=="LABS_PIN")throw new AccessError("Use a dedicated Labs credential account");
+      const targetAccess = await createAccessContext(targetUserId, db, undefined, { organizationId: division.id });
+      await targetAccess.requireAccess("organization.read", { organizationId: division.id });
       if (await db.user.count({ where: { personId: target.person.id } }) !== 1) throw new AccessError("Use a dedicated account without shared person credentials");
       await db.user.update({ where: { id: targetUserId }, data: { passwordHash: hash } });
       await db.person.update({ where: { id: target.person.id }, data: { metadata: JSON.stringify({ ...metadata, authenticationRealm: "labs", credentialKind: "LABS_PIN", labsPinChangeRequired: true }) } });

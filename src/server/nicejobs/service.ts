@@ -289,7 +289,7 @@ export function createNiceJobsService(client: PrismaClient = prisma) {
       await b.ctx.requireAccess("nicejobs.job.create", { organizationId: b.company.id });
       const legalName = (await db.companyProfile.findUniqueOrThrow({ where: { organizationId: b.company.id } })).legalName;
       const brand = await db.brand.findUniqueOrThrow({ where: { organizationId_slug: { organizationId: b.company.id, slug: "aira-labs" } } });
-      if (!legalName || brand.name !== "AIRA Labs" || brand.status !== "ACTIVE") throw new input.NiceJobsUnavailable("Canonical employer or brand unavailable");
+      if (!legalName || brand.slug !== "aira-labs" || brand.status !== "ACTIVE") throw new input.NiceJobsUnavailable("Canonical employer or brand unavailable");
       const rows = [];
       for (const job of initialOpportunities(b.company.id, legalName, brand.id)) {
         const divisions = await db.organization.findMany({ where: { slug: { in: job.slugs }, parentId: b.company.id, type: "DIVISION", status: "ACTIVE" }, select: { id: true }, take: 12 });

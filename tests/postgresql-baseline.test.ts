@@ -4,16 +4,18 @@ import { describe, expect, it } from "vitest";
 import { migrationManifest } from "@/server/security/readiness";
 import { Prisma } from "@prisma/client";
 
-const [name, checksum] = migrationManifest[0];
+const [name] = migrationManifest[0];
 const sql = readFileSync(`prisma/migrations/${name}/migration.sql`, "utf8");
 const triggers = [...sql.matchAll(/^CREATE TRIGGER\s+(?:"([^"]+)"|([a-z_]+))\s+/gm)].map(match => match[1] ?? match[2]);
 
 describe("PostgreSQL migration source", () => {
-  it("selects one PostgreSQL baseline and archives all SQLite migrations", () => {
-    expect(readdirSync("prisma/migrations").filter(entry => /^\d/.test(entry))).toEqual([name]);
+  it("selects the PostgreSQL migration chain and archives all SQLite migrations", () => {
+    expect(readdirSync("prisma/migrations").filter(entry => /^\d/.test(entry))).toEqual(migrationManifest.map(([migrationName]) => migrationName));
     expect(readdirSync("prisma/sqlite-migrations-archive").filter(entry => /^\d/.test(entry))).toHaveLength(31);
     expect(readFileSync("prisma/migrations/migration_lock.toml", "utf8")).toContain('provider = "postgresql"');
-    expect(createHash("sha256").update(sql).digest("hex")).toBe(checksum);
+    for (const [migrationName, expectedChecksum] of migrationManifest) {
+      expect(createHash("sha256").update(readFileSync(`prisma/migrations/${migrationName}/migration.sql`, "utf8").replaceAll("\r\n", "\n")).digest("hex")).toBe(expectedChecksum);
+    }
   });
 
   it("includes every historic financial and automation trigger name exactly once", () => {

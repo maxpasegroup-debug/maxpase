@@ -156,6 +156,7 @@ describe("Nice Jobs participant dashboard", () => {
     const { default: PortalLanding } = loadComponent<{ default: (props: { params: Promise<{ site: string }> }) => Promise<ReactNode> }>("src/app/sites/[site]/page.tsx", {
       "@/server/portals/request": { requestPortal }, "@/server/portals/sites": { portalSites: [] },
       "../labs-ui/landing": { LabsLanding: () => { throw new Error("Labs landing must not render for Nice Jobs"); } },
+      "../startup-ui/landing": { StartupLanding: () => { throw new Error("Startup landing must not render for Nice Jobs"); } },
       "../jobs-ui/landing": { JobsLanding: ({ paths: landingPaths }: { paths: typeof paths }) => createElement("a", { href: landingPaths.opportunities }, "Explore Opportunities") },
       "@/server/nicejobs/applications": { applicationService: { publicOpportunities: landingOpportunities } },
       "@/server/nicejobs/input": { NiceJobsUnavailable },
