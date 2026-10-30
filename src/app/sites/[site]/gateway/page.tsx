@@ -33,6 +33,9 @@ import { StartupFounderWorkspace, StartupFounderManagerWorkspace } from "../../s
 import { StartupPilotRegisterWorkspace } from "../../startup-ui/pilot-register-workspace";
 import { skillCityEmployeeDashboard, employeeViews } from "@/server/skillcity/employee-dashboard";
 import { SkillCityWorkspace } from "../../skillcity-ui/workspace";
+import { DirectorReportWorkspace } from "../../skillcity-ui/director-report";
+import { MarketingWorkspace } from "@/components/marketing-workspace";
+import { StartupCommercialWorkspace } from "@/components/startup-commercial-workspace";
 const views = ["overview", "programs", "projects", "tasks", "goals"];
 export default async function Gateway({ params, searchParams }: { params: Promise<{ site: string }>; searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const { site, paths } = await requestPortal((await params).site), query = await searchParams;
@@ -45,6 +48,9 @@ export default async function Gateway({ params, searchParams }: { params: Promis
   if (site.id === "skillcity" && view === "startup-applications") return <StartupReviewWorkspace userId={session.userId} email={session.email} home={paths.gateway}/>;
   if (site.id === "skillcity" && view === "founder-management") return <StartupFounderManagerWorkspace userId={session.userId} email={session.email} home={paths.gateway}/>;
   if (site.id === "skillcity" && view === "pilot") return <StartupPilotRegisterWorkspace userId={session.userId} email={session.email} home={paths.gateway} gateway={paths.gateway}/>;
+  if (site.id === "skillcity" && view === "marketing") return <MarketingWorkspace userId={session.userId} brandId={typeof query.brandId === "string" ? query.brandId : undefined} mode="SKILLCITY" base={paths.gateway} home={paths.gateway} search={typeof query.search === "string" ? query.search : undefined} status={typeof query.status === "string" ? query.status : undefined} recordId={typeof query.recordId === "string" ? query.recordId : undefined}/>;
+  if (site.id === "skillcity" && view === "commercial") return <StartupCommercialWorkspace userId={session.userId} mode="SKILLCITY" home={paths.gateway}/>;
+  if (site.id === "skillcity" && view === "director-report") return <DirectorReportWorkspace userId={session.userId} email={session.email} base={paths.gateway} divisionId={typeof query.divisionId === "string" ? query.divisionId : ""} kind={typeof query.kind === "string" ? query.kind : ""} cursor={typeof query.cursor === "string" ? query.cursor : undefined}/>;
   if (site.id === "skillcity" && (!query.view || employeeViews.includes(view as typeof employeeViews[number]))) {
     let data;
     try { data = await skillCityEmployeeDashboard.dashboard(session.userId, typeof query.view === "string" ? view : undefined); }

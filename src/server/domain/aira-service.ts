@@ -16,6 +16,12 @@ import { assertStartupPilotEnrollmentReady } from "@/server/portals/startup-pilo
 type DB = Prisma.TransactionClient;
 type Context = Awaited<ReturnType<typeof createAccessContext>>;
 export const companyReadKeys: Record<input.CompanyKind, string> = { divisions: "organization.read", departments: "organization.read", teams: "organization.read", people: "person.read", programs: "program.read", batches: "batch.read", locations: "location.read", products: "product.read", projects: "project.read", goals: "goal.read", responsibilities: "responsibility.read", participants: "batch.read", approvals: "approval.read", requests: "request.read", notifications: "notification.read", workflows: "workflow.read", instances: "workflow.read", employers: "company.read" };
+export function validateStartupProgramTransition(previous: string | null, next: string) {
+  if (next === "ACTIVE" && previous !== "ACTIVE") throw new AccessError("Startup programme activation requires an approved publication decision");
+  if (previous === "ARCHIVED") throw new AccessError("Archived programme is read-only");
+  if (previous && previous !== "DRAFT" && next === "DRAFT") throw new AccessError("Published programme cannot return to draft");
+  if (previous && previous !== next && !(previous === "ACTIVE" && next === "PAUSED") && next !== "ARCHIVED") throw new AccessError("Use the controlled programme lifecycle");
+}
 export function createAiraService(client: PrismaClient = prisma) {
   const business = createBusinessService(client), workforce = createWorkforceService(client), execution = createExecutionService(client), ops = createOperationsService(client);
   async function context(db: DB, userId: string) {
@@ -71,6 +77,11 @@ export function createAiraService(client: PrismaClient = prisma) {
         await c.ctx.requireAccess("organization.read", { organizationId });
         const old = recordId ? await program(db, c, recordId, "program.manage") : null;
         if (old && old.organizationId !== organizationId) throw new AccessError("Program division cannot be changed");
+        if (division.slug === "aira-startup-school") {
+          // Publication is a separate, evidence-backed decision. The shared editor
+          // must not be able to activate a draft or resume a paused programme.
+          validateStartupProgramTransition(old?.status ?? null, data.status);
+        }
         for (const [type, id] of [["brand", data.brandId], ["product", data.productId]] as const) if (id) {
           const linked = type === "brand" ? await db.brand.findUnique({ where: { id } }) : await db.product.findUnique({ where: { id } });
           if (!linked || linked.organizationId !== c.company.id || "divisionId" in linked && linked.divisionId && linked.divisionId !== organizationId) throw new AccessError("Program relationship belongs to another company or division");
@@ -115,7 +126,7 @@ export function createAiraService(client: PrismaClient = prisma) {
         if (data.status === "ACTIVE" && batch.status !== "ACTIVE") throw new AccessError("Active participation requires an active batch");
         const old = await db.batchParticipant.findUnique({ where: { batchId_personId: { batchId: batch.id, personId: data.personId } } });
         if (recordId && old?.id !== recordId) throw new AccessError("Participation identity cannot be changed");
-        if (["PLANNED", "ACTIVE"].includes(data.status) && (!old || old.status !== data.status)) await assertStartupPilotEnrollmentReady(db, p, batch.id, data.personId);
+        if (["PLANNED", "ACTIVE"].includes(data.status) && (!old || old.status !== data.status)) await assertStartupPilotEnrollmentReady(db, p, batch.id, data.personId, true);
         if (["PLANNED", "ACTIVE"].includes(data.status) && (!old || !["PLANNED", "ACTIVE"].includes(old.status)) && (batch.capacity ?? p.capacity) && await db.batchParticipant.count({ where: { batchId: batch.id, status: { in: ["PLANNED", "ACTIVE"] } } }) >= (batch.capacity ?? p.capacity)!) throw new AccessError("Batch capacity reached");
         row = await db.batchParticipant.upsert({ where: { batchId_personId: { batchId: batch.id, personId: data.personId } }, create: data, update: { status: data.status } });
       }

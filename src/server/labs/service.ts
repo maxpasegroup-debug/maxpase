@@ -9,6 +9,7 @@ import { createOperationsService } from "@/server/domain/operations-service";
 import { createExecutionService } from "@/server/domain/execution-service";
 import { leadInput, leadPayload, leadStates, quoteInput, quotePayload, quoteTotals, billingConfig } from "./input";
 import { buildAuditEventData } from "@/server/audit/audit-service";
+import { resolveCrmContact } from "@/server/skillcity/contact-identity";
 
 type DB = Prisma.TransactionClient;
 const digest = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
@@ -62,7 +63,8 @@ export function createLabsService(client: PrismaClient = prisma, now = () => new
       const sourceKey = "labs:lead:" + digest([a.divisionId, data.email, data.company.toLowerCase()]);
       const existing = await db.executiveRecord.findUnique({ where: { sourceKey } });
       if (existing) return {...existing,duplicate:true};
-      const row = await db.executiveRecord.create({ data: { kind: "LABS_LEAD", organizationId: a.divisionId, ownerPersonId: a.ctx.user!.personId!, title: data.company + " / " + data.name, status: "NEW", sourceKey, payload: JSON.stringify({ ...data, ownerUserId: userId, nextFollowUp: null, lastContact: null, outcome: "", qualification: "", quoteId: null, acceptance: "", projectId: null }) } });
+      const contactId = await resolveCrmContact(db, a.companyId, data.email, a.ctx.user!.personId!);
+      const row = await db.executiveRecord.create({ data: { kind: "LABS_LEAD", organizationId: a.divisionId, ownerPersonId: a.ctx.user!.personId!, title: data.company + " / " + data.name, status: "NEW", sourceKey, payload: JSON.stringify({ ...data, contactId, ownerUserId: userId, nextFollowUp: null, lastContact: null, outcome: "", qualification: "", quoteId: null, acceptance: "", projectId: null }) } });
       await event(db, userId, row, "labs.lead_created", undefined, { channel: "MANUAL" });
       // Internal alert only; this neither sends email nor asserts external delivery.
       await notify(db, userId, userId, { organizationId: a.divisionId, resourceType: "ORGANIZATION", resourceId: a.divisionId }, "LABS_ENQUIRY", "New Labs enquiry", "Review your AIRA Labs sales queue.", "labs-enquiry:" + row.id);
@@ -96,7 +98,8 @@ export function createLabsService(client: PrismaClient = prisma, now = () => new
       if (enquiry.status !== "PENDING") throw new AccessError("Enquiry is not pending assignment");
       const duplicate = await db.executiveRecord.findFirst({ where: { organizationId: a.divisionId, kind: "LABS_LEAD", sourceKey: "labs:lead:" + digest([a.divisionId, data.email, data.company.toLowerCase()]) } });
       if (duplicate) throw new AccessError("An existing lead has this contact; review it before assignment");
-      const row = await db.executiveRecord.create({ data: { kind: "LABS_LEAD", organizationId: a.divisionId, ownerPersonId: owner.ctx.user!.personId!, title: data.company + " / " + data.name, status: "NEW", sourceKey, payload: JSON.stringify({ ...data, ownerUserId, nextFollowUp: null, lastContact: null, outcome: "", qualification: "", quoteId: null, acceptance: "", projectId: null }) } });
+      const contactId = await resolveCrmContact(db, a.companyId, data.email, owner.ctx.user!.personId!);
+      const row = await db.executiveRecord.create({ data: { kind: "LABS_LEAD", organizationId: a.divisionId, ownerPersonId: owner.ctx.user!.personId!, title: data.company + " / " + data.name, status: "NEW", sourceKey, payload: JSON.stringify({ ...data, contactId, ownerUserId, nextFollowUp: null, lastContact: null, outcome: "", qualification: "", quoteId: null, acceptance: "", projectId: null }) } });
       await db.operationalEvent.update({ where: { id: enquiryId }, data: { status: "SUCCEEDED" } });
       await event(db, userId, row, "labs.enquiry_assigned", undefined, {enquiryId});
       await notify(db, userId, ownerUserId, { organizationId: a.divisionId, resourceType: "ORGANIZATION", resourceId: a.divisionId }, "LABS_ENQUIRY", "Labs enquiry assigned", "Review your AIRA Labs sales queue.", "labs-enquiry:" + row.id);

@@ -21,6 +21,16 @@ const stored = pilotRegisterInput.extend({ batchId: id, programId: id, preparedB
 const KIND = "STARTUP_KERALA_PILOT_INTAKE";
 const sourceKey = (batchId: string) => `startup:kerala-pilot:${batchId}`;
 export type PilotRegister = z.infer<typeof pilotRegisterInput>;
+export function matchesPilotApplicationProgram(linkedProgramId: string | undefined, intakeProgramId: string) {
+  return !linkedProgramId || linkedProgramId === intakeProgramId;
+}
+export function isConfirmedStartupAdmission(record: { kind: string; status: string; organizationId: string; ownerPersonId: string; payload: string } | null, applicationId: string, programId: string, batchId: string, divisionId: string, personId: string) {
+  if (!record || record.kind !== "STARTUP_ADMISSION" || record.status !== "CONFIRMED" || record.organizationId !== divisionId || record.ownerPersonId !== personId) return false;
+  try {
+    const mapping = z.object({ applicationId: id, programId: id, batchId: id }).passthrough().parse(JSON.parse(record.payload));
+    return mapping.applicationId === applicationId && mapping.programId === programId && mapping.batchId === batchId;
+  } catch { return false; }
+}
 
 export function missingPilotApprovals(value: PilotRegister): string[] {
   const missing: string[] = [];
@@ -48,13 +58,13 @@ async function currentManager(db: Prisma.TransactionClient, userId: string, orga
   const account = await db.user.findUnique({ where: { id: userId }, select: { status: true, emailVerifiedAt: true, person: { select: { status: true } } } });
   if (!account || account.status !== "ACTIVE" || account.person?.status !== "ACTIVE" || !account.emailVerifiedAt) throw new AccessError("Verified programme authority required");
 }
-async function eligibleApplicant(db: Prisma.TransactionClient, personId: string, organizationId: string, tier: NonNullable<PilotRegister["tier"]>) {
+async function eligibleApplicant(db: Prisma.TransactionClient, personId: string, organizationId: string, tier: NonNullable<PilotRegister["tier"]>, programId: string) {
   const user = await db.user.findFirst({ where: { personId, status: "ACTIVE", emailVerifiedAt: { not: null } }, select: { id: true, person: { select: { status: true, metadata: true } } } });
   if (!user || user.person?.status !== "ACTIVE" || z.object({ authenticationRealm: z.literal("startup") }).safeParse(parseEvidenceJson(user.person.metadata)).success === false) throw new AccessError("Verified participant account required");
   const application = await db.executiveRecord.findUnique({ where: { sourceKey: `startup:application:${user.id}` }, select: { kind: true, organizationId: true, ownerPersonId: true, status: true, payload: true } });
   if (!application || application.kind !== "STARTUP_APPLICATION" || application.organizationId !== organizationId || application.ownerPersonId !== personId || application.status !== "APPROVED") throw new AccessError("Human-approved application required");
-  const preference = z.object({ tier: z.enum(["STARTER", "PRO", "EXTRAORDINARY"]) }).safeParse(parseEvidenceJson(application.payload));
-  if (!preference.success || preference.data.tier !== tier) throw new AccessError("Approved application and intake tier must match");
+  const preference = z.object({ tier: z.enum(["STARTER", "PRO", "EXTRAORDINARY"]), programId: id.optional() }).safeParse(parseEvidenceJson(application.payload));
+  if (!preference.success || preference.data.tier !== tier || !matchesPilotApplicationProgram(preference.data.programId, programId)) throw new AccessError("Approved application, programme and intake tier must match");
 }
 async function validatedPayload(db: Prisma.TransactionClient, organizationId: string, value: z.infer<typeof stored>, personId?: string) {
   if (missingPilotApprovals(value).length) throw new AccessError("Pilot approval evidence is incomplete");
@@ -64,11 +74,11 @@ async function validatedPayload(db: Prisma.TransactionClient, organizationId: st
   for (const userId of new Set([value.termsApproverUserId, value.reviewerUserId, value.mentorUserId])) await currentManager(db, userId, organizationId);
   for (const candidate of value.participants) {
     if (!candidate.consentAt || Date.parse(candidate.consentAt) > now || Date.parse(candidate.consentAt) < approved) throw new AccessError("Participant consent evidence is unavailable");
-    await eligibleApplicant(db, candidate.personId, organizationId, value.tier);
+    await eligibleApplicant(db, candidate.personId, organizationId, value.tier, value.programId);
   }
   if (personId && !value.participants.some(row => row.personId === personId)) throw new AccessError("Participant is outside the approved intake");
 }
-export async function assertStartupPilotEnrollmentReady(db: Prisma.TransactionClient, program: { id: string; organizationId: string; productId: string | null }, batchId: string, personId: string) {
+export async function assertStartupPilotEnrollmentReady(db: Prisma.TransactionClient, program: { id: string; organizationId: string; productId: string | null }, batchId: string, personId: string, requireAdmission = false) {
   const division = await db.organization.findUnique({ where: { id: program.organizationId }, select: { slug: true } });
   if (division?.slug !== "aira-startup-school") return;
   if (!program.productId) throw new AccessError("Approved PBA programme required before enrollment");
@@ -80,6 +90,12 @@ export async function assertStartupPilotEnrollmentReady(db: Prisma.TransactionCl
   if (value.batchId !== batchId || value.programId !== program.id) throw new AccessError("Intake mapping unavailable");
   await currentManager(db, register.history[0].actorUserId, program.organizationId);
   await validatedPayload(db, program.organizationId, value, personId);
+  if (requireAdmission) {
+    const application = await db.executiveRecord.findFirst({ where: { kind: "STARTUP_APPLICATION", organizationId: program.organizationId, ownerPersonId: personId, status: "APPROVED" }, select: { id: true } });
+    if (!application) throw new AccessError("Approved application required for enrollment");
+    const admission = await db.executiveRecord.findUnique({ where: { sourceKey: `startup:admission:${application.id}` }, select: { kind: true, status: true, organizationId: true, ownerPersonId: true, payload: true } });
+    if (!isConfirmedStartupAdmission(admission, application.id, program.id, batchId, program.organizationId, personId)) throw new AccessError("Independent admission confirmation required before enrollment");
+  }
 }
 export function createStartupPilotRegister(client: PrismaClient = prisma) {
   async function overview(userId: string) {

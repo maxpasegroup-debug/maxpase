@@ -13,7 +13,7 @@ export type Workspace = {
   organizations: { id: string; name: string; type: string; parentId: string | null }[];
   people: { id: string; displayName: string }[];
   roles: { id: string; name: string; organizationId: string | null; principalType: string }[];
-  projects: Option[]; products: Option[]; goals: { id: string; title: string; organizationId: string }[];
+  projects: Option[]; products: Option[]; goals: { id: string; title: string; organizationId: string }[]; programs: Option[]; batches: Option[];
   permissions: { id: string; name: string; key: string }[];
   scopes: Record<string, string[]>; canCreatePermission: boolean;
 };
@@ -26,7 +26,7 @@ function text(value: unknown): string {
   return String(value).replaceAll("_", " ");
 }
 function sources(workspace: Workspace): Record<string, Option[]> {
-  return { organizations: workspace.organizations, people: workspace.people.map(p => ({ id: p.id, name: p.displayName })), roles: workspace.roles.map(r => ({ ...r, organizationId: r.organizationId ?? undefined })), projects: workspace.projects, products: workspace.products, goals: workspace.goals.map(g => ({ ...g, name: g.title })) };
+  return { organizations: workspace.organizations, people: workspace.people.map(p => ({ id: p.id, name: p.displayName })), roles: workspace.roles.map(r => ({ ...r, organizationId: r.organizationId ?? undefined })), projects: workspace.projects, products: workspace.products, goals: workspace.goals.map(g => ({ ...g, name: g.title })), programs: workspace.programs, batches: workspace.batches };
 }
 function Assignment({ operation, row, workspace, organizationId }: { operation: "role" | "permission" | "sia"; row: WorkforceRow; workspace: Workspace; organizationId: string }) {
   const [state, action, pending] = useActionState(assignAccessAction, {});
@@ -52,7 +52,7 @@ function Editor({ kind, row, workspace, activeOrganization, close }: { kind: Wor
         const value = f.key === "password" ? "" : row?.[f.key] ?? (f.key === "organizationId" ? activeOrganization : "");
         const locked = !!row && (["organizationId", "parentId", "type"].includes(f.key) || ["memberships", "users"].includes(kind) && ["personId", "projectId"].includes(f.key) || kind === "roles" && (f.key === "principalType" || !!row.canonical && ["key", "name", "status"].includes(f.key)));
         let choices = f.source ? options[f.source] ?? [] : [];
-        if (["projects", "products", "goals"].includes(f.source ?? "") && organization) choices = choices.filter(c => c.organizationId === organization);
+        if (["projects", "products", "goals", "programs", "batches"].includes(f.source ?? "") && organization) choices = choices.filter(c => c.organizationId === organization);
         if (f.source === "organizations" && !row) {
           const key = createKeys[kind]; if (key) choices = choices.filter(c => workspace.scopes[key]?.includes(c.id));
         }

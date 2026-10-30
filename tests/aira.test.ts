@@ -69,6 +69,18 @@ describe("Phase 06 AIRA company OS", () => {
     expect(await db.program.findUnique({ where: { id: priced.id } })).toMatchObject({ priceMinor: 0, currency: "INR" });
     await expect(service.save(admin, "programs", { organizationId: labs, name: unique(), slug: unique() }, p.id)).rejects.toThrow("cannot be changed");
   });
+  it("keeps Startup School publication separate from the shared programme editor", async () => {
+    const draft = await program(school, { description: "Planning only" });
+    expect(draft.status).toBe("DRAFT");
+    await expect(service.save(admin, "programs", { organizationId: school, name: "Unapproved", slug: unique(), status: "ACTIVE" })).rejects.toThrow("approved publication decision");
+    await expect(service.save(admin, "programs", { organizationId: school, name: "Unapproved", slug: unique(), status: "ACTIVE" }, draft.id)).rejects.toThrow("approved publication decision");
+    expect((await db.program.findUniqueOrThrow({ where: { id: draft.id } })).status).toBe("DRAFT");
+    await service.save(admin, "programs", { organizationId: school, name: "Edited draft", slug: (await db.program.findUniqueOrThrow({ where: { id: draft.id } })).slug, status: "DRAFT" }, draft.id);
+    expect((await db.program.findUniqueOrThrow({ where: { id: draft.id } })).name).toBe("Edited draft");
+    await service.save(admin, "programs", { organizationId: school, name: "Edited draft", slug: (await db.program.findUniqueOrThrow({ where: { id: draft.id } })).slug, status: "ARCHIVED" }, draft.id);
+    await expect(service.save(admin, "programs", { organizationId: school, name: "Replay", slug: unique(), status: "DRAFT" }, draft.id)).rejects.toThrow("read-only");
+    expect((await db.program.findUniqueOrThrow({ where: { id: draft.id } })).status).toBe("ARCHIVED");
+  });
   it("validates company and division product/brand relationships and canonical names", async () => {
     const foreign = await business.save(admin, "products", { organizationId: other, name: unique(), slug: unique() });
     await expect(program(school, { productId: foreign.id })).rejects.toThrow("another company");

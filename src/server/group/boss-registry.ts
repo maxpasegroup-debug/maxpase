@@ -3,6 +3,7 @@ import { prisma } from "@/server/db";
 import { AccessError } from "@/server/authorization/engine";
 import { buildAuditEventData } from "@/server/audit/audit-service";
 import { createBossService } from "./boss-service";
+import { marketingDivisionSlug } from "./brand-marketing-scope";
 
 export function createBossRegistry(client: PrismaClient = prisma) {
   const boss = createBossService(client);
@@ -23,14 +24,34 @@ export function createBossRegistry(client: PrismaClient = prisma) {
     if (row.organization.parentId !== root.id) throw new AccessError("Brand unavailable");
     await ctx.requireAccess("brand.read", { organizationId: row.organizationId });
     await ctx.requireAccess("company.read", { organizationId: row.organizationId });
+    const parent = row.parentBrandId ? await client.brand.findFirst({ where: { id: row.parentBrandId, organizationId: row.organizationId }, select: { id: true, name: true, slug: true, status: true } }) : null;
+    if (row.parentBrandId && !parent) throw new AccessError("Brand parent unavailable");
     const children = await client.brand.findMany({ where: { organizationId: row.organizationId, parentBrandId: row.id }, select: { id: true, name: true, status: true }, orderBy: { name: "asc" }, take: 100 });
-    const products = (await ctx.decide("product.read", { organizationId: row.organizationId })).allowed ? await client.product.findMany({ where: { brandId: row.id, organizationId: row.organizationId }, select: { id: true, name: true, status: true, lifecycle: true }, orderBy: { name: "asc" }, take: 100 }) : null;
+    const products = (await ctx.decide("product.read", { organizationId: row.organizationId })).allowed ? await client.product.findMany({ where: { brandId: row.id, organizationId: row.organizationId }, select: { id: true, name: true, status: true, lifecycle: true, updatedAt: true }, orderBy: { name: "asc" }, take: 101 }) : null;
     const mappedUnit = row.organization.slug === "aira-skill-city" ? ({ "aira-skill-city": "aira-skill-city", "startup-school": "aira-startup-school", "aira-labs": "aira-labs", "nice-jobs": "aira-career-hub" } as Record<string, string>)[row.slug] : undefined;
-    const verifiedUnit = mappedUnit && mappedUnit !== row.organization.slug ? await client.organization.findFirst({ where: { slug: mappedUnit, parentId: row.organizationId, type: "DIVISION" }, select: { id: true } }) : null;
+    const verifiedUnit = mappedUnit && mappedUnit !== row.organization.slug ? await client.organization.findFirst({ where: { slug: mappedUnit, parentId: row.organizationId, type: "DIVISION" }, select: { id: true, status: true } }) : null;
     const scope = { organizationId: row.organizationId };
     const workReadable = (await ctx.decide("project.read", scope)).allowed;
-    const projects = workReadable ? await client.project.findMany({ where: { brandId: row.id, organizationId: row.organizationId }, select: { id: true, name: true, status: true }, orderBy: { updatedAt: "desc" }, take: 50 }) : null;
-    return { row, children, products, commandHref: mappedUnit && (verifiedUnit || mappedUnit === row.organization.slug) ? `/app/boss/command/${row.organization.slug}/${mappedUnit}` : null, permissions: {
+    const projects = workReadable ? await client.project.findMany({ where: { brandId: row.id, organizationId: row.organizationId }, select: { id: true, name: true, status: true, updatedAt: true }, orderBy: { updatedAt: "desc" }, take: 51 }) : null;
+    const startupDivision = row.organization.slug === "aira-skill-city" && row.slug === "startup-school" && verifiedUnit?.id
+      ? verifiedUnit.id : null;
+    const canReadPrograms = !!startupDivision && (await ctx.decide("program.read", { organizationId: startupDivision })).allowed;
+    const canReadAdmissions = canReadPrograms && (await ctx.decide("person.read", { organizationId: startupDivision! })).allowed && (await ctx.decide("executive.read", { organizationId: startupDivision! })).allowed;
+    const canManagePrograms = canReadPrograms && (await ctx.decide("program.manage", { organizationId: startupDivision! })).allowed;
+    const programs = canReadPrograms ? await client.program.findMany({ where: { companyOrganizationId: row.organizationId, organizationId: startupDivision!, OR: [{ brandId: row.id }, { brandId: null }] }, select: { id: true, name: true, status: true, kind: true, durationDays: true, capacity: true, updatedAt: true }, orderBy: { name: "asc" }, take: 51 }) : null;
+    const marketingUnit = row.organization.slug === "aira-skill-city" ? marketingDivisionSlug(row.slug, parent?.slug) : undefined;
+    const marketingDivision = marketingUnit ? await client.organization.findFirst({ where: { slug: marketingUnit, parentId: row.organizationId, type: "DIVISION", status: "ACTIVE" }, select: { id: true } }) : null;
+    const marketingScope = marketingUnit ? marketingDivision?.id : row.organizationId;
+    const canReadMarketing = !!marketingScope && row.status === "ACTIVE" && (!parent || parent.status === "ACTIVE") && row.organization.status === "ACTIVE" && row.organization.company?.status === "ACTIVE" && (await ctx.decide("executive.read", { organizationId: marketingScope })).allowed;
+    const now = new Date();
+    const canReadTasks = (await ctx.decide("task.read", scope)).allowed;
+    const overdueTasks = canReadTasks ? await client.task.findMany({ where: { organizationId: row.organizationId, project: { brandId: row.id, organizationId: row.organizationId }, dueDate: { lt: now }, status: { notIn: ["COMPLETED", "CANCELLED"] } }, select: { id: true, title: true, status: true, dueDate: true, updatedAt: true }, orderBy: [{ dueDate: "asc" }, { id: "asc" }], take: 21 }) : null;
+    const counts = async (where: Prisma.ExecutiveRecordWhereInput) => client.executiveRecord.groupBy({ by: ["status"], where, _count: { _all: true }, _max: { updatedAt: true } });
+    const admissions = canReadAdmissions ? await counts({ organizationId: startupDivision!, kind: "STARTUP_APPLICATION", sourceKey: { startsWith: "startup:application:" }, status: { in: ["SUBMITTED", "IN_REVIEW", "APPROVED", "REJECTED"] } }) : null;
+    const campaigns = canReadMarketing ? await counts({ organizationId: marketingScope, kind: "BRAND_MARKETING_CAMPAIGN", sourceKey: { startsWith: `marketing:campaign:${row.id}:` } }) : null;
+    const canReadCommercial = canReadPrograms && verifiedUnit?.status === "ACTIVE" && row.status === "ACTIVE" && row.organization.status === "ACTIVE" && row.organization.company?.status === "ACTIVE" && (await ctx.decide("executive.read", { organizationId: startupDivision! })).allowed;
+    const commercial = canReadCommercial ? await counts({ organizationId: startupDivision!, kind: "STARTUP_COMMERCIAL_TERMS", sourceKey: { startsWith: `startup:commercial:${row.id}:` } }) : null;
+    return { row, parent, children, products, startupDivision, startupDivisionActive: verifiedUnit?.status === "ACTIVE", programs, canManagePrograms, canReadAdmissions, canReadMarketing, canReadCommercial, report: { admissions, campaigns, commercial, overdueTasks, calculatedAt: now }, commandHref: mappedUnit && (verifiedUnit || mappedUnit === row.organization.slug) ? `/app/boss/command/${row.organization.slug}/${mappedUnit}` : null, permissions: {
       manage: (await ctx.decide("brand.manage", scope)).allowed,
       work: workReadable,
       people: (await ctx.decide("person.read", scope)).allowed,

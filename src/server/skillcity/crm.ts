@@ -5,6 +5,7 @@ import { prisma } from "@/server/db";
 import { AccessError, createAccessContext } from "@/server/authorization/engine";
 import { requirePortalAccess } from "@/server/portals/policy";
 import { operationalEvent } from "@/server/domain/operational-events";
+import { resolveCrmContact } from "./contact-identity";
 
 export const advisorProducts = [
   { slug: "pba", divisionSlug: "aira-startup-school", label: "PBA" },
@@ -14,7 +15,7 @@ const productKey = z.enum(["pba", "genz-builder"]);
 const identity = z.object({ name: z.string().trim().min(2).max(160), email: z.email().max(254).transform(value => value.toLowerCase()), phone: z.string().trim().max(30), need: z.string().trim().min(10).max(3000), consent: z.literal(true) });
 const createInput = identity.extend({ product: productKey, ownerUserId: z.string().min(1), reference: z.string().min(8).max(120) }).strict();
 const updateInput = z.object({ id: z.string().min(1), version: z.number().int().min(0), reference: z.string().min(8).max(120), status: z.enum(["NEW", "CONTACTED", "QUALIFIED", "LOST"]), outcome: z.string().trim().min(1).max(3000), qualification: z.string().trim().max(3000), nextFollowUp: z.string().datetime().nullable() }).strict();
-const payload = identity.extend({ product: productKey, ownerUserId: z.string(), outcome: z.string(), qualification: z.string(), nextFollowUp: z.string().datetime().nullable(), lastContact: z.string().datetime().nullable() });
+const payload = identity.extend({ product: productKey, contactId: z.string().optional(), ownerUserId: z.string(), outcome: z.string(), qualification: z.string(), nextFollowUp: z.string().datetime().nullable(), lastContact: z.string().datetime().nullable() });
 export const crmLeadPayload = payload;
 const transitions: Record<string, string[]> = { NEW: ["NEW", "CONTACTED", "LOST"], CONTACTED: ["CONTACTED", "QUALIFIED", "LOST"], QUALIFIED: ["QUALIFIED", "LOST"], LOST: [] };
 const digest = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
@@ -81,10 +82,11 @@ export function createAdvisorCrm(client: PrismaClient = prisma, now = () => new 
       const record = await db.product.findUnique({ where: { organizationId_slug: { organizationId: companyId, slug: product.slug } }, select: { divisionId: true } });
       if (!record || record.divisionId !== division.id) throw new AccessError("Product pipeline is not configured");
       const owner = await advisor(db, data.ownerUserId, division.id);
-      const sourceKey = "aira-crm:" + digest([division.id, data.reference]);
+      const sourceKey = "aira-crm:" + digest([division.id, data.product, data.email]);
       const existing = await db.executiveRecord.findUnique({ where: { sourceKey } });
       if (existing) { const previous = payload.parse(JSON.parse(existing.payload)); if (previous.email !== data.email || previous.name !== data.name || previous.phone !== data.phone || previous.need !== data.need || previous.product !== data.product || existing.ownerPersonId !== owner.user.personId) throw new AccessError("Lead replay mismatch"); return existing; }
-      const row = await db.executiveRecord.create({ data: { kind: "AIRA_CRM_LEAD", organizationId: division.id, ownerPersonId: owner.user.personId!, title: `${data.name} / ${product.label}`, status: "NEW", sourceKey, payload: JSON.stringify({ product: data.product, name: data.name, email: data.email, phone: data.phone, need: data.need, consent: true, ownerUserId: data.ownerUserId, outcome: "", qualification: "", nextFollowUp: null, lastContact: null }) } });
+      const contactId = await resolveCrmContact(db, companyId, data.email, owner.user.personId!);
+      const row = await db.executiveRecord.create({ data: { kind: "AIRA_CRM_LEAD", organizationId: division.id, ownerPersonId: owner.user.personId!, title: `${data.name} / ${product.label}`, status: "NEW", sourceKey, payload: JSON.stringify({ product: data.product, contactId, name: data.name, email: data.email, phone: data.phone, need: data.need, consent: true, ownerUserId: data.ownerUserId, outcome: "", qualification: "", nextFollowUp: null, lastContact: null }) } });
       await operationalEvent(db, { actorUserId: userId, actorPersonId: ctx.user!.personId, organizationId: division.id, action: "aira.crm.lead_created", entityType: "ExecutiveRecord", entityId: row.id, result: "SUCCESS", metadata: { product: product.slug, ownerUserId: data.ownerUserId } });
       return row;
     });

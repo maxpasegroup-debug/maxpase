@@ -10,6 +10,7 @@ import { organizationInput } from "./business-input";
 import * as input from "./workforce-input";
 import { operationalEvent } from "./operational-events";
 import { protectCanonicalDivision } from "./company-structure";
+import { approvedPilotCohort, approvedPilotMentor } from "./mentor-assignment";
 
 type DB = Prisma.TransactionClient;
 type Context = Awaited<ReturnType<typeof defaultAccessContext>>;
@@ -48,6 +49,22 @@ export function createWorkforceService(client: PrismaClient = prisma, createAcce
       ...(scope.projectId ? [{ projectId: scope.projectId, organizationId: scope.organizationId }] : [])
     ] } });
     if (!membership) throw new AccessError("Person must have an active membership in this scope");
+  }
+  async function verifiedWorker(db: DB, ctx: Context, personId: string, scope: ResourceScope) {
+    const account = await db.user.findFirst({ where: { personId, status: "ACTIVE", emailVerifiedAt: { not: null }, person: { status: "ACTIVE" } }, select: { id: true } });
+    if (!account) throw new AccessError("Verified active account required for an active assignment");
+    await belongs(db, ctx, personId, scope);
+    return account.id;
+  }
+  async function responsibleManager(db: DB, ctx: Context, personId: string, scope: ResourceScope) {
+    const now = new Date();
+    const relation = await db.reportingRelationship.findFirst({ where: { personId, organizationId: scope.organizationId, status: "ACTIVE", AND: [{ OR: [{ startDate: null }, { startDate: { lte: now } }] }, { OR: [{ endDate: null }, { endDate: { gt: now } }] }] }, select: { managerPersonId: true } });
+    if (!relation) throw new AccessError("Active responsible manager required");
+    await verifiedWorker(db, ctx, relation.managerPersonId, { organizationId: scope.organizationId });
+  }
+  async function airaStaffScope(db: DB, organizationId: string) {
+    const organization = await db.organization.findUnique({ where: { id: organizationId }, select: { slug: true, parent: { select: { slug: true } } } });
+    return organization?.slug === "aira-skill-city" || organization?.parent?.slug === "aira-skill-city";
   }
   async function list(userId: string, kind: input.WorkforceKind, query: { organizationId?: string; search?: string; status?: string; projectId?: string } = {}) {
     return client.$transaction(async db => {
@@ -200,7 +217,8 @@ export function createWorkforceService(client: PrismaClient = prisma, createAcce
           await ctx.requireAccess("reporting.manage", scope);
           await scopedPerson(db, ctx, data.personId); await scopedPerson(db, ctx, data.managerPersonId);
           if (data.status === "ACTIVE") {
-            await belongs(db, ctx, data.personId, scope); await belongs(db, ctx, data.managerPersonId, scope);
+            if (await airaStaffScope(db, data.organizationId)) { await verifiedWorker(db, ctx, data.personId, scope); await verifiedWorker(db, ctx, data.managerPersonId, scope); }
+            else { await belongs(db, ctx, data.personId, scope); await belongs(db, ctx, data.managerPersonId, scope); }
             const edges = await boundedRead(take => db.reportingRelationship.findMany({ take, where: { organizationId: data.organizationId, status: "ACTIVE", ...(recordId ? { id: { not: recordId } } : {}) }, select: { personId: true, managerPersonId: true } }));
             const queue = [data.managerPersonId]; const seen = new Set<string>();
             while (queue.length) {
@@ -220,6 +238,7 @@ export function createWorkforceService(client: PrismaClient = prisma, createAcce
         case "responsibilities": {
           const parsed = input.responsibilityInput.parse(raw);
           const data = { ...parsed, projectId: parsed.projectId ?? null, productId: parsed.productId ?? null, goalId: parsed.goalId ?? null, taskId: parsed.taskId ?? null, milestoneId: parsed.milestoneId ?? null, programId: parsed.programId ?? null, batchId: parsed.batchId ?? null, locationId: parsed.locationId ?? null };
+          if (data.kind === "PARTNER" && data.status === "ACTIVE") throw new AccessError("Partner activation requires a separately verified agreement and approval workflow");
           let targetProjectId = data.projectId;
           if (data.taskId) {
             const task = await db.task.findUniqueOrThrow({ where: { id: data.taskId } });
@@ -249,7 +268,22 @@ export function createWorkforceService(client: PrismaClient = prisma, createAcce
           }
           if (targetProjectId && data.status === "ACTIVE" && ["COMPLETED", "CANCELLED", "ARCHIVED"].includes((await db.project.findUniqueOrThrow({ where: { id: targetProjectId } })).status)) throw new AccessError("Closed project cannot accept active responsibilities");
           await scopedPerson(db, ctx, data.personId);
-          if (data.status === "ACTIVE") await belongs(db, ctx, data.personId, scope);
+          if (data.status === "ACTIVE") {
+            if (await airaStaffScope(db, data.organizationId)) { await verifiedWorker(db, ctx, data.personId, scope); await responsibleManager(db, ctx, data.personId, scope); }
+            else await belongs(db, ctx, data.personId, scope);
+          }
+          const startupCohort = data.status === "ACTIVE" && (await db.organization.findUnique({ where: { id: data.organizationId }, select: { slug: true } }))?.slug === "aira-startup-school";
+          if (startupCohort && data.kind === "MENTOR" && !data.batchId) throw new AccessError("Active mentor assignment requires an approved cohort");
+          if (startupCohort && data.batchId) {
+            const batch = await db.batch.findUnique({ where: { id: data.batchId }, select: { programId: true } });
+            const pilot = await db.executiveRecord.findUnique({ where: { sourceKey: `startup:kerala-pilot:${data.batchId}` }, select: { id: true, kind: true, organizationId: true, status: true, payload: true } });
+            const decision = pilot ? await db.executiveHistory.findFirst({ where: { recordId: pilot.id, toStatus: "APPROVED" }, select: { actorUserId: true }, orderBy: { createdAt: "desc" } }) : null;
+            if (!batch || !approvedPilotCohort(pilot, decision, data.batchId, batch.programId, data.organizationId)) throw new AccessError("Approved intake required for an active cohort assignment");
+            if (data.kind === "MENTOR") {
+              const mentor = await db.user.findFirst({ where: { personId: data.personId, status: "ACTIVE", emailVerifiedAt: { not: null } }, select: { id: true } });
+              if (!mentor || !approvedPilotMentor(pilot, decision, data.batchId, batch.programId, data.organizationId, mentor.id)) throw new AccessError("Approved intake and verified mentor assignment required");
+            }
+          }
           for (const [type, id] of [["project", data.projectId], ["product", data.productId], ["goal", data.goalId]] as const) if (id) {
             const target = type === "project" ? await db.project.findUnique({ where: { id } }) : type === "product" ? await db.product.findUnique({ where: { id } }) : await db.goal.findUnique({ where: { id } });
             if (!target || target.organizationId !== data.organizationId) throw new AccessError("Responsibility target belongs to another scope");
@@ -351,10 +385,12 @@ export function createWorkforceService(client: PrismaClient = prisma, createAcce
       const projects = await boundedRead(take => db.project.findMany({ take, where: { OR: [{ organizationId: { in: ctx.organizationIds("project.read") } }, { id: { in: ctx.grants.filter(g => g.key === "project.read" && g.projectId).map(g => g.projectId!) }, organizationId: { in: ctx.nodes.filter(n => ancestry(ctx.nodes, n.id).every(a => a.status === "ACTIVE")).map(n => n.id) } }] }, select: { id: true, name: true, organizationId: true } }));
       const products = await boundedRead(take => db.product.findMany({ take, where: { organizationId: { in: ctx.organizationIds("product.read") } }, select: { id: true, name: true, organizationId: true } }));
       const goals = await boundedRead(take => db.goal.findMany({ take, where: { organizationId: { in: ctx.organizationIds("goal.read") } }, select: { id: true, title: true, organizationId: true } }));
+      const programs = await boundedRead(take => db.program.findMany({ take, where: { organizationId: { in: ctx.organizationIds("program.read") } }, select: { id: true, name: true, organizationId: true }, orderBy: { name: "asc" } }));
+      const batches = await boundedRead(take => db.batch.findMany({ take, where: { program: { organizationId: { in: ctx.organizationIds("batch.read") } } }, select: { id: true, name: true, program: { select: { organizationId: true } } }, orderBy: { name: "asc" } }));
       const permissions = ctx.organizationIds("permission.read").length ? await boundedRead(take => db.permission.findMany({ take, select: { id: true, name: true, key: true }, orderBy: { key: "asc" } })) : [];
       const scopes = Object.fromEntries(["person.create", "person.update", "user.create", "user.update", "role.create", "role.update", "permission.assign", "membership.manage", "membership.assign_role", "organization.manage", "reporting.manage", "responsibility.manage", "sia.access.manage", "access.explain"].map(k => [k, ctx.organizationIds(k)]));
       const canCreatePermission = ctx.grants.some(g => g.key === "permission.create" && g.scope === "GLOBAL" && !g.projectId);
-      return { organizations, people, roles, projects, products, goals, permissions, scopes, canCreatePermission };
+      return { organizations, people, roles, projects, products, goals, programs, batches: batches.map(batch => ({ id: batch.id, name: batch.name, organizationId: batch.program.organizationId })), permissions, scopes, canCreatePermission };
     });
   }
   return { list, save, setRole, setPermission, switchOrganization, explain, setSiaRole, workspace };

@@ -1,5 +1,7 @@
 # MAXPASE workplace: Phase 11 release preparation
 
+> Historical 2026-10-24 SQLite-era record. Do not use its SQLite deployment steps for the current PostgreSQL application. See [Phase 8 acceptance and release register](MAXPASE_PHASE_8_ACCEPTANCE_RELEASE.md) and the PostgreSQL sections of `docs/architecture/MIGRATION_RUNBOOK.md` and `docs/architecture/BACKUP_RESTORE.md`.
+
 Status: **PREPARED FOR OWNER REVIEW; NOT APPROVED FOR RELEASE**. Recorded 2026-10-24. This is a source/configuration and runbook review, not a Railway-account inspection, production migration, domain retest or deployment. Phase 10's synthetic acceptance does not authorize real accounts or traffic. The current worktree has uncommitted Phase 1-10 work and is not an immutable release artifact.
 
 ## Deployment boundary
