@@ -6,12 +6,19 @@ export type HierarchyNode = {
   lifecycle?: string;
   detail?: string;
   href: string;
+  recordId?: string;
+  organizationId?: string;
+  slug?: string;
+  displayName?: string;
+  legalName?: string | null;
+  website?: string | null;
+  description?: string | null;
   children: HierarchyNode[];
 };
 
 type Organization = { id: string; parentId: string | null; name: string; slug?: string; type: string; status?: string };
-type Company = { id?: string; organizationId: string; legalName?: string | null; displayName: string; status: string };
-type Brand = { id: string; organizationId: string; parentBrandId?: string | null; name: string; status: string; website?: string | null };
+type Company = { id?: string; organizationId: string; legalName?: string | null; displayName: string; status: string; description?: string | null; organization?: { slug?: string } };
+type Brand = { id: string; organizationId: string; parentBrandId?: string | null; name: string; slug?: string; status: string; website?: string | null; description?: string | null };
 type Product = { id: string; organizationId: string; divisionId?: string | null; brandId?: string | null; name: string; type: string; lifecycle: string; status: string };
 export type HierarchySource = { groupId: string; organizations: Organization[]; companies: Company[]; brands: Brand[]; products: Product[] };
 
@@ -25,7 +32,7 @@ export function buildBossHierarchy(source: HierarchySource): HierarchyNode {
   const organizations = new Map(source.organizations.map(row => [row.id, row]));
   for (const company of source.companies) {
     if (organizations.get(company.organizationId)?.parentId !== source.groupId) continue;
-    const node: HierarchyNode = { id: company.organizationId, kind: "COMPANY", name: company.legalName || company.displayName, status: company.status, detail: company.displayName !== company.legalName ? company.displayName : undefined, href: `/app/boss/companies/${encodeURIComponent(company.organizationId)}`, children: [] };
+    const node: HierarchyNode = { id: company.organizationId, kind: "COMPANY", name: company.legalName || company.displayName, status: company.status, detail: company.displayName !== company.legalName ? company.displayName : undefined, recordId: company.id, organizationId: company.organizationId, slug: company.organization?.slug ?? organizations.get(company.organizationId)?.slug, displayName: company.displayName, legalName: company.legalName, description: company.description, href: `/app/boss/companies/${encodeURIComponent(company.organizationId)}`, children: [] };
     root.children.push(node); nodes.set(node.id, node);
   }
   const units = source.organizations.filter(row => row.type === "DIVISION" || row.type === "BUSINESS_UNIT");
@@ -53,7 +60,7 @@ export function buildBossHierarchy(source: HierarchySource): HierarchyNode {
       if (brand.parentBrandId && (!parentBrand || parentBrand.organizationId !== brand.organizationId)) continue;
       const parent = nodes.get(brand.parentBrandId ? `brand:${brand.parentBrandId}` : brand.organizationId);
       if (!parent || !(brand.parentBrandId ? parent.kind === "BRAND" : parent.kind === "COMPANY")) { unresolved.push(brand); continue; }
-      const node: HierarchyNode = { id: `brand:${brand.id}`, kind: "BRAND", name: brand.name, status: brand.status, detail: brand.website || undefined, href: `/app/boss/brands/${encodeURIComponent(brand.id)}`, children: [] };
+      const node: HierarchyNode = { id: `brand:${brand.id}`, kind: "BRAND", name: brand.name, status: brand.status, detail: brand.website || undefined, recordId: brand.id, organizationId: brand.organizationId, slug: brand.slug, website: brand.website, description: brand.description, href: `/app/boss/brands/${encodeURIComponent(brand.id)}`, children: [] };
       parent.children.push(node); nodes.set(node.id, node); attached++;
     }
     if (!attached) break;

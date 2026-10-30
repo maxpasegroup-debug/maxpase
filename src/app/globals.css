@@ -2238,6 +2238,31 @@ progress { width: 120px; accent-color: var(--accent); }
 .boss-hierarchy-toggle:hover { background: rgba(90, 135, 195, .15); }
 .boss-hierarchy-link { display: grid; flex: 1; min-width: 0; gap: 2px; color: inherit; text-decoration: none; overflow-wrap: anywhere; }
 .boss-hierarchy-link:hover strong { text-decoration: underline; }
+.boss-hierarchy-manage-trigger { padding: 0; border: 0; background: transparent; text-align: left; font: inherit; cursor: pointer; }
+.boss-hierarchy-dialog { width: min(620px, calc(100vw - 28px)); max-height: min(760px, calc(100dvh - 28px)); padding: 0; border: 1px solid #cbd8eb; border-radius: 18px; background: #fff; color: #102954; box-shadow: 0 24px 80px #071a3a55; overflow: auto; }
+.boss-hierarchy-dialog::backdrop { background: #071a3ab8; }
+.boss-hierarchy-dialog-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; padding: 24px 26px 12px; border-bottom: 1px solid #e4ebf5; }
+.boss-hierarchy-dialog-head h2 { margin: 5px 0 10px; font-size: clamp(20px, 3vw, 26px); overflow-wrap: anywhere; }
+.boss-hierarchy-dialog > p, .boss-hierarchy-dialog > .boss-hierarchy-dialog-actions, .boss-hierarchy-dialog-list, .boss-hierarchy-manage-form, .boss-hierarchy-dialog-back { margin-left: 26px; margin-right: 26px; }
+.boss-hierarchy-dialog > p { line-height: 1.55; }
+.boss-hierarchy-dialog-actions { display: flex; flex-wrap: wrap; gap: 9px; padding: 8px 0 20px; }
+.boss-hierarchy-dialog-actions .button { display: inline-flex; align-items: center; gap: 7px; min-height: 44px; text-decoration: none; }
+.boss-hierarchy-dialog-list { padding-bottom: 24px; }
+.boss-hierarchy-dialog-list h3 { margin: 0 0 10px; font-size: 14px; }
+.boss-hierarchy-dialog-list ul { list-style: none; padding: 0; margin: 0; display: grid; gap: 7px; }
+.boss-hierarchy-dialog-list button { width: 100%; display: flex; align-items: center; gap: 10px; padding: 10px 12px; min-height: 52px; border: 1px solid #dbe3ef; border-radius: 9px; background: #f8fbff; color: inherit; text-align: left; cursor: pointer; }
+.boss-hierarchy-dialog-list button span { flex: 1; min-width: 0; display: grid; gap: 2px; overflow-wrap: anywhere; }
+.boss-hierarchy-dialog-list button small { color: #5c6e89; }
+.boss-hierarchy-dialog-list button:hover { border-color: #2869c9; }
+.boss-hierarchy-manage-form { display: grid; gap: 16px; padding: 14px 0 8px; }
+.boss-hierarchy-manage-form > p { margin: 0; line-height: 1.5; }
+.boss-hierarchy-manage-form label, .boss-hierarchy-form-grid label { display: grid; gap: 6px; font-size: 13px; font-weight: 700; }
+.boss-hierarchy-manage-form input, .boss-hierarchy-manage-form textarea, .boss-hierarchy-manage-form select { width: 100%; min-height: 44px; padding: 9px 11px; border: 1px solid #b9c9df; border-radius: 8px; color: #102954; background: #fff; font: inherit; }
+.boss-hierarchy-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.boss-hierarchy-form-wide { grid-column: 1 / -1; }
+.boss-hierarchy-dialog-back { display: inline-block; margin-bottom: 22px; padding: 8px 0; border: 0; background: transparent; color: #1259bc; font-weight: 700; cursor: pointer; }
+.boss-hierarchy-dialog :is(button, a, input, textarea, select):focus-visible { outline: 3px solid #2869c9; outline-offset: 2px; }
+@media (max-width: 600px) { .boss-hierarchy-dialog-head { padding: 18px 16px 10px; } .boss-hierarchy-dialog > p, .boss-hierarchy-dialog > .boss-hierarchy-dialog-actions, .boss-hierarchy-dialog-list, .boss-hierarchy-manage-form, .boss-hierarchy-dialog-back { margin-left: 16px; margin-right: 16px; } .boss-hierarchy-form-grid { grid-template-columns: 1fr; } }
 .boss-hierarchy-link strong { font-size: 14px; line-height: 1.35; }
 .boss-hierarchy-link small { color: var(--muted); font-size: 11px; }
 .boss-hierarchy-kind { color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }

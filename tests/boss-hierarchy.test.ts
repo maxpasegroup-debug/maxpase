@@ -17,6 +17,7 @@ runInNewContext(code, { module: target, exports: target.exports, require: (name:
   "next/navigation": { useRouter: () => ({ push: () => undefined }) },
   "lucide-react": { Boxes: Icon, Building2: Icon, ChevronDown: Icon, ChevronRight: Icon, Layers3: Icon, List: Icon, Search: Icon, Shield: Icon, X: Icon },
   "@/components/ui/status": { Status: ({ value }: { value: string }) => createElement("span", null, value) },
+  "./hierarchy-manager": { HierarchyManager: () => createElement("div", null, "Management dialog") },
   "@/server/group/boss-hierarchy": { filterBossHierarchy, selectCompanyHierarchy, visibleHierarchyIds }
 } as Record<string, unknown>)[name] ?? require(name) });
 const BossHierarchy = (target.exports as { BossHierarchy: ComponentType<{ root: ReturnType<typeof buildBossHierarchy>; selectedCompanyId?: string; initialSearch?: string; initialStatus?: string; brandReadable: boolean; productReadable: boolean }> }).BossHierarchy;
@@ -128,6 +129,9 @@ describe("Boss registry hierarchy", () => {
     const root = buildBossHierarchy(source);
     const overview = renderToStaticMarkup(createElement(BossHierarchy, { root, brandReadable: true, productReadable: true }));
     expect(overview).toContain('aria-label="Expand AIRA Skill City Private Limited"');
+    expect(overview).toContain('aria-label="Manage MAXPASE Group"');
+    expect(overview).toContain('aria-label="Manage AIRA Skill City Private Limited"');
+    expect(overview).toContain('aria-haspopup="dialog"');
     expect(overview).toContain('aria-expanded="false"');
     expect(overview).toContain('boss-hierarchy-company-grid');
     expect(overview).toContain('2 brands / units · 2 products / services');
@@ -137,6 +141,7 @@ describe("Boss registry hierarchy", () => {
     const searched = renderToStaticMarkup(createElement(BossHierarchy, { root, brandReadable: true, productReadable: true, initialSearch: "BGOS" }));
     expect(searched).toContain("BGOS");
     expect(searched).toContain("AIRA Labs Brand");
+    expect(searched).toContain('aria-label="Manage AIRA Labs Brand"');
     expect(searched).toContain('href="/app/business/products?recordId=bgos"');
     expect(searched).toContain("CONCEPT");
     expect(searched).not.toContain("<strong>TEARN Private Limited</strong>");
@@ -151,5 +156,12 @@ describe("Boss registry hierarchy", () => {
     const empty = renderToStaticMarkup(createElement(BossHierarchy, { root: buildBossHierarchy({ ...source, organizations: [], companies: [], brands: [], products: [] }), brandReadable: false, productReadable: false }));
     expect(empty).toContain("No company records are configured");
     expect(empty).toContain("current permissions");
+  });
+  it("removes archived companies from the default diagram while retaining a way to find them", () => {
+    const root = buildBossHierarchy({ ...source, companies: source.companies.map(row => row.organizationId === "tearn" ? { ...row, status: "ARCHIVED" } : row) });
+    const html = renderToStaticMarkup(createElement(BossHierarchy, { root, brandReadable: true, productReadable: true }));
+    expect(html).not.toContain("<strong>TEARN Private Limited</strong>");
+    expect(html).toContain("TEARN Private Limited (Archived)");
+    expect(html).toContain("All statuses");
   });
 });
