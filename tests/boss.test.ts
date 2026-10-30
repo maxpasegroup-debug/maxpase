@@ -131,10 +131,10 @@ describe("MAXPASE group and Boss controls", () => {
     expect(await db.companyProfile.count()).toBe(3);
     expect((await db.organization.findUniqueOrThrow({ where: { id: groupId } })).name).toBe("MAXPASE GROUP");
     const brands = await db.brand.findMany({ orderBy: { website: "asc" } });
-    expect(brands.filter(b => b.website).map(b => b.website).sort()).toEqual(["airaskillcity.com", "airastartupskool.com", "airalabs.online", "nicejobs.online", "teachx.guru", "learnx.guru"].map(d => "https://" + d).sort());
+    expect(brands.filter(b => b.website).map(b => b.website).sort()).toEqual(["airastartupskool.com", "airalabs.online", "nicejobs.online", "teachx.guru", "learnx.guru"].map(d => "https://" + d).sort());
     expect(brands.find(b => b.slug === "top-rank-ai")?.website).toBeNull();
     const bySlug = new Map(brands.map(brand => [brand.slug, brand]));
-    expect(brands.filter(brand => brand.organizationId === airaId && !brand.parentBrandId).map(brand => brand.name).sort()).toEqual(["AIRA SKILL CITY", "AIRA STARTUP SKOOL", "AIRA LABS", "AIRA CAREER HUB"].sort());
+    expect(brands.filter(brand => brand.organizationId === airaId && !brand.parentBrandId).map(brand => brand.name).sort()).toEqual(["AIRA STARTUP SKOOL", "AIRA SKILL STUDIO", "AIRA LABS", "AIRA CAREER HUB"].sort());
     expect(brands.filter(brand => brand.parentBrandId === bySlug.get("aira-labs")?.id).map(brand => brand.name).sort()).toEqual(["MY SOLAR SOLUTIONS", "NTE NAADU", "HAPPINOTES", "TALKIN LABS", "BGOS"].sort());
     expect(bySlug.get("nice-jobs")?.parentBrandId).toBe(bySlug.get("aira-career-hub")?.id);
     expect(brands.filter(brand => brand.organizationId === pearnId).map(brand => brand.name).sort()).toEqual(["LEARNX GURU", "TEACHX GURU"]);
@@ -178,7 +178,7 @@ describe("MAXPASE group and Boss controls", () => {
     expect(aira.divisions.map(item => !!item.productRow)).toEqual([true, true, true, true]);
     expect(aira.divisions.slice(0, 3).every(item => item.productRow?.status === "INACTIVE" && item.productRow.lifecycle === "CONCEPT")).toBe(true);
     expect(aira.divisions[3].productRow?.lifecycle).toBe("CONCEPT");
-    expect(aira.brands.map(item => item.name)).toEqual(["AIRA SKILL CITY", "AIRA STARTUP SKOOL", "AIRA LABS", "AIRA CAREER HUB"]);
+    expect(aira.brands.map(item => item.name)).toEqual(["AIRA STARTUP SKOOL", "AIRA SKILL STUDIO", "AIRA LABS", "AIRA CAREER HUB"]);
     expect(aira.brands.every(item => !!item.row)).toBe(true);
     expect(aira.subBrands.map(item => item.name)).toEqual(["MY SOLAR SOLUTIONS", "NTE NAADU", "HAPPINOTES", "TALKIN LABS", "BGOS", "NICEJOBS"]);
     expect(aira.subBrands.every(item => !!item.row)).toBe(true);

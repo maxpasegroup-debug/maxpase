@@ -9,8 +9,8 @@ export const groupCompanies = [
   { slug: "top-rank-ai", name: "TOP RANK AI PRIVATE LIMITED", shortName: "Top Rank AI" }
 ] as const;
 const brands = [
-  { company: "aira-skill-city", slug: "aira-skill-city", name: "AIRA SKILL CITY", parentSlug: null, domain: "airaskillcity.com" },
   { company: "aira-skill-city", slug: "startup-school", name: "AIRA STARTUP SKOOL", parentSlug: null, domain: "airastartupskool.com" },
+  { company: "aira-skill-city", slug: "aira-skill-studio", name: "AIRA SKILL STUDIO", parentSlug: null, domain: null },
   { company: "aira-skill-city", slug: "aira-labs", name: "AIRA LABS", parentSlug: null, domain: "airalabs.online" },
   { company: "aira-skill-city", slug: "aira-career-hub", name: "AIRA CAREER HUB", parentSlug: null, domain: null },
   { company: "aira-skill-city", slug: "my-solar-solutions", name: "MY SOLAR SOLUTIONS", parentSlug: "aira-labs", domain: null },
@@ -24,7 +24,7 @@ const brands = [
   { company: "top-rank-ai", slug: "top-rank-ai", name: "TOP TANK AI", parentSlug: null, domain: null }
 ] as const;
 const previousBrandNames: Record<string, string[]> = {
-  "aira-skill-city": ["Aira Skill City"], "startup-school": ["Startup School"],
+  "startup-school": ["Startup School"],
   "aira-labs": ["AIRA Labs"], "nice-jobs": ["Nice Jobs"],
   "teachx-guru": ["TeachX Guru"], "learnx-guru": ["LearnX Guru"], "top-rank-ai": ["Top Rank AI"],
   happinotes: ["HappiNotes"]
@@ -49,6 +49,12 @@ export async function initializeGroupStructure(db: Prisma.TransactionClient) {
   }
   const aira = companies.find(c => c.slug === "aira-skill-city")!;
   await seedAiraStructure(db, aira.id);
+  const legacyBrand = await db.brand.findUnique({ where: { organizationId_slug: { organizationId: aira.id, slug: "aira-skill-city" } }, include: { _count: { select: { childBrands: true, products: true, projects: true, programs: true } } } });
+  if (legacyBrand && legacyBrand.status !== "ARCHIVED") {
+    if (Object.values(legacyBrand._count).some(count => count > 0)) throw new Error("Legacy AIRA Skill City brand has linked records; review before archiving");
+    await db.brand.update({ where: { id: legacyBrand.id }, data: { status: "ARCHIVED" } });
+    await db.auditEvent.create({ data: { organizationId: aira.id, action: "group.legacy_brand_archived", entityType: "Brand", entityId: legacyBrand.id, result: "SUCCESS", metadata: JSON.stringify({ source: "OWNER_CONFIRMED", reason: "AIRA Skill City is the company and employee workplace, not a brand" }) } });
+  }
   for (const definition of brands) {
     const company = companies.find(c => c.slug === definition.company)!;
     const parent = definition.parentSlug ? await db.brand.findUnique({ where: { organizationId_slug: { organizationId: company.id, slug: definition.parentSlug } } }) : null;

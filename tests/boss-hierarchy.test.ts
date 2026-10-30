@@ -50,7 +50,7 @@ const source: HierarchySource = {
 describe("Boss registry hierarchy", () => {
   it("keeps the owner-confirmed company, brand and sub-brand map", () => {
     expect(bossStructure.map(company => company.legalName)).toEqual(["AIRA SKILL CITY PRIVATE LIMITED", "TEARN PRIVATE LIMITED", "TOP RANK AI PRIVATE LIMITED"]);
-    expect(bossStructure[0].brands.map(brand => brand.name)).toEqual(["AIRA SKILL CITY", "AIRA STARTUP SKOOL", "AIRA LABS", "AIRA CAREER HUB"]);
+    expect(bossStructure[0].brands.map(brand => brand.name)).toEqual(["AIRA STARTUP SKOOL", "AIRA SKILL STUDIO", "AIRA LABS", "AIRA CAREER HUB"]);
     expect(bossStructure[0].subBrands.filter(brand => brand.parentSlug === "aira-labs").map(brand => brand.name)).toEqual(["MY SOLAR SOLUTIONS", "NTE NAADU", "HAPPINOTES", "TALKIN LABS", "BGOS"]);
     expect(bossStructure[0].subBrands.filter(brand => brand.parentSlug === "aira-career-hub").map(brand => brand.name)).toEqual(["NICEJOBS"]);
     expect(bossStructure[1].brands.map(brand => brand.name)).toEqual(["TEACHX GURU", "LEARNX GURU"]);
@@ -65,6 +65,15 @@ describe("Boss registry hierarchy", () => {
     expect(aira.children[0].children.map(node => node.id)).toEqual(["product:service"]);
     expect(aira.children[1].children[0]).toMatchObject({ status: "INACTIVE", lifecycle: "CONCEPT", href: "/app/business/products?recordId=bgos" });
     expect(JSON.stringify(root)).not.toContain("Hidden");
+  });
+  it("shows brands, not operational divisions, in the Boss brand diagram", () => {
+    const root = buildBossHierarchy(source, { includeUnits: false });
+    expect(root.children[0].children.map(node => node.id)).toEqual(["brand:brand-labs", "product:service"]);
+    expect(root.children[0].children[0].children.map(node => node.id)).toEqual(["product:bgos"]);
+    expect(root.children[0].children.some(node => node.kind === "UNIT")).toBe(false);
+    const html = renderToStaticMarkup(createElement(BossHierarchy, { root, brandReadable: true, productReadable: true }));
+    expect(html).toContain("1 top-level brand");
+    expect(html).not.toContain("brands / units");
   });
 
   it("nests sub-brands by recorded parent ID and rejects foreign or cyclic parents", () => {

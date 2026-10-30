@@ -3,7 +3,7 @@ import type { Prisma } from "@prisma/client";
 export const airaProductDrafts = [
   { slug: "bgos", name: "BGOS", divisionSlug: "aira-labs", brandSlug: "bgos" },
   { slug: "pba", name: "PBA", divisionSlug: "aira-startup-school", brandSlug: "startup-school" },
-  { slug: "genz-builder", name: "GenZ Builder", divisionSlug: "aira-skill-studio", brandSlug: null }
+  { slug: "genz-builder", name: "GenZ Builder", divisionSlug: "aira-skill-studio", brandSlug: "aira-skill-studio" }
 ] as const;
 
 export const seniorAcademicAdvisorDraft = {
@@ -37,7 +37,11 @@ export async function registerAiraProductDrafts(db: Prisma.TransactionClient, co
     if (definition.brandSlug && !brand) throw new Error("Product brand is not registered");
     const existing = await db.product.findUnique({ where: { organizationId_slug: { organizationId: companyId, slug: definition.slug } } });
     if (existing) {
-      if (existing.name !== definition.name || existing.divisionId !== division.id || existing.brandId !== (brand?.id ?? null) || existing.status !== "INACTIVE" || existing.lifecycle !== "CONCEPT") throw new Error("Product draft conflicts with existing record; review required");
+      if (existing.name !== definition.name || existing.divisionId !== division.id || (existing.brandId !== (brand?.id ?? null) && !(definition.slug === "genz-builder" && existing.brandId === null)) || existing.status !== "INACTIVE" || existing.lifecycle !== "CONCEPT") throw new Error("Product draft conflicts with existing record; review required");
+      if (definition.slug === "genz-builder" && existing.brandId === null && brand) {
+        await db.product.update({ where: { id: existing.id }, data: { brandId: brand.id } });
+        await db.auditEvent.create({ data: { organizationId: companyId, action: "group.product_brand_corrected", entityType: "Product", entityId: existing.id, result: "SUCCESS", metadata: JSON.stringify({ previousBrandId: null, nextBrandId: brand.id, source: "OWNER_CONFIRMED" }) } });
+      }
       continue;
     }
     const product = await db.product.create({ data: {

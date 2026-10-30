@@ -12,7 +12,7 @@ export const bossStructure = [
       { slug: "aira-career-hub", label: "AIRA Career Hub", product: "Nice Jobs", productSlug: "nice-jobs" }
     ],
     brands: [
-      { slug: "aira-skill-city", name: "AIRA SKILL CITY" }, { slug: "startup-school", name: "AIRA STARTUP SKOOL" },
+      { slug: "startup-school", name: "AIRA STARTUP SKOOL" }, { slug: "aira-skill-studio", name: "AIRA SKILL STUDIO" },
       { slug: "aira-labs", name: "AIRA LABS" }, { slug: "aira-career-hub", name: "AIRA CAREER HUB" }
     ],
     subBrands: [
@@ -52,7 +52,6 @@ export function projectBossStructure(data: BossData) {
       status: card.status,
       health: card.health,
       evidence: card.evidence,
-      primaryBrand: spec.slug === "aira-skill-city" ? namedRow(data.brands, card.organizationId, "Aira Skill City", "aira-skill-city") : undefined,
       divisions: spec.divisions.map(item => ({
         ...item,
         row: division(item.slug),

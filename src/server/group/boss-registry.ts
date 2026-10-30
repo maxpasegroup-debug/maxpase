@@ -13,7 +13,7 @@ export function createBossRegistry(client: PrismaClient = prisma) {
     if (!row || row.organization.parentId !== root.id) throw new AccessError("Company unavailable");
     await ctx.requireAccess("company.read", { organizationId });
     await ctx.requireAccess("organization.read", { organizationId });
-    const brands = (await ctx.decide("brand.read", { organizationId })).allowed ? await client.brand.findMany({ where: { organizationId, parentBrandId: null }, select: { id: true, name: true, status: true, website: true, _count: { select: { childBrands: true } } }, orderBy: { name: "asc" }, take: 100 }) : null;
+    const brands = (await ctx.decide("brand.read", { organizationId })).allowed ? await client.brand.findMany({ where: { organizationId, parentBrandId: null, status: { not: "ARCHIVED" } }, select: { id: true, name: true, status: true, website: true, _count: { select: { childBrands: true } } }, orderBy: { name: "asc" }, take: 100 }) : null;
     const units = await client.organization.findMany({ where: { parentId: organizationId, type: { in: ["DIVISION", "BUSINESS_UNIT"] }, id: { in: ctx.organizationIds("organization.read") } }, select: { id: true, name: true, status: true }, orderBy: { name: "asc" }, take: 100 });
     return { row, brands, units, canManageCompany: (await ctx.decide("company.manage", { organizationId })).allowed, canManageBrands: (await ctx.decide("brand.manage", { organizationId })).allowed };
   }
@@ -28,7 +28,7 @@ export function createBossRegistry(client: PrismaClient = prisma) {
     if (row.parentBrandId && !parent) throw new AccessError("Brand parent unavailable");
     const children = await client.brand.findMany({ where: { organizationId: row.organizationId, parentBrandId: row.id }, select: { id: true, name: true, status: true }, orderBy: { name: "asc" }, take: 100 });
     const products = (await ctx.decide("product.read", { organizationId: row.organizationId })).allowed ? await client.product.findMany({ where: { brandId: row.id, organizationId: row.organizationId }, select: { id: true, name: true, status: true, lifecycle: true, updatedAt: true }, orderBy: { name: "asc" }, take: 101 }) : null;
-    const mappedUnit = row.organization.slug === "aira-skill-city" ? ({ "aira-skill-city": "aira-skill-city", "startup-school": "aira-startup-school", "aira-labs": "aira-labs", "nice-jobs": "aira-career-hub" } as Record<string, string>)[row.slug] : undefined;
+    const mappedUnit = row.organization.slug === "aira-skill-city" ? ({ "startup-school": "aira-startup-school", "aira-skill-studio": "aira-skill-studio", "aira-labs": "aira-labs", "aira-career-hub": "aira-career-hub", "nice-jobs": "aira-career-hub" } as Record<string, string>)[row.slug] : undefined;
     const verifiedUnit = mappedUnit && mappedUnit !== row.organization.slug ? await client.organization.findFirst({ where: { slug: mappedUnit, parentId: row.organizationId, type: "DIVISION" }, select: { id: true, status: true } }) : null;
     const scope = { organizationId: row.organizationId };
     const workReadable = (await ctx.decide("project.read", scope)).allowed;

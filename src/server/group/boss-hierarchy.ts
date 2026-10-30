@@ -25,7 +25,7 @@ export type HierarchySource = { groupId: string; organizations: Organization[]; 
 const detailHref = (kind: string, id: string) => `/app/business/${kind}?recordId=${encodeURIComponent(id)}`;
 const sort = (a: HierarchyNode, b: HierarchyNode) => a.name.localeCompare(b.name);
 
-export function buildBossHierarchy(source: HierarchySource): HierarchyNode {
+export function buildBossHierarchy(source: HierarchySource, options: { includeUnits?: boolean } = {}): HierarchyNode {
   const group = source.organizations.find(row => row.id === source.groupId);
   const root: HierarchyNode = { id: source.groupId, kind: "GROUP", name: group?.name ?? "MAXPASE Group", status: group?.status ?? "NOT CONFIGURED", href: "/app/boss?view=companies", children: [] };
   const nodes = new Map<string, HierarchyNode>([[root.id, root]]);
@@ -35,7 +35,7 @@ export function buildBossHierarchy(source: HierarchySource): HierarchyNode {
     const node: HierarchyNode = { id: company.organizationId, kind: "COMPANY", name: company.legalName || company.displayName, status: company.status, detail: company.displayName !== company.legalName ? company.displayName : undefined, recordId: company.id, organizationId: company.organizationId, slug: company.organization?.slug ?? organizations.get(company.organizationId)?.slug, displayName: company.displayName, legalName: company.legalName, description: company.description, href: `/app/boss/companies/${encodeURIComponent(company.organizationId)}`, children: [] };
     root.children.push(node); nodes.set(node.id, node);
   }
-  const units = source.organizations.filter(row => row.type === "DIVISION" || row.type === "BUSINESS_UNIT");
+  const units = options.includeUnits === false ? [] : source.organizations.filter(row => row.type === "DIVISION" || row.type === "BUSINESS_UNIT");
   // Resolve only the authorized organization chain; never attach a unit by name.
   let pending = units;
   while (pending.length) {

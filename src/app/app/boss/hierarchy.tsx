@@ -13,9 +13,11 @@ function activeStructure(node: HierarchyNode): HierarchyNode { return { ...node,
 
 function ChildCount({ node }: { node: HierarchyNode }) {
   const rows = descendants(node).slice(1);
-  const units = rows.filter(row => row.kind === "UNIT" || row.kind === "BRAND").length;
+  const brandRows = node.kind === "COMPANY" ? node.children : rows;
+  const units = brandRows.filter(row => row.kind === "UNIT" || row.kind === "BRAND").length;
+  const includesUnits = rows.some(row => row.kind === "UNIT");
   const products = rows.filter(row => row.kind === "PRODUCT" || row.kind === "SERVICE").length;
-  return <span className="boss-hierarchy-node-count">{units} {units === 1 ? "brand / unit" : "brands / units"} · {products} {products === 1 ? "product / service" : "products / services"}</span>;
+  return <span className="boss-hierarchy-node-count">{units} {includesUnits ? units === 1 ? "brand / unit" : "brands / units" : node.kind === "COMPANY" ? units === 1 ? "top-level brand" : "top-level brands" : units === 1 ? "brand" : "brands"} · {products} {products === 1 ? "product / service" : "products / services"}</span>;
 }
 
 function HierarchyBranch({ node, expanded, onToggle, onManage, index = 0 }: { node: HierarchyNode; expanded: ReadonlySet<string>; onToggle: (id: string) => void; onManage: (node: HierarchyNode) => void; index?: number }) {
