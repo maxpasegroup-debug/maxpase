@@ -11,6 +11,7 @@ export function brandOperatingModules(input: {
   marketingHref?: string;
   commercialHref?: string;
   reportsHref?: string;
+  studioProgramsHref?: string;
 }): BrandModule[] {
   const available = (key: string, label: string, href: string, enabled: boolean, note = "Authorized workspace") =>
     ({ key, label, href: enabled ? href : null, note: enabled ? note : "Not authorized" });
@@ -33,6 +34,7 @@ export function brandOperatingModules(input: {
   ];
   return [
     available("overview", "Overview", "#overview", true),
+    ...(input.studioProgramsHref ? [available("programs", "Skill programmes", input.studioProgramsHref, input.programs, "Recorded Skill Studio drafts and lifecycle states")] : []),
     available("products", "Programs, Products and Services", "#products", input.products),
     unconnected("crm", "CRM"),
     available("people", "People and HR", "#people", input.people),

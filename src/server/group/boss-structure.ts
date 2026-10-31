@@ -20,6 +20,7 @@ export const bossStructure = [
       { slug: "nte-naadu", name: "NTE NAADU", parentSlug: "aira-labs" },
       { slug: "happinotes", name: "HAPPINOTES", parentSlug: "aira-labs" },
       { slug: "talkin-labs", name: "TALKIN LABS", parentSlug: "aira-labs" },
+      { slug: "onspeak-mentor-hub", name: "ONSPEAK MENTOR HUB", parentSlug: "aira-labs" },
       { slug: "bgos", name: "BGOS", parentSlug: "aira-labs" },
       { slug: "nice-jobs", name: "NICEJOBS", parentSlug: "aira-career-hub" }
     ]

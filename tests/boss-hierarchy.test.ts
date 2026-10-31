@@ -51,7 +51,7 @@ describe("Boss registry hierarchy", () => {
   it("keeps the owner-confirmed company, brand and sub-brand map", () => {
     expect(bossStructure.map(company => company.legalName)).toEqual(["AIRA SKILL CITY PRIVATE LIMITED", "TEARN PRIVATE LIMITED", "TOP RANK AI PRIVATE LIMITED"]);
     expect(bossStructure[0].brands.map(brand => brand.name)).toEqual(["AIRA STARTUP SKOOL", "AIRA SKILL STUDIO", "AIRA LABS", "AIRA CAREER HUB"]);
-    expect(bossStructure[0].subBrands.filter(brand => brand.parentSlug === "aira-labs").map(brand => brand.name)).toEqual(["MY SOLAR SOLUTIONS", "NTE NAADU", "HAPPINOTES", "TALKIN LABS", "BGOS"]);
+    expect(bossStructure[0].subBrands.filter(brand => brand.parentSlug === "aira-labs").map(brand => brand.name)).toEqual(["MY SOLAR SOLUTIONS", "NTE NAADU", "HAPPINOTES", "TALKIN LABS", "ONSPEAK MENTOR HUB", "BGOS"]);
     expect(bossStructure[0].subBrands.filter(brand => brand.parentSlug === "aira-career-hub").map(brand => brand.name)).toEqual(["NICEJOBS"]);
     expect(bossStructure[1].brands.map(brand => brand.name)).toEqual(["TEACHX GURU", "LEARNX GURU"]);
     expect(bossStructure[2].brands.map(brand => brand.name)).toEqual(["TOP TANK AI"]);

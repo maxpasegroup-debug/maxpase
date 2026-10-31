@@ -18,16 +18,25 @@ export function commandUnit(companySlug: string, unitSlug: string) {
   return product ? { company, label: product, productSlug: unitSlug, productName: product } : null;
 }
 
+export function commandBrandSlug(companySlug: string, unitSlug: string) {
+  const unit = commandUnit(companySlug, unitSlug);
+  if (!unit || companySlug === "aira-skill-city" && unitSlug === companySlug) return null;
+  if ("brandSlug" in unit) return unit.brandSlug;
+  if ("divisionSlug" in unit) return unit.divisionSlug === "aira-startup-school" ? "startup-school" : unit.divisionSlug;
+  return null;
+}
+
 export function createBrandCommandService(client: PrismaClient = prisma) {
   const boss = createBossService(client);
   async function read(userId: string, companySlug: string, unitSlug: string) {
     const unit = commandUnit(companySlug, unitSlug);
     if (!unit) throw new AccessError("Command centre unavailable");
+    const companyOS = companySlug === "aira-skill-city" && unitSlug === companySlug;
     const { ctx, root } = await boss.authority(userId);
     const company = await client.organization.findUnique({ where: { slug: companySlug }, select: { id: true, parentId: true, type: true, status: true, company: { select: { legalName: true, status: true } } } });
     if (!company || company.parentId !== root.id || company.type !== "COMPANY") throw new AccessError("Company unavailable");
     for (const permission of ["organization.read", "company.read", "executive.read"]) await ctx.requireAccess(permission, { organizationId: company.id });
-    const brandSlug = "brandSlug" in unit ? unit.brandSlug : unit.divisionSlug === "aira-startup-school" ? "startup-school" : unit.divisionSlug === "aira-career-hub" ? "nice-jobs" : unit.divisionSlug;
+    const brandSlug = commandBrandSlug(companySlug, unitSlug);
     const brand = brandSlug && (await ctx.decide("brand.read", { organizationId: company.id })).allowed
       ? await client.brand.findUnique({ where: { organizationId_slug: { organizationId: company.id, slug: brandSlug } }, select: { id: true, name: true, status: true, website: true } }) : null;
     const division = "divisionSlug" in unit ? await client.organization.findUnique({ where: { slug: unit.divisionSlug }, select: { id: true, parentId: true, type: true, status: true } }) : null;
@@ -36,7 +45,9 @@ export function createBrandCommandService(client: PrismaClient = prisma) {
       ? await client.product.findUnique({ where: { organizationId_slug: { organizationId: company.id, slug: unit.productSlug } }, select: { id: true, name: true, divisionId: true, status: true, lifecycle: true } }) : null;
     if (product && division && product.divisionId !== division.id) throw new AccessError("Product scope unavailable");
     const scopeId = division?.id ?? company.id;
-    return { label: unit.label, companyId: company.id, companyName: company.company?.legalName ?? unit.company.legalName, companyStatus: company.company?.status ?? company.status, scopeId, division: division ? { status: division.status } : null, brand, product,
+    const brands = companyOS && (await ctx.decide("brand.read", { organizationId: company.id })).allowed
+      ? await client.brand.findMany({ where: { organizationId: company.id, parentBrandId: null, status: { not: "ARCHIVED" } }, select: { id: true, name: true, status: true }, orderBy: { name: "asc" }, take: 50 }) : null;
+    return { label: unit.label, companyOS, brands, companyId: company.id, companyName: company.company?.legalName ?? unit.company.legalName, companyStatus: company.company?.status ?? company.status, scopeId, division: division ? { status: division.status } : null, brand, product,
       canManagePeople: (await ctx.decide("person.create", { organizationId: scopeId })).allowed && (await ctx.decide("membership.manage", { organizationId: scopeId })).allowed,
       canReadPeople: (await ctx.decide("person.read", { organizationId: scopeId })).allowed,
       canReadWork: (await ctx.decide("project.read", { organizationId: scopeId })).allowed,

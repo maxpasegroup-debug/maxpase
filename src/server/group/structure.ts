@@ -17,6 +17,7 @@ const brands = [
   { company: "aira-skill-city", slug: "nte-naadu", name: "NTE NAADU", parentSlug: "aira-labs", domain: null },
   { company: "aira-skill-city", slug: "happinotes", name: "HAPPINOTES", parentSlug: "aira-labs", domain: null },
   { company: "aira-skill-city", slug: "talkin-labs", name: "TALKIN LABS", parentSlug: "aira-labs", domain: null },
+  { company: "aira-skill-city", slug: "onspeak-mentor-hub", name: "ONSPEAK MENTOR HUB", parentSlug: "aira-labs", domain: null },
   { company: "aira-skill-city", slug: "bgos", name: "BGOS", parentSlug: "aira-labs", domain: null },
   { company: "aira-skill-city", slug: "nice-jobs", name: "NICEJOBS", parentSlug: "aira-career-hub", domain: "nicejobs.online" },
   { company: "pearn", slug: "teachx-guru", name: "TEACHX GURU", parentSlug: null, domain: "teachx.guru" },
@@ -29,6 +30,12 @@ const previousBrandNames: Record<string, string[]> = {
   "teachx-guru": ["TeachX Guru"], "learnx-guru": ["LearnX Guru"], "top-rank-ai": ["Top Rank AI"],
   happinotes: ["HappiNotes"]
 };
+
+export const skillStudioProgramDrafts = [
+  { slug: "genz-builder", name: "GenZ Builder", productSlug: "genz-builder" },
+  { slug: "vive-coding", name: "VIVE CODING", productSlug: null },
+  { slug: "full-stack-branding-expert", name: "Full Stack Branding Expert", productSlug: null }
+] as const;
 
 // Explicit operator initialization, never called by a page or application startup.
 export async function initializeGroupStructure(db: Prisma.TransactionClient) {
@@ -81,6 +88,20 @@ export async function initializeGroupStructure(db: Prisma.TransactionClient) {
     }
   }
   await registerAiraProductDrafts(db, aira.id);
+  const studio = await db.organization.findUnique({ where: { slug: "aira-skill-studio" } });
+  const studioBrand = await db.brand.findUnique({ where: { organizationId_slug: { organizationId: aira.id, slug: "aira-skill-studio" } } });
+  if (!studio || studio.parentId !== aira.id || studio.type !== "DIVISION" || !studioBrand || studioBrand.parentBrandId) throw new Error("Skill Studio structure conflicts with programme setup");
+  for (const draft of skillStudioProgramDrafts) {
+    const existing = await db.program.findUnique({ where: { companyOrganizationId_slug: { companyOrganizationId: aira.id, slug: draft.slug } } });
+    if (existing) {
+      if (existing.name !== draft.name || existing.organizationId !== studio.id || (existing.brandId && existing.brandId !== studioBrand.id)) throw new Error("Skill Studio programme conflicts with existing record; review required");
+      continue;
+    }
+    const product = draft.productSlug ? await db.product.findUnique({ where: { organizationId_slug: { organizationId: aira.id, slug: draft.productSlug } } }) : null;
+    if (draft.productSlug && (!product || product.divisionId !== studio.id || product.brandId !== studioBrand.id)) throw new Error("Skill Studio product relationship conflicts with programme setup");
+    const program = await db.program.create({ data: { companyOrganizationId: aira.id, organizationId: studio.id, brandId: studioBrand.id, productId: product?.id ?? null, slug: draft.slug, name: draft.name, kind: "PROGRAM", status: "DRAFT", metadata: JSON.stringify({ setupStatus: "OWNER_PROPOSED_DRAFT", publicationApproved: false, commercialApproval: false, termsReference: null, ownerPersonId: null }) } });
+    await db.auditEvent.create({ data: { organizationId: studio.id, action: "group.skill_studio_program_draft_registered", entityType: "Program", entityId: program.id, result: "SUCCESS", metadata: JSON.stringify({ brandId: studioBrand.id, publicationApproved: false }) } });
+  }
   await db.auditEvent.create({ data: { organizationId: group.id, action: "group.structure_initialized", entityType: "Organization", entityId: group.id, result: "SUCCESS", metadata: JSON.stringify({ origin: "EXPLICIT_OPERATOR_INITIALIZATION", ownershipCreated: false }) } });
   await db.siaIdentity.updateMany({ where: { id: "sia-default" }, data: { title: `${groupIdentity.name} Virtual CEO` } });
   return { groupId: group.id, companies: companies.map(c => ({ id: c.id, name: c.name })) };

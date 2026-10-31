@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { allowedStartupChange, canDecidePublication, readStartupDraft, startupProgramWhere } from "@/server/group/startup-programs";
-import { validateStartupProgramTransition } from "@/server/domain/aira-service";
+import { approvalControlledProgramDivision, validateStartupProgramTransition } from "@/server/domain/aira-service";
 
 describe("Startup programme planning boundary", () => {
   it("reads only the validated draft proposal from existing metadata", () => {
@@ -18,6 +18,9 @@ describe("Startup programme planning boundary", () => {
     expect(startupProgramWhere("company", "division", "brand", "", "FORGED")).not.toHaveProperty("status");
   });
   it("allows pause and archive while refusing activation, resumption and archived replay", () => {
+    expect(approvalControlledProgramDivision("aira-skill-studio")).toBe(true);
+    expect(approvalControlledProgramDivision("aira-startup-school")).toBe(true);
+    expect(approvalControlledProgramDivision("aira-labs")).toBe(false);
     expect(allowedStartupChange("ACTIVE", "PAUSED")).toBe(true);
     expect(allowedStartupChange("DRAFT", "ARCHIVED")).toBe(true);
     expect(allowedStartupChange("ACTIVE", "ARCHIVED")).toBe(true);

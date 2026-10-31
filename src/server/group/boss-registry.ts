@@ -35,10 +35,12 @@ export function createBossRegistry(client: PrismaClient = prisma) {
     const projects = workReadable ? await client.project.findMany({ where: { brandId: row.id, organizationId: row.organizationId }, select: { id: true, name: true, status: true, updatedAt: true }, orderBy: { updatedAt: "desc" }, take: 51 }) : null;
     const startupDivision = row.organization.slug === "aira-skill-city" && row.slug === "startup-school" && verifiedUnit?.id
       ? verifiedUnit.id : null;
-    const canReadPrograms = !!startupDivision && (await ctx.decide("program.read", { organizationId: startupDivision })).allowed;
-    const canReadAdmissions = canReadPrograms && (await ctx.decide("person.read", { organizationId: startupDivision! })).allowed && (await ctx.decide("executive.read", { organizationId: startupDivision! })).allowed;
-    const canManagePrograms = canReadPrograms && (await ctx.decide("program.manage", { organizationId: startupDivision! })).allowed;
-    const programs = canReadPrograms ? await client.program.findMany({ where: { companyOrganizationId: row.organizationId, organizationId: startupDivision!, OR: [{ brandId: row.id }, { brandId: null }] }, select: { id: true, name: true, status: true, kind: true, durationDays: true, capacity: true, updatedAt: true }, orderBy: { name: "asc" }, take: 51 }) : null;
+    const studioDivision = row.organization.slug === "aira-skill-city" && row.slug === "aira-skill-studio" && verifiedUnit?.id ? verifiedUnit.id : null;
+    const programDivision = startupDivision ?? studioDivision;
+    const canReadPrograms = !!programDivision && (await ctx.decide("program.read", { organizationId: programDivision })).allowed;
+    const canReadAdmissions = !!startupDivision && canReadPrograms && (await ctx.decide("person.read", { organizationId: startupDivision })).allowed && (await ctx.decide("executive.read", { organizationId: startupDivision })).allowed;
+    const canManagePrograms = canReadPrograms && (await ctx.decide("program.manage", { organizationId: programDivision! })).allowed;
+    const programs = canReadPrograms ? await client.program.findMany({ where: { companyOrganizationId: row.organizationId, organizationId: programDivision!, OR: [{ brandId: row.id }, { brandId: null }] }, select: { id: true, name: true, status: true, kind: true, durationDays: true, capacity: true, updatedAt: true }, orderBy: { name: "asc" }, take: 51 }) : null;
     const marketingUnit = row.organization.slug === "aira-skill-city" ? marketingDivisionSlug(row.slug, parent?.slug) : undefined;
     const marketingDivision = marketingUnit ? await client.organization.findFirst({ where: { slug: marketingUnit, parentId: row.organizationId, type: "DIVISION", status: "ACTIVE" }, select: { id: true } }) : null;
     const marketingScope = marketingUnit ? marketingDivision?.id : row.organizationId;
@@ -49,9 +51,9 @@ export function createBossRegistry(client: PrismaClient = prisma) {
     const counts = async (where: Prisma.ExecutiveRecordWhereInput) => client.executiveRecord.groupBy({ by: ["status"], where, _count: { _all: true }, _max: { updatedAt: true } });
     const admissions = canReadAdmissions ? await counts({ organizationId: startupDivision!, kind: "STARTUP_APPLICATION", sourceKey: { startsWith: "startup:application:" }, status: { in: ["SUBMITTED", "IN_REVIEW", "APPROVED", "REJECTED"] } }) : null;
     const campaigns = canReadMarketing ? await counts({ organizationId: marketingScope, kind: "BRAND_MARKETING_CAMPAIGN", sourceKey: { startsWith: `marketing:campaign:${row.id}:` } }) : null;
-    const canReadCommercial = canReadPrograms && verifiedUnit?.status === "ACTIVE" && row.status === "ACTIVE" && row.organization.status === "ACTIVE" && row.organization.company?.status === "ACTIVE" && (await ctx.decide("executive.read", { organizationId: startupDivision! })).allowed;
+    const canReadCommercial = !!startupDivision && canReadPrograms && verifiedUnit?.status === "ACTIVE" && row.status === "ACTIVE" && row.organization.status === "ACTIVE" && row.organization.company?.status === "ACTIVE" && (await ctx.decide("executive.read", { organizationId: startupDivision })).allowed;
     const commercial = canReadCommercial ? await counts({ organizationId: startupDivision!, kind: "STARTUP_COMMERCIAL_TERMS", sourceKey: { startsWith: `startup:commercial:${row.id}:` } }) : null;
-    return { row, parent, children, products, startupDivision, startupDivisionActive: verifiedUnit?.status === "ACTIVE", programs, canManagePrograms, canReadAdmissions, canReadMarketing, canReadCommercial, report: { admissions, campaigns, commercial, overdueTasks, calculatedAt: now }, commandHref: mappedUnit && (verifiedUnit || mappedUnit === row.organization.slug) ? `/app/boss/command/${row.organization.slug}/${mappedUnit}` : null, permissions: {
+    return { row, parent, children, products, startupDivision, studioDivision, startupDivisionActive: verifiedUnit?.status === "ACTIVE", programs, canManagePrograms, canReadAdmissions, canReadMarketing, canReadCommercial, report: { admissions, campaigns, commercial, overdueTasks, calculatedAt: now }, commandHref: mappedUnit && (verifiedUnit || mappedUnit === row.organization.slug) ? `/app/boss/command/${row.organization.slug}/${mappedUnit}` : null, permissions: {
       manage: (await ctx.decide("brand.manage", scope)).allowed,
       work: workReadable,
       people: (await ctx.decide("person.read", scope)).allowed,

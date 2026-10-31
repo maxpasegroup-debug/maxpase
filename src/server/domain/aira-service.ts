@@ -16,8 +16,9 @@ import { assertStartupPilotEnrollmentReady } from "@/server/portals/startup-pilo
 type DB = Prisma.TransactionClient;
 type Context = Awaited<ReturnType<typeof createAccessContext>>;
 export const companyReadKeys: Record<input.CompanyKind, string> = { divisions: "organization.read", departments: "organization.read", teams: "organization.read", people: "person.read", programs: "program.read", batches: "batch.read", locations: "location.read", products: "product.read", projects: "project.read", goals: "goal.read", responsibilities: "responsibility.read", participants: "batch.read", approvals: "approval.read", requests: "request.read", notifications: "notification.read", workflows: "workflow.read", instances: "workflow.read", employers: "company.read" };
+export function approvalControlledProgramDivision(slug: string) { return slug === "aira-startup-school" || slug === "aira-skill-studio"; }
 export function validateStartupProgramTransition(previous: string | null, next: string) {
-  if (next === "ACTIVE" && previous !== "ACTIVE") throw new AccessError("Startup programme activation requires an approved publication decision");
+  if (next === "ACTIVE" && previous !== "ACTIVE") throw new AccessError("Programme activation requires an approved publication decision");
   if (previous === "ARCHIVED") throw new AccessError("Archived programme is read-only");
   if (previous && previous !== "DRAFT" && next === "DRAFT") throw new AccessError("Published programme cannot return to draft");
   if (previous && previous !== next && !(previous === "ACTIVE" && next === "PAUSED") && next !== "ARCHIVED") throw new AccessError("Use the controlled programme lifecycle");
@@ -77,10 +78,14 @@ export function createAiraService(client: PrismaClient = prisma) {
         await c.ctx.requireAccess("organization.read", { organizationId });
         const old = recordId ? await program(db, c, recordId, "program.manage") : null;
         if (old && old.organizationId !== organizationId) throw new AccessError("Program division cannot be changed");
-        if (division.slug === "aira-startup-school") {
+        if (approvalControlledProgramDivision(division.slug)) {
           // Publication is a separate, evidence-backed decision. The shared editor
           // must not be able to activate a draft or resume a paused programme.
           validateStartupProgramTransition(old?.status ?? null, data.status);
+        }
+        if (division.slug === "aira-skill-studio") {
+          const studioBrand = data.brandId ? await db.brand.findUnique({ where: { id: data.brandId } }) : null;
+          if (!studioBrand || studioBrand.organizationId !== c.company.id || studioBrand.slug !== "aira-skill-studio" || studioBrand.parentBrandId) throw new AccessError("Skill Studio programme requires the verified Skill Studio brand");
         }
         for (const [type, id] of [["brand", data.brandId], ["product", data.productId]] as const) if (id) {
           const linked = type === "brand" ? await db.brand.findUnique({ where: { id } }) : await db.product.findUnique({ where: { id } });

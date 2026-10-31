@@ -48,4 +48,18 @@ describe("Boss brand command center", () => {
     const page = load(async () => { throw new AccessError("Access denied"); });
     await expect(page({ params: Promise.resolve({ id: "foreign" }) })).rejects.toThrow("NOT_FOUND");
   });
+  it("shows Skill Studio drafts through the existing scoped programme registry", async () => {
+    const page = load(async () => ({
+      row: { id: "studio-brand", name: "AIRA SKILL STUDIO", slug: "aira-skill-studio", status: "ACTIVE", website: null, organizationId: "company", organization: { company: { displayName: "AIRA Skill City" } } },
+      parent: null, children: [], products: [], projects: [], startupDivision: null, studioDivision: "studio-division",
+      programs: [{ id: "genz", name: "GenZ Builder", kind: "PROGRAM", status: "DRAFT", durationDays: null, capacity: null }],
+      canManagePrograms: true, canReadAdmissions: false, commandHref: null,
+      permissions: { work: false, approvals: false, people: false, products: true, manage: false }
+    }));
+    const html = renderToStaticMarkup(await page({ params: Promise.resolve({ id: "studio-brand" }) }));
+    expect(html).toContain('href="/app/aira/programs?organizationId=studio-division"');
+    expect(html).toContain("GenZ Builder");
+    expect(html).toContain("DRAFT");
+    expect(html).not.toContain("Startup School programmes");
+  });
 });

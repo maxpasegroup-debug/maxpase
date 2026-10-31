@@ -6,6 +6,11 @@ const base = { brandId: "startup", startupConfigured: true, projects: [], produc
 const find = (key: string, input: Parameters<typeof buildBrandReport>[0]) => buildBrandReport(input).find(row => row.key === key)!;
 
 describe("Brand operating report coverage", () => {
+  it("links Skill Studio programme counts to its own recorded section", () => {
+    const studio = { ...base, startupConfigured: false, studioConfigured: true, programsHref: "#studio-programs" };
+    expect(find("programs", studio)).toMatchObject({ value: 0, href: "#studio-programs" });
+    expect(find("programs", { ...studio, programs: null })).toMatchObject({ value: null, href: null, coverage: "Not authorized" });
+  });
   it("distinguishes zero connected records from unauthorized or unlinked sources", () => {
     expect(find("admissions", base)).toMatchObject({ value: 0, href: "/app/boss/brands/startup/admissions", freshness: "No recorded updates" });
     expect(find("admissions", { ...base, admissions: null })).toMatchObject({ value: null, href: null, freshness: "Unavailable" });

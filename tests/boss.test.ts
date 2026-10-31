@@ -1,7 +1,7 @@
 import { beforeAll, beforeEach, afterAll, describe, it, expect } from "vitest";
 import { randomInt, randomBytes } from "node:crypto";
 import { createPostgresFixture } from "./helpers/postgres-fixture";
-import { initializeGroupStructure } from "@/server/group/structure";
+import { initializeGroupStructure, skillStudioProgramDrafts } from "@/server/group/structure";
 import { provisionBoss } from "@/server/group/provision";
 import { BOSS_EMAIL, validateBossConfiguration } from "@/server/group/identity";
 import { createAuthenticationService } from "@/server/auth/service";
@@ -135,8 +135,9 @@ describe("MAXPASE group and Boss controls", () => {
     expect(brands.find(b => b.slug === "top-rank-ai")?.website).toBeNull();
     const bySlug = new Map(brands.map(brand => [brand.slug, brand]));
     expect(brands.filter(brand => brand.organizationId === airaId && !brand.parentBrandId).map(brand => brand.name).sort()).toEqual(["AIRA STARTUP SKOOL", "AIRA SKILL STUDIO", "AIRA LABS", "AIRA CAREER HUB"].sort());
-    expect(brands.filter(brand => brand.parentBrandId === bySlug.get("aira-labs")?.id).map(brand => brand.name).sort()).toEqual(["MY SOLAR SOLUTIONS", "NTE NAADU", "HAPPINOTES", "TALKIN LABS", "BGOS"].sort());
+    expect(brands.filter(brand => brand.parentBrandId === bySlug.get("aira-labs")?.id).map(brand => brand.name).sort()).toEqual(["MY SOLAR SOLUTIONS", "NTE NAADU", "HAPPINOTES", "TALKIN LABS", "ONSPEAK MENTOR HUB", "BGOS"].sort());
     expect(bySlug.get("nice-jobs")?.parentBrandId).toBe(bySlug.get("aira-career-hub")?.id);
+    expect(bySlug.get("onspeak-mentor-hub")?.status).toBe("INACTIVE");
     expect(brands.filter(brand => brand.organizationId === pearnId).map(brand => brand.name).sort()).toEqual(["LEARNX GURU", "TEACHX GURU"]);
     expect(bySlug.get("top-rank-ai")?.name).toBe("TOP TANK AI");
     expect(await db.role.count({ where: { organizationId: airaId, canonical: true } })).toBe(60);
@@ -151,6 +152,12 @@ describe("MAXPASE group and Boss controls", () => {
       expect(draft.brand?.slug ?? null).toBe(definition.brandSlug);
       expect(JSON.parse(draft.metadata!)).toMatchObject({ setupStatus: "REVIEWED_DRAFT", commercialTerms: null, productOwnerPersonId: null, approvalAuthorityPersonId: null, publicationApproved: false });
       expect(await db.auditEvent.count({ where: { entityId: draft.id, action: "product.reviewed_draft_registered" } })).toBe(1);
+    }
+    for (const definition of skillStudioProgramDrafts) {
+      const draft = await db.program.findUniqueOrThrow({ where: { companyOrganizationId_slug: { companyOrganizationId: airaId, slug: definition.slug } } });
+      expect(draft).toMatchObject({ name: definition.name, status: "DRAFT", brandId: bySlug.get("aira-skill-studio")?.id, priceMinor: null, currency: null, durationDays: null });
+      expect(JSON.parse(draft.metadata!)).toMatchObject({ setupStatus: "OWNER_PROPOSED_DRAFT", publicationApproved: false, commercialApproval: false });
+      expect(await db.auditEvent.count({ where: { entityId: draft.id, action: "group.skill_studio_program_draft_registered" } })).toBe(1);
     }
     expect(seniorAcademicAdvisorDraft).toMatchObject({ engagement: "IN_HOUSE_EMPLOYEE", monthlySalaryMinor: 1800000, status: "DRAFT", managerPersonId: null, payrollConfiguration: null });
     const prior = await db.organization.findUniqueOrThrow({ where: { id: pearnId }, include: { company: true } });
@@ -180,7 +187,7 @@ describe("MAXPASE group and Boss controls", () => {
     expect(aira.divisions[3].productRow?.lifecycle).toBe("CONCEPT");
     expect(aira.brands.map(item => item.name)).toEqual(["AIRA STARTUP SKOOL", "AIRA SKILL STUDIO", "AIRA LABS", "AIRA CAREER HUB"]);
     expect(aira.brands.every(item => !!item.row)).toBe(true);
-    expect(aira.subBrands.map(item => item.name)).toEqual(["MY SOLAR SOLUTIONS", "NTE NAADU", "HAPPINOTES", "TALKIN LABS", "BGOS", "NICEJOBS"]);
+    expect(aira.subBrands.map(item => item.name)).toEqual(["MY SOLAR SOLUTIONS", "NTE NAADU", "HAPPINOTES", "TALKIN LABS", "ONSPEAK MENTOR HUB", "BGOS", "NICEJOBS"]);
     expect(aira.subBrands.every(item => !!item.row)).toBe(true);
     expect(mapped[1].products.map(item => item.row?.name)).toEqual(["TeachX Guru", "LearnX Guru"]);
     const bgos = await db.product.findUniqueOrThrow({ where: { organizationId_slug: { organizationId: airaId, slug: "bgos" } } });

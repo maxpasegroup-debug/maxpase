@@ -17,6 +17,11 @@ describe("Brand operating modules", () => {
     expect(modules.find(module => module.key === "finance")?.href).toBeNull();
     expect(modules.find(module => module.key === "decisions")?.href).toBe("#decisions");
   });
+  it("opens Skill Studio programmes only when the scoped registry is authorized", () => {
+    const base = { startup: false, programs: true, products: true, projects: false, people: false, approvals: false };
+    expect(brandOperatingModules(base).some(module => module.key === "programs")).toBe(false);
+    expect(brandOperatingModules({ ...base, studioProgramsHref: "/app/aira/programs?organizationId=studio" }).find(module => module.key === "programs")?.href).toBe("/app/aira/programs?organizationId=studio");
+  });
   it("opens reporting and commercial controls only when their source workspace is authorized", () => {
     const modules = brandOperatingModules({ startup: true, programs: true, products: true, projects: true, people: false, approvals: false, commercialHref: "/app/boss/brands/startup/commercial", reportsHref: "#reporting" });
     expect(modules.find(module => module.key === "finance")?.href).toBe("/app/boss/brands/startup/commercial");

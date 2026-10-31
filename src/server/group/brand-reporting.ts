@@ -16,6 +16,8 @@ const groupCoverage = (value: number | null, source: string) => value === null ?
 export function buildBrandReport(input: {
   brandId: string;
   startupConfigured: boolean;
+  studioConfigured?: boolean;
+  programsHref?: string;
   projects: ({ status: string } & Dated)[] | null;
   products: Dated[] | null;
   programs: Dated[] | null;
@@ -35,7 +37,7 @@ export function buildBrandReport(input: {
   return [
     metric("projects", "Projects shown", shown(input.projects, 50), "#projects", projects, input.calculatedAt, coverage(input.projects, 50, "projects")),
     metric("products", "Products shown", shown(input.products, 100), "#products", products, input.calculatedAt, coverage(input.products, 100, "products")),
-    metric("programs", "Programmes shown", shown(input.programs, 50), "#programs", programs, input.calculatedAt, input.programs === null && !input.startupConfigured ? "No verified Startup School division" : coverage(input.programs, 50, "programmes")),
+    metric("programs", "Programmes shown", shown(input.programs, 50), input.programsHref ?? "#programs", programs, input.calculatedAt, input.programs === null && !input.startupConfigured && !input.studioConfigured ? "No verified programme division" : coverage(input.programs, 50, "programmes")),
     metric("admissions", "Applications shown", shownGroup(total(input.admissions)), `${base}/admissions`, dates(input.admissions), input.calculatedAt, input.admissions === null ? input.startupConfigured ? "Not authorized" : "No verified Startup School division" : groupCoverage(total(input.admissions), "Startup School applications in the verified division")),
     metric("admissionReviews", "Applications in review shown", input.admissions === null ? null : shownGroup(status(input.admissions, "IN_REVIEW")), `${base}/admissions?status=IN_REVIEW`, dates(input.admissions), input.calculatedAt, input.admissions === null ? input.startupConfigured ? "Not authorized" : "No verified Startup School division" : groupCoverage(status(input.admissions, "IN_REVIEW"), "applications in review; review is not admission")),
     metric("campaigns", "Campaigns shown", shownGroup(total(input.campaigns)), `${base}/marketing`, dates(input.campaigns), input.calculatedAt, input.campaigns === null ? "Not authorized or brand inactive" : groupCoverage(total(input.campaigns), "brand-keyed internal campaigns")),
