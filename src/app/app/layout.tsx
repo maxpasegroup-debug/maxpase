@@ -18,8 +18,9 @@ export default async function AppLayout({ children }: Readonly<{ children: React
   const access = await createAccessContext(session.userId, prisma, undefined, root ? { organizationId: root.id } : undefined);
   const ids = access.organizationIds("company.read").filter(id => access.organizationIds("organization.read").includes(id));
   const companies = await boundedRead(take => prisma.companyProfile.findMany({ take, where: { organizationId: { in: ids } }, select: { organizationId: true, displayName: true, legalName: true }, orderBy: { displayName: "asc" } }));
+  const brands = boss ? await boundedRead(take => prisma.brand.findMany({ take, where: { organizationId: { in: ids.filter(id => access.organizationIds("brand.read").includes(id)) } }, select: { id: true, name: true, organizationId: true }, orderBy: { name: "asc" } })) : [];
   let unread: number | null = null;
   try { if (access.grants.some(g => g.key === "notification.read")) unread = (await operationsService.list(session.userId, "notifications", { read: "unread" })).length; }
   catch (error) { if (!(error instanceof AccessError) && !(error instanceof QueryBudgetError)) throw error; }
-  return <WorkspaceShell boss={boss} {...account} unread={unread} companies={companies.map(c => ({ id: c.organizationId, name: c.legalName ?? c.displayName }))} logout={<form action={logoutAction}><button className="icon-button" type="submit" title="Sign out" aria-label="Sign out"><LogOut size={20}/></button></form>}>{children}</WorkspaceShell>;
+  return <WorkspaceShell boss={boss} {...account} unread={unread} companies={companies.map(c => ({ id: c.organizationId, name: c.legalName ?? c.displayName }))} brands={brands} logout={<form action={logoutAction}><button className="icon-button" type="submit" title="Sign out" aria-label="Sign out"><LogOut size={20}/></button></form>}>{children}</WorkspaceShell>;
 }

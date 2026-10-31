@@ -864,6 +864,30 @@ progress { width: 120px; accent-color: var(--accent); }
 .boss-shell .boss-selector label { flex: 0 1 235px; font-size: 11px; }
 .boss-shell .boss-selector select { background: #fff; }
 .boss-dashboard { display: grid; gap: 16px; }
+.boss-simple-dashboard { display: grid; gap: 14px; }
+.boss-simple-dashboard > header h2 { margin: 0 0 4px; font-size: 23px; }
+.boss-simple-dashboard > header p { margin: 0; color: var(--muted); }
+.boss-simple-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.boss-simple-metrics a, .boss-department-module { display: grid; gap: 6px; min-width: 0; padding: 15px; border: 1px solid var(--line); border-radius: 9px; background: #fff; }
+.boss-simple-metrics a strong { font-size: 23px; overflow-wrap: anywhere; }
+.boss-simple-metrics small, .boss-department-module small { color: var(--muted); line-height: 1.4; }
+.boss-simple-columns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.boss-simple-columns .executive-band { margin: 0; }
+.boss-simple-columns .executive-band > header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.boss-simple-columns .executive-band > header a, .boss-simple-shortcuts a { display: inline-flex; align-items: center; justify-content: space-between; gap: 10px; }
+.boss-simple-shortcuts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+.boss-simple-shortcuts a, .boss-simple-bottom a { padding: 9px 11px; border: 1px solid var(--line); border-radius: 7px; background: #fff; }
+.boss-simple-bottom { display: flex; flex-wrap: wrap; gap: 8px; }
+.boss-department-context { display: flex; flex-wrap: wrap; gap: 8px 24px; }
+.boss-department-steps { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+.boss-department-steps ul { display: flex; flex-wrap: wrap; gap: 8px; padding: 0; list-style: none; }
+.boss-department-steps li a { display: inline-flex; min-height: 42px; align-items: center; gap: 5px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 7px; background: #fff; }
+.boss-department-steps li a[aria-current] { border-color: var(--accent); background: #e9f2ff; font-weight: 700; }
+.boss-department-modules { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.boss-department-module a { justify-self: start; min-height: 40px; padding-top: 8px; color: var(--accent); font-weight: 700; }
+.boss-department a:focus-visible, .boss-simple-dashboard a:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+@media (max-width: 900px) { .boss-simple-metrics, .boss-department-modules { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 650px) { .boss-simple-metrics, .boss-simple-columns, .boss-department-steps, .boss-department-modules, .boss-simple-shortcuts { grid-template-columns: 1fr; } }
 .boss-dashboard-hero { position: relative; display: flex; align-items: center; justify-content: space-between; gap: 24px; overflow: hidden; min-height: 154px; padding: 22px 34px; border-radius: 12px; background: linear-gradient(105deg, #061a41 0%, #0a326f 58%, #2770df 100%); color: #fff; isolation: isolate; }
 .boss-dashboard-hero::before { content: ""; position: absolute; inset: 0; z-index: -1; background-image: linear-gradient(rgb(160 201 255 / 7%) 1px, transparent 1px), linear-gradient(90deg, rgb(160 201 255 / 7%) 1px, transparent 1px); background-size: 52px 52px; }
 .boss-dashboard-hero p:first-child { margin: 0 0 5px; color: #accbfa; letter-spacing: .22em; font-size: 11px; font-weight: 700; }
