@@ -16,3 +16,4 @@ tsconfig.tsbuildinfo
 prisma/dev.db
 *.log
 .private/
+tsconfig.aira-check.tsbuildinfo
