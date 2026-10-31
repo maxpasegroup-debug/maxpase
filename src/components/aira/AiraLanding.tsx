@@ -9,6 +9,7 @@ import { ScrollController, type ScrollHandle } from "./ScrollController";
 import { VenturePortals } from "./VenturePortals";
 import { airaDestinations, type Venture } from "./ventures";
 import { roomOpacity, smoothstep } from "./journey";
+import { SiaGuide } from "@/components/sia/sia-guide";
 import "lenis/dist/lenis.css";
 import "./aira.css";
 
@@ -169,7 +170,7 @@ export function AiraLanding({
           </ul>
         </div>
         <p className="aira-hint" ref={hint}><span />SCROLL TO EXPLORE</p>
-        <p className="aira-sr">Scroll from space to the AIRA headquarters, enter the welcome room, continue into the innovation room, then choose Startup School, AIRA Labs, or Nice Jobs.</p>
+        <p className="aira-sr">Scroll from space to the AIRA headquarters, enter the welcome room, continue into the innovation room, then choose Startup Skool, AIRA Labs, or Nice Jobs.</p>
         <div className="aira-room" ref={welcome}>
           <p>AIRA SKILL CITY</p>
           <h2>Welcome to<br />Aira Skill City</h2>
@@ -217,6 +218,7 @@ export function AiraLanding({
           </nav>
         </footer>
       </section>
+      <SiaGuide message="Welcome to AIRA Skill City. Explore our brands and practical learning paths here. A person will help with any formal decision." action={{ href: login, label: "Open your Skill City sign-in" }} disclaimer="This is page guidance. Access and decisions follow the existing human review steps." />
     </main>
   );
 }

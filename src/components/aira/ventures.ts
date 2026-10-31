@@ -11,9 +11,9 @@ export type Venture = {
 const ventureCopy: Array<Omit<Venture, "href">> = [
   {
     id: "startup",
-    label: "AIRA STARTUP SCHOOL",
+    label: "AIRA STARTUP SKOOL",
     description: "Learn. Build. Launch.",
-    cta: "EXPLORE STARTUP SCHOOL",
+    cta: "EXPLORE STARTUP SKOOL",
     accent: "#B89552",
     tone: "A founder studio for practical learning and first ventures."
   },

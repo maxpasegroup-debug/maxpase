@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { brandOperatingModules } from "@/server/group/brand-os";
 
 describe("Brand operating modules", () => {
-  it("opens only authorized, implemented Startup School destinations", () => {
+  it("opens only authorized, implemented Startup Skool destinations", () => {
     const modules = brandOperatingModules({ startup: true, programs: true, products: true, projects: false, people: false, approvals: false });
     expect(modules.find(module => module.key === "programs")).toMatchObject({ href: "#programs" });
     for (const key of ["admissions", "learners", "crm", "finance", "marketing", "sales", "partners", "delivery"]) {

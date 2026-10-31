@@ -75,7 +75,7 @@ export function createStartupPrograms(client: PrismaClient = prisma) {
   }
   async function requestPublication(userId: string, brandId: string, programId: string) {
     const { context, row } = await scopedProgram(userId, brandId, programId, true);
-    if (context.row.status !== "ACTIVE" || context.row.organization.status !== "ACTIVE" || !context.startupDivisionActive) throw new AccessError("Startup School scope is inactive");
+    if (context.row.status !== "ACTIVE" || context.row.organization.status !== "ACTIVE" || !context.startupDivisionActive) throw new AccessError("Startup Skool scope is inactive");
     if (row.status !== "DRAFT" && row.status !== "PAUSED") throw new AccessError("Only draft or paused programmes can request publication");
     const termsReference = readStartupDraft(row.metadata)?.writtenTermsReference;
     if (!row.name || !row.description || !row.durationDays || !termsReference) throw new AccessError("Complete the programme description, duration and proposed terms reference first");
@@ -98,7 +98,7 @@ export function createStartupPrograms(client: PrismaClient = prisma) {
   async function decidePublication(userId: string, brandId: string, programId: string, raw: unknown) {
     const input = z.object({ requestId: z.string().min(1), version: z.number().int().min(0), decision: z.enum(["APPROVED", "REJECTED"]), reason: z.string().trim().min(8).max(1000), evidenceReference: z.string().trim().min(8).max(300) }).strict().parse(raw);
     const { context } = await scopedProgram(userId, brandId, programId, true);
-    if (context.row.status !== "ACTIVE" || context.row.organization.status !== "ACTIVE" || !context.startupDivisionActive) throw new AccessError("Startup School scope is inactive");
+    if (context.row.status !== "ACTIVE" || context.row.organization.status !== "ACTIVE" || !context.startupDivisionActive) throw new AccessError("Startup Skool scope is inactive");
     return client.$transaction(async db => {
       const { ctx } = await boss.authority(userId, db);
       await ctx.requireAccess("program.manage", { organizationId: context.startupDivision! });

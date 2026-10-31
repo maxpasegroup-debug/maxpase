@@ -12,7 +12,7 @@ The existing Organization/CompanyProfile at `aira-skill-city` is reused. Its gro
 
 Four canonical Organization DIVISION records are added beneath AIRA:
 
-1. AIRA Startup School (`aira-startup-school`)
+1. AIRA Startup Skool (`aira-startup-school`)
 2. AIRA Labs (`aira-labs`)
 3. AIRA Skill Studio (`aira-skill-studio`)
 4. AIRA Career Hub (`aira-career-hub`)
@@ -27,7 +27,7 @@ Product remains company/group-scoped. Optional divisionId expresses its operatin
 
 Program is a reusable business record, not an AIRA-specific task or admissions entity. It has companyOrganizationId, division organizationId, name/reference, description, PROGRAM/SERVICE kind, status, optional durationDays/capacity, optional priceMinor/currency, optional company brand/product, metadata and timestamps. Lifecycle is DRAFT, ACTIVE, PAUSED, RETIRED, ARCHIVED. Creates default DRAFT. Unknown data remains null, including price and capacity. Price is an integer in explicitly named minor units with a three-letter currency; the pair is either both present or both unknown. This is offering configuration, not accounting, invoices or revenue.
 
-Programs require a division/business unit. Company scope is derived, not accepted from the client. Division/company identity cannot be transferred on update. Brand/product links require actual AIRA company ownership, read capability, compatible division and consistent brand. No programs/services are seeded. Startup School, Skill Studio and Career Hub share this offering model; no separate per-division program registries exist.
+Programs require a division/business unit. Company scope is derived, not accepted from the client. Division/company identity cannot be transferred on update. Brand/product links require actual AIRA company ownership, read capability, compatible division and consistent brand. No programs/services are seeded. Startup Skool, Skill Studio and Career Hub share this offering model; no separate per-division program registries exist.
 
 ## Batches and Delivery
 

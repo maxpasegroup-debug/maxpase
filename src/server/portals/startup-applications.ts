@@ -38,9 +38,9 @@ export function createStartupApplications(client: PrismaClient = prisma) {
   async function bossReviewScope(db: Prisma.TransactionClient, userId: string, brandId: string) {
     const { ctx, root } = await createBossService(client).authority(userId, db);
     const brand = await db.brand.findUnique({ where: { id: brandId }, select: { slug: true, status: true, organizationId: true, organization: { select: { slug: true, type: true, status: true, parentId: true, company: { select: { status: true } } } } } });
-    if (!brand || brand.slug !== "startup-school" || brand.status !== "ACTIVE" || brand.organization.slug !== "aira-skill-city" || brand.organization.type !== "COMPANY" || brand.organization.parentId !== root.id || brand.organization.status !== "ACTIVE" || brand.organization.company?.status !== "ACTIVE") throw new AccessError("Startup School brand unavailable");
+    if (!brand || brand.slug !== "startup-school" || brand.status !== "ACTIVE" || brand.organization.slug !== "aira-skill-city" || brand.organization.type !== "COMPANY" || brand.organization.parentId !== root.id || brand.organization.status !== "ACTIVE" || brand.organization.company?.status !== "ACTIVE") throw new AccessError("Startup Skool brand unavailable");
     const division = await db.organization.findFirst({ where: { slug: "aira-startup-school", parentId: brand.organizationId, type: "DIVISION", status: "ACTIVE" }, select: { id: true } });
-    if (!division) throw new AccessError("Startup School scope unavailable");
+    if (!division) throw new AccessError("Startup Skool scope unavailable");
     await ctx.requireAccess("brand.read", { organizationId: brand.organizationId });
     await ctx.requireAccess("company.read", { organizationId: brand.organizationId });
     await ctx.requireAccess("program.manage", { organizationId: division.id });

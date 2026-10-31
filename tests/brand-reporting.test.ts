@@ -16,7 +16,7 @@ describe("Brand operating report coverage", () => {
     expect(find("admissions", { ...base, admissions: null })).toMatchObject({ value: null, href: null, freshness: "Unavailable" });
     expect(find("sales", base)).toMatchObject({ value: null, href: null });
     expect(find("people", base).coverage).toContain("does not establish brand assignment");
-    expect(find("admissions", { ...base, startupConfigured: false, admissions: null }).coverage).toBe("No verified Startup School division");
+    expect(find("admissions", { ...base, startupConfigured: false, admissions: null }).coverage).toBe("No verified Startup Skool division");
   });
   it("links recorded review decisions and labels old evidence", () => {
     const old = new Date("2026-10-01T12:00:00Z");

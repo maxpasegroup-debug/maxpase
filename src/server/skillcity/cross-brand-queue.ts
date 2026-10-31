@@ -7,7 +7,7 @@ import { crmLeadPayload } from "./crm";
 
 const sources = [
   { key: "labs", divisionSlug: "aira-labs", label: "AIRA Labs enquiries", kind: "LABS_LEAD", selfPermission: "labs.sales.self", teamPermission: "labs.sales.read", product: null },
-  { key: "pba", divisionSlug: "aira-startup-school", label: "PBA / Startup School", kind: "AIRA_CRM_LEAD", selfPermission: "aira.crm.self", teamPermission: "aira.crm.manage", product: "pba" },
+  { key: "pba", divisionSlug: "aira-startup-school", label: "PBA / Startup Skool", kind: "AIRA_CRM_LEAD", selfPermission: "aira.crm.self", teamPermission: "aira.crm.manage", product: "pba" },
   { key: "genz-builder", divisionSlug: "aira-skill-studio", label: "GenZ Builder / Skill Studio", kind: "AIRA_CRM_LEAD", selfPermission: "aira.crm.self", teamPermission: "aira.crm.manage", product: "genz-builder" }
 ] as const;
 const advisorRoles = new Set(["Senior Academic Advisor", "Junior Academic Advisor"]);

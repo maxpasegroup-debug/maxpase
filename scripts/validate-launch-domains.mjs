@@ -9,7 +9,7 @@ import { writeFileSync } from "node:fs";
 const sites = [
   { host: "maxpase.com", brand: "MAXPASE", protectedPath: "/app/boss", corporate: true },
   { host: "airaskillcity.com", brand: "AIRA Skill City", protectedPath: "/gateway" },
-  { host: "airastartupskool.com", brand: "AIRA Startup School", protectedPath: "/gateway" },
+  { host: "airastartupskool.com", brand: "AIRA Startup Skool", protectedPath: "/gateway" },
   { host: "airalabs.online", brand: "AIRA Labs", protectedPath: "/gateway" },
   { host: "nicejobs.online", brand: "Nice Jobs", protectedPath: "/gateway" }
 ];

@@ -6,7 +6,7 @@ import { matchesPilotApplicationProgram } from "@/server/portals/startup-pilot-r
 
 const answers = { tier: "STARTER", idea: "A local business problem that I want to investigate", goal: "Interview potential customers before choosing a solution", experience: "I have started looking into this problem", location: "Kerala", timeCommitment: "Five hours each week", consent: true, noticeVersion: 1 };
 
-describe("Startup School admissions contract", () => {
+describe("Startup Skool admissions contract", () => {
   it("keeps search and status inside the verified application division and kind", () => {
     expect(startupAdmissionsWhere("division-1", "  Meera  ", "IN_REVIEW")).toEqual({ organizationId: "division-1", kind: "STARTUP_APPLICATION", sourceKey: { startsWith: "startup:application:" }, status: "IN_REVIEW", owner: { displayName: { contains: "Meera", mode: "insensitive" } } });
     expect(startupAdmissionsWhere("division-1", "", "ACTIVE")).toMatchObject({ organizationId: "division-1", kind: "STARTUP_APPLICATION", status: { in: ["SUBMITTED", "IN_REVIEW", "APPROVED", "REJECTED"] } });

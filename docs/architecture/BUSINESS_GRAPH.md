@@ -16,7 +16,7 @@ Nice Jobs Phase 02 preserves the accepted graph: AIRA Skill City Private Limited
 
 ## Nice Jobs Workforce Phase 01
 
-The existing company-owned Nice Jobs Product under AIRA Career Hub now anchors Job Templates/Versions, existing division business areas and Person-linked workforce profiles/assignments. Academic Advisor covers Startup School and Skill Studio; Business Development Manager covers Labs. Job assignment and lifecycle attestations create no Membership, Role, ownership or access. Historical versions remain pinned. See NICE_JOBS_WORKFORCE_ARCHITECTURE.md.
+The existing company-owned Nice Jobs Product under AIRA Career Hub now anchors Job Templates/Versions, existing division business areas and Person-linked workforce profiles/assignments. Academic Advisor covers Startup Skool and Skill Studio; Business Development Manager covers Labs. Job assignment and lifecycle attestations create no Membership, Role, ownership or access. Historical versions remain pinned. See NICE_JOBS_WORKFORCE_ARCHITECTURE.md.
 
 ## Current Group Identity
 

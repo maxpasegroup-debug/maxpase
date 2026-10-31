@@ -115,7 +115,7 @@ The five requested experiences now route independently on the same application:
 | --- | --- | --- | --- |
 | maxpase.com | Existing MAXPASE Group | /login: Boss email and six-digit PIN; /staff/login: staff password | /app/boss or existing staff workspace |
 | airaskillcity.com | AIRA Skill City, including links to the three specialist sites | /login: email/password | /gateway: company-bounded AIRA workspace |
-| airastartupskool.com | AIRA Startup School | /login: email/password | /gateway: Startup School division |
+| airastartupskool.com | AIRA Startup Skool | /login: email/password | /gateway: Startup Skool division |
 | airalabs.online | AIRA Labs | /login: email/password | /gateway: Labs division |
 | nicejobs.online | Nice Jobs | /login: email/password | /gateway: Career Hub division |
 
@@ -125,7 +125,7 @@ Railway must attach all five domains to the updated service and deploy this buil
 
 Five-domain update validation: PASS, 263 tests across 19 files, lint, TypeScript and production build. The focused company-entry test rejects division-only authority, verifies Skill City JWT isolation against the group and all three sibling realms, checks permission-filtered empty programs and denies suspended company membership. The isolated four-AIRA-domain HTTP smoke verifies real form submissions, five authorized gateway views and cross-brand replay denial; the MAXPASE Host check verifies its own landing, PIN form and protected command-center redirect without creating a Boss fixture credential. No database/schema changes. Live Railway and browser/device acceptance: NOT RUN.
 
-The latest confirmed brand domains are airastartupskool.com (Startup School), airalabs.online (AIRA Labs) and nicejobs.online (Nice Jobs). They supersede the earlier proposed domains in this historical document. All remain part of AIRA SKILL CITY PRIVATE LIMITED; Startup School uses the existing aira-startup-school division, Labs uses aira-labs, and Nice Jobs remains a Product under aira-career-hub. No new companies, users, role assignments, employment or jobs data are invented.
+The latest confirmed brand domains are airastartupskool.com (Startup Skool), airalabs.online (AIRA Labs) and nicejobs.online (Nice Jobs). They supersede the earlier proposed domains in this historical document. All remain part of AIRA SKILL CITY PRIVATE LIMITED; Startup Skool uses the existing aira-startup-school division, Labs uses aira-labs, and Nice Jobs remains a Product under aira-career-hub. No new companies, users, role assignments, employment or jobs data are invented.
 
 Each exact root/www hostname serves its own landing page at /, email/password login at /login and protected workspace at /gateway. Unknown hostnames retain the main MAXPASE experience. Corporate /app, /boss, /staff and internal /sites routes are not exposed on branded hosts. Local non-production previews are /sites/startup, /sites/labs and /sites/jobs. Production previews through unrelated hostnames are denied.
 
@@ -152,7 +152,7 @@ MAXSPACE GROUP is the canonical group-facing identity. MAXSPACE OS is the existi
 | Company | Brand | Confirmed domain |
 | --- | --- | --- |
 | AIRA SKILL CITY PRIVATE LIMITED | Aira Skill City | airaskillcity.com |
-| AIRA SKILL CITY PRIVATE LIMITED | Startup School | startupschool.com |
+| AIRA SKILL CITY PRIVATE LIMITED | Startup Skool | startupschool.com |
 | AIRA SKILL CITY PRIVATE LIMITED | AIRA Labs | airalabs.com |
 | AIRA SKILL CITY PRIVATE LIMITED | Nice Jobs | nicejobs.com |
 | PEARN PRIVATE LIMITED | TeachX Guru | teachx.guru |
@@ -161,7 +161,7 @@ MAXSPACE GROUP is the canonical group-facing identity. MAXSPACE OS is the existi
 
 These user-provided domains replace earlier proposed startup/job domain names. Domain records are NOT VERIFIED, not proof of registration, ownership, connectivity or live service. Existing TeachX Guru name/identity is never silently renamed; conflicting records cause initialization rollback. No pre-existing TeachX logo or brand asset was found in this repository, and none was replaced.
 
-AIRA retains AIRA Startup School, AIRA Labs, AIRA Skill Studio and AIRA Career Hub. Nice Jobs remains the same company-owned Product under Career Hub, not a company. TeachX Guru, LearnX Guru and Top Rank AI reuse company-owned Brand and Product records; new platforms are registered CONCEPT, not asserted live. Existing unrelated companies and operational records remain untouched. Supplied legal names do not verify registration, directors, shareholders, addresses or financial details.
+AIRA retains AIRA Startup Skool, AIRA Labs, AIRA Skill Studio and AIRA Career Hub. Nice Jobs remains the same company-owned Product under Career Hub, not a company. TeachX Guru, LearnX Guru and Top Rank AI reuse company-owned Brand and Product records; new platforms are registered CONCEPT, not asserted live. Existing unrelated companies and operational records remain untouched. Supplied legal names do not verify registration, directors, shareholders, addresses or financial details.
 
 ## Distinct Concepts
 

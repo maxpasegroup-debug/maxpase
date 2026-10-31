@@ -1,0 +1,211 @@
+[1mdiff --git a/public/images/aira-labs-intelligence-core.webp b/public/images/aira-labs-intelligence-core.webp[m
+[1mnew file mode 100644[m
+[1mindex 0000000..1a710ec[m
+Binary files /dev/null and b/public/images/aira-labs-intelligence-core.webp differ
+[1mdiff --git a/src/app/sites/labs-ui/labs-hero.css b/src/app/sites/labs-ui/labs-hero.css[m
+[1mnew file mode 100644[m
+[1mindex 0000000..c17dcb6[m
+[1m--- /dev/null[m
+[1m+++ b/src/app/sites/labs-ui/labs-hero.css[m
+[36m@@ -0,0 +1,149 @@[m
+[32m+[m[32m.al-public .al-labs-stage {[m
+[32m+[m[32m  width: min(100% - 32px, 1260px);[m
+[32m+[m[32m  margin: 24px auto 32px;[m
+[32m+[m[32m  overflow: hidden;[m
+[32m+[m[32m  border: 1px solid #d4af623d;[m
+[32m+[m[32m  border-radius: 24px;[m
+[32m+[m[32m  background: var(--aira-black);[m
+[32m+[m[32m  box-shadow: 0 28px 90px #0905077a;[m
+[32m+[m[32m}[m
+[32m+[m
+[32m+[m[32m.al-public .al-header.al-labs-header {[m
+[32m+[m[32m  display: grid;[m
+[32m+[m[32m  grid-template-columns: 1fr auto 1fr;[m
+[32m+[m[32m  align-items: center;[m
+[32m+[m[32m  gap: 24px;[m
+[32m+[m[32m  min-height: 76px;[m
+[32m+[m[32m  padding: 14px clamp(20px, 4vw, 46px);[m
+[32m+[m[32m  border-bottom: 1px solid var(--aira-burgundy);[m
+[32m+[m[32m  background: var(--aira-black);[m
+[32m+[m[32m}[m
+[32m+[m[32m.al-public .al-labs-brand {[m
+[32m+[m[32m  display: inline-flex;[m
+[32m+[m[32m  align-items: center;[m
+[32m+[m[32m  gap: 11px;[m
+[32m+[m[32m  width: max-content;[m
+[32m+[m[32m  color: var(--aira-ivory);[m
+[32m+[m[32m  font-size: 18px;[m
+[32m+[m[32m  font-weight: 800;[m
+[32m+[m[32m  white-space: nowrap;[m
+[32m+[m[32m  text-decoration: none;[m
+[32m+[m[32m}[m
+[32m+[m[32m.al-public .al-labs-brand svg { color: var(--aira-gold); }[m
+[32m+[m[32m.al-public .al-labs-header nav { display: flex; align-items: center; gap: clamp(12px, 2vw, 28px); }[m
+[32m+[m[32m.al-public .al-labs-header nav a:not(.al-button),[m
+[32m+[m[32m.al-public .al-labs-login { color: var(--aira-ivory); font-size: 13px; text-decoration: none; white-space: nowrap; }[m
+[32m+[m[32m.al-public .al-labs-header nav a:hover,[m
+[32m+[m[32m.al-public .al-labs-login:hover { color: var(--aira-gold); }[m
+[32m+[m[32m.al-labs-header-actions { display: flex; align-items: center; justify-content: flex-end; gap: 16px; }[m
+[32m+[m[32m.al-public .al-labs-explore {[m
+[32m+[m[32m  display: inline-flex;[m
+[32m+[m[32m  align-items: center;[m
+[32m+[m[32m  gap: 5px;[m
+[32m+[m[32m  min-height: 38px;[m
+[32m+[m[32m  padding: 7px 13px;[m
+[32m+[m[32m  border: 1px solid #8b102575;[m
+[32m+[m[32m  border-radius: 999px;[m
+[32m+[m[32m  background: #57071375;[m
+[32m+[m[32m  color: var(--aira-gold);[m
+[32m+[m[32m  font-size: 12px;[m
+[32m+[m[32m  font-weight: 750;[m
+[32m+[m[32m  text-decoration: none;[m
+[32m+[m[32m  white-space: nowrap;[m
+[32m+[m[32m}[m
+[32m+[m[32m.al-public .al-labs-explore:hover { background: var(--aira-burgundy); color: var(--aira-ivory); }[m
+[32m+[m
+[32m+[m[32m.al-public .al-hero.al-labs-hero {[m
+[32m+[m[32m  display: block;[m
+[32m+[m[32m  height: auto;[m
+[32m+[m[32m  min-height: 0;[m
+[32m+[m[32m  max-height: none;[m
+[32m+[m[32m  padding: clamp(30px, 4vw, 54px) clamp(20px, 4vw, 46px) 22px;[m
+[32m+[m[32m  background: radial-gradient(circle at 76% 57%, #5707133d, transparent 46%), var(--aira-black);[m
+[32m+[m[32m  color: var(--aira-ivory);[m
+[32m+[m[32m  scroll-margin-top: 20px;[m
+[32m+[m[32m}[m
+[32m+[m[32m.al-public .al-hero.al-labs-hero::before { content: none; }[m
+[32m+[m[32m.al-public .al-hero.al-labs-hero > div { position: relative; max-width: none; padding: 0; }[m
+[32m+[m[32m.al-public .al-labs-intro { max-width: 880px !important; }[m
+[32m+[m[32m.al-public .al-labs-hero .al-eyebrow {[m
+[32m+[m[32m  margin: 0 0 14px;[m
+[32m+[m[32m  color: var(--aira-gold);[m
+[32m+[m[32m  font-size: clamp(11px, 1.1vw, 14px);[m
+[32m+[m[32m  font-weight: 750;[m
+[32m+[m[32m  letter-spacing: .055em;[m
+[32m+[m[32m}[m
+[32m+[m[32m.al-public .al-hero.al-labs-hero h1 {[m
+[32m+[m[32m  max-width: 19ch;[m
+[32m+[m[32m  margin: 0 0 13px;[m
+[32m+[m[32m  color: var(--aira-ivory);[m
+[32m+[m[32m  font-size: clamp(2.2rem, 4.4vw, 3.7rem);[m
+[32m+[m[32m  line-height: 1.08;[m
+[32m+[m[32m  letter-spacing: -.035em;[m
+[32m+[m[32m  text-wrap: balance;[m
+[32m+[m[32m}[m
+[32m+[m[32m.al-public .al-hero.al-labs-hero p.al-labs-description {[m
+[32m+[m[32m  max-width: 70ch;[m
+[32m+[m[32m  margin: 0;[m
+[32m+[m[32m  color: var(--aira-ivory);[m
+[32m+[m[32m  font-size: clamp(15px, 1.45vw, 18px);[m
+[32m+[m[32m  line-height: 1.6;[m
+[32m+[m[32m}[m
+[32m+[m[32m.al-labs-hero-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 12px 22px; margin: 23px 0 27px; }[m
+[32m+[m[32m.al-public .al-labs-primary,[m
+[32m+[m[32m.al-public .al-labs-secondary { display: inline-flex; align-items: center; gap: 7px; min-height: 44px; font-size: 14px; font-weight: 750; text-decoration: none; }[m
+[32m+[m[32m.al-public .al-labs-primary { padding: 10px 17px; border-radius: 999px; background: var(--aira-gold); color: var(--aira-black); }[m
+[32m+[m[32m.al-public .al-labs-primary:hover { background: var(--aira-ivory); }[m
+[32m+[m[32m.al-public .al-labs-secondary { color: var(--aira-ivory); }[m
+[32m+[m[32m.al-public .al-labs-secondary:hover { color: var(--aira-gold); }[m
+[32m+[m
+[32m+[m[32m.al-public .al-labs-visual {[m
+[32m+[m[32m  padding: clamp(10px, 1.3vw, 18px);[m
+[32m+[m[32m  border: 1px solid #8b10256b;[m
+[32m+[m[32m  border-radius: 22px;[m
+[32m+[m[32m  background: linear-gradient(145deg, var(--aira-burgundy), #3c0611 55%, #23050a);[m
+[32m+[m[32m  scroll-margin-top: 20px;[m
+[32m+[m[32m}[m
+[32m+[m[32m.al-labs-core { margin: 0; }[m
+[32m+[m[32m.al-labs-core-image { position: relative; aspect-ratio: 16 / 8.6; overflow: hidden; border-radius: 15px; background: #100c0d; }[m
+[32m+[m[32m.al-labs-core-image img { object-fit: cover; object-position: center; animation: al-core-breathe 13s ease-in-out infinite; }[m
+[32m+[m[32m.al-labs-core-image::after { position: absolute; inset: 0; content: ""; pointer-events: none; box-shadow: inset 0 0 42px #09050799; }[m
+[32m+[m[32m.al-labs-core figcaption { padding: 12px 6px 8px; color: var(--aira-gold); font-size: 12px; font-weight: 800; letter-spacing: .08em; text-align: center; }[m
+[32m+[m[32m.al-labs-categories { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: 0; padding: 0; list-style: none; scroll-margin-top: 20px; }[m
+[32m+[m[32m.al-labs-categories li { display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 8px; min-height: 88px; padding: 12px; border: 1px solid #d4af6226; border-radius: 11px; background: #570713bd; color: var(--aira-ivory); font-size: 13px; text-align: center; }[m
+[32m+[m[32m.al-labs-categories svg { color: var(--aira-gold); }[m
+[32m+[m[32m.al-public .al-labs-hero > .al-labs-hero-foot { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 12px; margin-top: 16px; color: var(--aira-gold); font-size: 11px; letter-spacing: .05em; }[m
+[32m+[m[32m.al-labs-hero-foot span:last-child { text-align: right; }[m
+[32m+[m[32m.al-labs-hero-foot a { display: grid; place-items: center; width: 38px; height: 38px; border: 1px solid var(--aira-gold); border-radius: 50%; color: var(--aira-gold); }[m
+[32m+[m[32m.al-labs-hero-foot a:hover { background: var(--aira-gold); color: var(--aira-black); }[m
+[32m+[m[32m.al-public .al-labs-stage :focus-visible { outline: 3px solid var(--aira-gold); outline-offset: 3px; }[m
+[32m+[m
+[32m+[m[32m@keyframes al-core-breathe { 50% { transform: scale(1.025); } }[m
+[32m+[m[32m@media (max-width: 880px) {[m
+[32m+[m[32m  .al-public .al-header.al-labs-header { display: flex; flex-wrap: wrap; gap: 10px 18px; }[m
+[32m+[m[32m  .al-public .al-labs-header nav { order: 3; width: 100%; justify-content: center; }[m
+[32m+[m[32m  .al-labs-header-actions { margin-left: auto; }[m
+[32m+[m[32m}[m
+[32m+[m[32m@media (max-width: 600px) {[m
+[32m+[m[32m  .al-public .al-labs-stage { width: 100%; margin: 0 0 24px; border-radius: 0; border-inline: 0; }[m
+[32m+[m[32m  .al-public .al-header.al-labs-header { padding: 12px 16px; }[m
+[32m+[m[32m  .al-public .al-labs-brand { font-size: 15px; }[m
+[32m+[m[32m  .al-public .al-labs-header nav { justify-content: flex-start; gap: 17px; overflow-x: auto; padding: 4px 0 3px; }[m
+[32m+[m[32m  .al-public .al-labs-header nav a:not(.al-button) { display: inline-flex; min-height: 40px; align-items: center; }[m
+[32m+[m[32m  .al-labs-header-actions { gap: 8px; }[m
+[32m+[m[32m  .al-public .al-labs-explore { padding: 6px 9px; font-size: 11px; }[m
+[32m+[m[32m  .al-public .al-labs-login { font-size: 11px; }[m
+[32m+[m[32m  .al-public .al-hero.al-labs-hero { padding: 32px 16px 17px; }[m
+[32m+[m[32m  .al-labs-hero-actions { margin-bottom: 22px; }[m
+[32m+[m[32m  .al-labs-core-image { aspect-ratio: 4 / 3; }[m
+[32m+[m[32m  .al-labs-categories { gap: 6px; }[m
+[32m+[m[32m  .al-labs-categories li { min-height: 83px; padding: 8px 4px; font-size: 11px; }[m
+[32m+[m[32m  .al-labs-categories svg { width: 20px; height: 20px; }[m
+[32m+[m[32m  .al-public .al-labs-hero > .al-labs-hero-foot { font-size: 9px; }[m
+[32m+[m[32m}[m
+[32m+[m[32m@media (max-width: 360px) {[m
+[32m+[m[32m  .al-labs-header-actions { width: 100%; justify-content: flex-start; margin-left: 0; }[m
+[32m+[m[32m  .al-labs-categories { grid-template-columns: 1fr; }[m
+[32m+[m[32m  .al-labs-categories li { min-height: 48px; flex-direction: row; }[m
+[32m+[m[32m}[m
+[32m+[m[32m@media (prefers-reduced-motion: reduce) { .al-labs-core-image img { animation: none; } }[m
+[1mdiff --git a/src/app/sites/labs-ui/landing.tsx b/src/app/sites/labs-ui/landing.tsx[m
+[1mindex ef4c659..b2b0cc0 100644[m
+[1m--- a/src/app/sites/labs-ui/landing.tsx[m
+[1m+++ b/src/app/sites/labs-ui/landing.tsx[m
+[36m@@ -1,14 +1,22 @@[m
+ import Link from "next/link";[m
+[31m-import { ArrowUpRight, Workflow, Code2, Blocks, MessagesSquare, Bot, PanelsTopLeft } from "lucide-react";[m
+[32m+[m[32mimport Image from "next/image";[m
+[32m+[m[32mimport { ArrowDown, ArrowRight, ArrowUpRight, BrainCircuit, Workflow, Code2, Blocks, MessagesSquare, Bot, PanelsTopLeft, Sparkles } from "lucide-react";[m
+ import { LabsForm } from "./form";[m
+[32m+[m[32mimport { SiaGuide } from "@/components/sia/sia-guide";[m
+[32m+[m[32mimport "./labs-hero.css";[m
+ const services=[{title:"AI automation",copy:"Connect repetitive business work to controlled AI-assisted workflows.",Icon:Bot},{title:"Workflow integration",copy:"Bring your existing tools and processes together.",Icon:Workflow},{title:"Customer systems",copy:"Organize leads, follow-ups and service delivery.",Icon:Blocks},{title:"Communication workflows",copy:"Permission-aware WhatsApp and email integrations.",Icon:MessagesSquare},{title:"Web and mobile",copy:"Applications built around your team's day-to-day work.",Icon:Code2},{title:"Business operations",copy:"Practical management workspaces and reporting.",Icon:PanelsTopLeft}];[m
+[31m-const labsFaqs=[{q:"What does AIRA Labs do?",a:"AIRA Labs helps a business connect people, processes and technology. The work covers practical AI transformation, workflow integration and business systems."},{q:"How does a project start?",a:"Begin with an automation audit. We look at where work gets stuck, agree the scope and priorities, then build, test, review and deliver with your acceptance."},{q:"Does an enquiry start paid work?",a:"No. The form asks AIRA Labs to review one business need and contact you about that enquiry. It is not a contract, and it is not marketing consent."},{q:"Who operates AIRA Labs?",a:"AIRA Labs is a division of AIRA Skill City Private Limited. It is separate from Nice Jobs and AIRA Startup School."}];[m
+[32m+[m[32mconst labsFaqs=[{q:"What does AIRA Labs do?",a:"AIRA Labs helps a business connect people, processes and technology. The work covers practical AI transformation, workflow integration and business systems."},{q:"How does a project start?",a:"Begin with an automation audit. We look at where work gets stuck, agree the scope and priorities, then build, test, review and deliver with your acceptance."},{q:"Does an enquiry start paid work?",a:"No. The form asks AIRA Labs to review one business need and contact you about that enquiry. It is not a contract, and it is not marketing consent."},{q:"Who operates AIRA Labs?",a:"AIRA Labs is a division of AIRA Skill City Private Limited. It is separate from Nice Jobs and AIRA Startup Skool."}];[m
+ export function LabsLanding({home,login}:{home:string;login:string}){[m
+[31m-return <main className="al-public" data-motion=""><header className="al-header"><Link className="al-brand" href={home}>AIRA <strong>Labs</strong></Link><nav aria-label="AIRA Labs"><a href="#services">Services</a><a href="#faq">FAQ</a><a href="#enquiry">Book an audit</a><Link className="al-button" href={login}>Team login<ArrowUpRight size={17}/></Link></nav></header>[m
+[31m-<section className="al-hero" style={{backgroundImage:"url('/images/aira-labs.jpg')"}}><div><p className="al-eyebrow">AI &amp; BUSINESS AUTOMATION</p><h1>AIRA Labs</h1><p className="al-hero-description">Make your business work better.</p><p>Connect your people, processes and technology with practical AI transformation.</p><a className="al-button" href="#enquiry">Book an automation audit<ArrowUpRight size={18}/></a></div><span className="al-image-caption">Illustrative technology photograph</span></section>[m
+[32m+[m[32mreturn <main className="al-public" data-motion=""><div className="al-labs-stage">[m
+[32m+[m[32m<header className="al-header al-labs-header"><Link className="al-brand al-labs-brand" href={home}><Sparkles size={20} aria-hidden="true"/><span>AIRA LABS</span></Link><nav aria-label="AIRA Labs"><a href="#discover">Discover</a><a href="#research">Research</a><a href="#products">Products</a><a href="#about">About</a></nav><div className="al-labs-header-actions"><Link className="al-labs-login" href={login}>Team login</Link><a className="al-labs-explore" href="#services">Explore Labs <ArrowUpRight size={16} aria-hidden="true"/></a></div></header>[m
+[32m+[m[32m<section className="al-hero al-labs-hero" id="discover" aria-labelledby="labs-hero-title"><div className="al-labs-intro"><p className="al-eyebrow">ARTIFICIAL INTELLIGENCE · RESEARCH · INNOVATION</p><h1 id="labs-hero-title">Intelligence that builds what&apos;s next.</h1><p className="al-labs-description">We transform ideas into intelligent products, AI-powered platforms and real-world business solutions.</p><div className="al-labs-hero-actions"><a className="al-labs-primary" href="#services">Explore AIRA Labs <ArrowRight size={18} aria-hidden="true"/></a><a className="al-labs-secondary" href="#products">Our innovations <ArrowUpRight size={16} aria-hidden="true"/></a></div></div>[m
+[32m+[m[32m<div className="al-labs-visual" id="research"><figure className="al-labs-core"><div className="al-labs-core-image"><Image src="/images/aira-labs-intelligence-core.webp" alt="A golden intelligence core surrounded by orbital networks inside a dark research chamber" fill priority sizes="(max-width: 760px) 100vw, (max-width: 1300px) 92vw, 1160px" /></div><figcaption>ONE INTELLIGENCE. MANY POSSIBILITIES.</figcaption></figure><ul className="al-labs-categories" id="products" aria-label="AIRA Labs technology focus"><li><MessagesSquare size={23} aria-hidden="true"/><span>Communication</span></li><li><BrainCircuit size={23} aria-hidden="true"/><span>AI Systems</span></li><li><Workflow size={23} aria-hidden="true"/><span>Automation</span></li></ul></div>[m
+[32m+[m[32m<div className="al-labs-hero-foot" id="about"><span>AIRA FAMILY</span><a href="#services" aria-label="Continue to AIRA Labs services"><ArrowDown size={19} aria-hidden="true"/></a><span>Research · Create · Advance</span></div></section></div>[m
+ <section className="al-band" id="services"><header><p className="al-eyebrow">BUILT AROUND YOUR BUSINESS</p><h2>Less friction. More useful work.</h2></header><div className="al-services">{services.map(({title,copy,Icon})=><article key={title}><Icon size={26}/><h3>{title}</h3><p>{copy}</p></article>)}</div></section>[m
+ <section className="al-band al-process"><header><p className="al-eyebrow">FROM NEED TO DELIVERY</p><h2>A clear path forward.</h2></header><ol>{["Understand your workflow","Agree scope and priorities","Build, test and review","Deliver with your acceptance"].map((text,i)=><li key={text}><span>0{i+1}</span><h3>{text}</h3></li>)}</ol></section>[m
+ <section className="al-band al-enquiry" id="enquiry"><div><p className="al-eyebrow">LET'S TALK ABOUT YOUR WORKFLOW</p><h2>Where does work get stuck?</h2><p>Tell us about your business and the process you want to improve.</p><p>AIRA Labs is a division of AIRA Skill City Private Limited.</p></div><LabsForm kind="ENQUIRY" label="Send enquiry"><label>Business name<input name="company" required maxLength={160} autoComplete="organization"/></label><label>Your name<input name="name" required maxLength={160} autoComplete="name"/></label><label>Email<input name="email" type="email" required maxLength={254} autoComplete="email"/></label><label>Phone <span>(optional)</span><input name="phone" type="tel" maxLength={30} autoComplete="tel"/></label><label>Business need<textarea name="need" required minLength={10} maxLength={3000} rows={4}/></label><div hidden aria-hidden="true"><label>Website<input name="website" tabIndex={-1} autoComplete="off"/></label></div><label className="al-check"><input type="checkbox" name="consent" required/>I authorize AIRA Labs to review this enquiry and contact me about it. This is not marketing consent.</label></LabsForm></section>[m
+ <section className="al-band al-faq" id="faq" aria-labelledby="labs-faq-title"><header><p className="al-eyebrow">BEFORE YOU WRITE</p><h2 id="labs-faq-title">Questions about AIRA Labs.</h2></header><div>{labsFaqs.map(item=><details key={item.q}><summary>{item.q}</summary><p>{item.a}</p></details>)}</div></section>[m
+[31m-<footer className="al-footer"><div><strong>AIRA Labs</strong><p>Practical AI, workflow integration and business automation.</p><span>AIRA Skill City Private Limited</span></div><nav aria-label="AIRA Labs footer"><a href="#services">Services</a><a href="#faq">FAQ</a><a href="#enquiry">Book an audit</a><Link href={login}>Team workspace</Link></nav></footer></main>;[m
+[32m+[m[32m<footer className="al-footer"><div><strong>AIRA Labs</strong><p>Practical AI, workflow integration and business automation.</p><span>AIRA Skill City Private Limited</span></div><nav aria-label="AIRA Labs footer"><a href="#services">Services</a><a href="#faq">FAQ</a><a href="#enquiry">Book an audit</a><Link href={login}>Team workspace</Link></nav></footer>[m
+[32m+[m[32m<SiaGuide message="I can show you where to describe your automation need. The Labs team reviews each enquiry before deciding the next step." action={{ href: "#enquiry", label: "Describe your business need" }} disclaimer="This guide explains the page. It does not submit an enquiry or start a paid project." />[m
+[32m+[m[32m</main>;[m
+ }[m
+[1mdiff --git a/tests/labs-ui.test.ts b/tests/labs-ui.test.ts[m
+[1mindex 1cb088b..9e58642 100644[m
+[1m--- a/tests/labs-ui.test.ts[m
+[1m+++ b/tests/labs-ui.test.ts[m
+[36m@@ -8,12 +8,13 @@[m [mimport {renderToStaticMarkup} from "react-dom/server";[m
+ import {NextRequest} from "next/server";[m
+ import {middleware} from "../src/middleware";[m
+ import {portalSites,siteById} from "@/server/portals/sites";[m
+[32m+[m[32mconst SiaGuide = () => createElement("aside", null, "SIA guide");[m
+ const require=createRequire(import.meta.url);[m
+ function load<T>(path:string,mocks:Record<string,unknown>):T{const code=transpileModule(readFileSync(path,"utf8"),{compilerOptions:{module:ModuleKind.CommonJS,jsx:JsxEmit.ReactJSX,esModuleInterop:true}}).outputText;const target={exports:{}};runInNewContext(code,{module:target,exports:target.exports,require:(name:string)=>name in mocks?mocks[name]:require(name)});return target.exports as T;}[m
+ const form={LabsForm:(p:{children:ReactNode;label:string})=>createElement("form",null,p.children,createElement("button",null,p.label))};[m
+ describe("Labs UI, host routing and honest configuration",()=>{[m
+[31m-it("renders business positioning and a consent-labelled enquiry without fake clients, results or contact details",()=>{const {LabsLanding}=load<{LabsLanding:ComponentType<{home:string;login:string}>}>("src/app/sites/labs-ui/landing.tsx",{"./form":form});const html=renderToStaticMarkup(createElement(LabsLanding,{home:"/sites/labs",login:"/sites/labs/login"}));expect(html).toContain("AIRA Labs");expect(html).toContain("AIRA Skill City Private Limited");expect(html).toContain('href="/sites/labs/login"');expect(html).toContain("Send enquiry");expect(html).toContain('type="checkbox"');expect(html).toContain("not marketing consent");expect(html).not.toContain("director@airalabs.online");expect(html).not.toMatch(/value="[0-9]{6}"/);expect(html).not.toContain("testimonial");expect(html).toContain("Illustrative technology photograph");});[m
+[31m-it("selects only Labs' new landing and preserves the independent Nice Jobs entry",async()=>{const {LabsLanding}=load<{LabsLanding:ComponentType<{home:string;login:string}>}>("src/app/sites/labs-ui/landing.tsx",{"./form":form});const publicOpportunities=vi.fn(async()=>({records:[],nextCursor:null}));const JobsLanding=()=>createElement("p",null,"Nice Jobs independent landing");const {default:page}=load<{default:(p:{params:Promise<{site:string}>})=>Promise<ReactNode>}>("src/app/sites/[site]/page.tsx",{"../labs-ui/landing":{LabsLanding},"../jobs-ui/landing":{JobsLanding},"../startup-ui/landing":{StartupLanding:()=>null},"@/server/nicejobs/applications":{applicationService:{publicOpportunities}},"@/server/nicejobs/input":{NiceJobsUnavailable:class extends Error{}},"@/server/portals/sites":{portalSites},"@/server/portals/request":{requestPortal:async(id:string)=>({site:siteById(id),paths:{home:"/sites/"+id,login:"/sites/"+id+"/login",opportunities:"/sites/"+id+"/opportunities"}})}});const labs=renderToStaticMarkup(await page({params:Promise.resolve({site:"labs"})}));expect(labs).toContain("Book an automation audit");expect(publicOpportunities).not.toHaveBeenCalled();const jobs=renderToStaticMarkup(await page({params:Promise.resolve({site:"jobs"})}));expect(jobs).toContain("Nice Jobs independent landing");expect(jobs).not.toContain("Book an automation audit");expect(publicOpportunities).toHaveBeenCalledWith({kind:"jobs",limit:3});});[m
+[32m+[m[32mit("renders business positioning and a consent-labelled enquiry without fake clients, results or contact details",()=>{const {LabsLanding}=load<{LabsLanding:ComponentType<{home:string;login:string}>}>("src/app/sites/labs-ui/landing.tsx",{"./form":form,"./labs-hero.css":{},"@/components/sia/sia-guide":{SiaGuide}});const html=renderToStaticMarkup(createElement(LabsLanding,{home:"/sites/labs",login:"/sites/labs/login"}));expect(html).toContain("AIRA Labs");expect(html).toContain("AIRA Skill City Private Limited");expect(html).toContain('href="/sites/labs/login"');expect(html).toContain("Send enquiry");expect(html).toContain('type="checkbox"');expect(html).toContain("not marketing consent");expect(html).not.toContain("director@airalabs.online");expect(html).not.toMatch(/value="[0-9]{6}"/);expect(html).not.toContain("testimonial");expect(html).toContain("golden intelligence core");});[m
+[32m+[m[32mit("selects only Labs' new landing and preserves the independent Nice Jobs entry",async()=>{const {LabsLanding}=load<{LabsLanding:ComponentType<{home:string;login:string}>}>("src/app/sites/labs-ui/landing.tsx",{"./form":form,"./labs-hero.css":{},"@/components/sia/sia-guide":{SiaGuide}});const publicOpportunities=vi.fn(async()=>({records:[],nextCursor:null}));const JobsLanding=()=>createElement("p",null,"Nice Jobs independent landing");const {default:page}=load<{default:(p:{params:Promise<{site:string}>})=>Promise<ReactNode>}>("src/app/sites/[site]/page.tsx",{"@/components/aira/AiraLanding":{AiraLanding:()=>null},"@/components/aira/ventures":{venturesFor:()=>[]},"next/font/google":{Manrope:()=>({variable:"test-text"}),Syne:()=>({variable:"test-display"})},"../labs-ui/landing":{LabsLanding},"../jobs-ui/landing":{JobsLanding},"../startup-ui/landing":{StartupLanding:()=>null},"@/server/nicejobs/applications":{applicationService:{publicOpportunities}},"@/server/nicejobs/input":{NiceJobsUnavailable:class extends Error{}},"@/server/portals/sites":{portalSites},"@/server/portals/request":{requestPortal:async(id:string)=>({site:siteById(id),paths:{home:"/sites/"+id,login:"/sites/"+id+"/login",opportunities:"/sites/"+id+"/opportunities"}})}});const labs=renderToStaticMarkup(await page({params:Promise.resolve({site:"labs"})}));expect(labs).toContain("Intelligence that builds");expect(publicOpportunities).not.toHaveBeenCalled();const jobs=renderToStaticMarkup(await page({params:Promise.resolve({site:"jobs"})}));expect(jobs).toContain("Nice Jobs independent landing");expect(jobs).not.toContain("Intelligence that builds");expect(publicOpportunities).toHaveBeenCalledWith({kind:"jobs",limit:3});});[m
+ it("offers customer PIN only in Labs and keeps staff on Skill City",()=>{const {PortalLoginForm}=load<{PortalLoginForm:ComponentType<{site:typeof portalSites[number];home:string}>}>("src/app/sites/[site]/login/form.tsx",{"../actions":{portalLoginAction:async()=>({})},"../../startup-ui/sia-assistant":{StartupSiaAssistant:()=>null}});const labs=renderToStaticMarkup(createElement(PortalLoginForm,{site:siteById("labs")!,home:"/sites/labs"}));expect(labs).toContain("Six-digit customer PIN");expect(labs).toContain('minLength="6"');expect(labs).toContain('maxLength="6"');expect(labs).toContain('type="password"');expect(labs).toContain("Customers use their six-digit PIN");expect(labs).toContain("airaskillcity.com");expect(labs).toContain("authorized administrator");const startup=renderToStaticMarkup(createElement(PortalLoginForm,{site:siteById("startup")!,home:"/sites/startup"}));expect(startup).toContain("Password");expect(startup).toContain('minLength="8"');expect(startup).not.toContain("Six-digit customer PIN");});[m
+ it("routes Labs PIN and private quotations without opening those paths on other brands",async()=>{const prior=process.env.AUTH_SECRET;process.env.AUTH_SECRET="isolated-ui-test-secret-of-at-least-32-characters";try{for(const path of ["/pin","/quotations/fixture-quote"]){const response=await middleware(new NextRequest("https://airalabs.online"+path,{headers:{host:"airalabs.online"}}));expect(response.headers.get("x-middleware-rewrite")).toContain("/sites/labs"+path);expect(response.headers.get("Cache-Control")).toContain("no-store");const other=await middleware(new NextRequest("https://airastartupskool.com"+path,{headers:{host:"airastartupskool.com"}}));expect(other.status).toBe(404);}}finally{if(prior===undefined)delete process.env.AUTH_SECRET;else process.env.AUTH_SECRET=prior;}});[m
+ it("uses the authenticated actor rather than a forged form identity for a manual lead",async()=>{const createLead=vi.fn(async(actor:string,data:unknown)=>({id:actor,data})),requestPortal=vi.fn(async()=>({site:siteById("labs"),paths:{gateway:"/sites/labs/gateway"}}));const {labsAction}=load<{labsAction:(state:object,form:FormData)=>Promise<{message?:string;error?:string}>}>("src/app/sites/labs-ui/actions.ts",{"next/cache":{revalidatePath:vi.fn()},"next/navigation":{redirect:vi.fn()},"@/server/portals/request":{requestPortal},"@/server/portals/session":{getPortalSession:async()=>({userId:"verified-actor",needsPinChange:false}),revokePortalSession:vi.fn()},"@/server/labs/service":{labsService:{createLead}},"@/server/labs/customer":{labsCustomerService:{}},"@/server/labs/pin":{labsPin:{}},"@/server/authorization/engine":{AccessError:class extends Error{}},"@/server/security/rate-limit":{consumeSecurityBudget:vi.fn(),securityKey:()=>"fixture-budget",RateLimitError:class extends Error{}},"@/server/security/diagnostics":{safeDiagnostic:vi.fn()}});const data=new FormData();data.set("action","CREATE_LEAD");data.set("userId","forged-actor");data.set("consent","on");const result=await labsAction({},data);expect(result.message).toContain("Saved");expect(requestPortal).toHaveBeenCalledWith("labs",true);expect(createLead.mock.calls[0][0]).toBe("verified-actor");expect(JSON.stringify(createLead.mock.calls)).not.toContain("forged-actor");});[m

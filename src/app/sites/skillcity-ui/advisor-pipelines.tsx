@@ -3,7 +3,7 @@ import type { advisorCrm } from "@/server/skillcity/crm";
 import { WorkForm } from "./work-form";
 
 type Pipeline = { slug: string } & Awaited<ReturnType<typeof advisorCrm.list>>;
-const labels: Record<string, string> = { pba: "PBA / Startup School", "genz-builder": "GenZ Builder / Skill Studio" };
+const labels: Record<string, string> = { pba: "PBA / Startup Skool", "genz-builder": "GenZ Builder / Skill Studio" };
 const next: Record<string, string[]> = { NEW: ["NEW", "CONTACTED", "LOST"], CONTACTED: ["CONTACTED", "QUALIFIED", "LOST"], QUALIFIED: ["QUALIFIED", "LOST"] };
 const date = (value: Date | string | null | undefined) => value ? new Date(value).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" }) + " IST" : "Not scheduled";
 

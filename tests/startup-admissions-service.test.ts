@@ -4,7 +4,7 @@ import type { PrismaClient } from "@prisma/client";
 const guard = vi.hoisted(() => ({ denied: false, deniedExecutive: false, brandDenied: false }));
 vi.mock("@/server/group/boss-registry", () => ({ createBossRegistry: () => ({ brand: async (_userId: string, brandId: string) => {
   if (guard.brandDenied || brandId !== "startup-brand") throw new Error("Brand unavailable");
-  return { row: { id: brandId, organizationId: "aira-company", name: "Startup School", status: "ACTIVE", organization: { status: "ACTIVE", company: { status: "ACTIVE" } } }, startupDivision: "startup-division", startupDivisionActive: true, programs: [], canManagePrograms: true };
+  return { row: { id: brandId, organizationId: "aira-company", name: "Startup Skool", status: "ACTIVE", organization: { status: "ACTIVE", company: { status: "ACTIVE" } } }, startupDivision: "startup-division", startupDivisionActive: true, programs: [], canManagePrograms: true };
 } }) }));
 vi.mock("@/server/group/boss-service", () => ({ createBossService: () => ({ authority: async () => ({ ctx: {
   requireAccess: async (key: string) => { if (guard.denied && key === "person.read" || guard.deniedExecutive && key === "executive.read") throw new Error("Access denied"); },
@@ -36,7 +36,7 @@ describe("Boss Startup admissions read boundary", () => {
   it("never falls back to the staff review path when the Boss brand ID is empty", async () => {
     const db = { brand: { findUnique: vi.fn(async () => null) } };
     const client = { $transaction: async (callback: (transaction: typeof db) => Promise<unknown>) => callback(db) } as unknown as PrismaClient;
-    await expect(createStartupApplications(client).reviewForBoss("staff-account", "", { id: "application", version: 0, decision: "APPROVED", reason: "Reviewed by a person" })).rejects.toThrow("Startup School brand unavailable");
+    await expect(createStartupApplications(client).reviewForBoss("staff-account", "", { id: "application", version: 0, decision: "APPROVED", reason: "Reviewed by a person" })).rejects.toThrow("Startup Skool brand unavailable");
     expect(db.brand.findUnique).toHaveBeenCalledWith({ where: { id: "" }, select: expect.any(Object) });
   });
 });

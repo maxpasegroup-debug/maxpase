@@ -12,7 +12,7 @@ Long-term lifecycle: apply, screen, interview, approve, offer, orientation, OJT,
 
 | Code | Job | Business areas | Engagement | Initial state |
 | --- | --- | --- | --- | --- |
-| JOB-001 | Academic Advisor - Junior (display uses the supplied em dash) | AIRA Startup School; AIRA Skill Studio | Part-time / incentive-based | DRAFT, INTERNAL, v1 |
+| JOB-001 | Academic Advisor - Junior (display uses the supplied em dash) | AIRA Startup Skool; AIRA Skill Studio | Part-time / incentive-based | DRAFT, INTERNAL, v1 |
 | JOB-002 | Business Development Manager | AIRA Labs | Part-time / incentive-based | DRAFT, INTERNAL, v1 |
 
 The idempotent, transactional `seedKnown` operation requires explicit create authority in the company and every referenced area. It verifies existing catalogue identity and refuses conflicts rather than overwriting. Development seeding calls it after reviewed development-administrator provisioning. Management offers the same explicitly authorized catalogue action. No live seeding, vacancies, compensation, targets, applications, workers, performance, leads or earnings are invented. Future availability says **More jobs coming soon**. New job definitions can be created through the UI without code changes; they still create no vacancy.

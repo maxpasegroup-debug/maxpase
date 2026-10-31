@@ -1,6 +1,6 @@
 # Skill City staff and CRM rollout
 
-Status: implemented locally, **not activated for real staff**. The Boss remains on `maxpase.com`. AIRA directors and advisors sign in on `airaskillcity.com`. Newly invited AIRA Labs Software Developers, Full Stack Developers, Junior Developers and Business Development Managers sign in on `airalabs.online` with the password they create during invitation activation; existing Labs PIN accounts retain their PIN flow. Startup School students and Nice Jobs part-time participants retain their own portals. TEARN and TopRank staff domains are not specified here.
+Status: implemented locally, **not activated for real staff**. The Boss remains on `maxpase.com`. AIRA directors and advisors sign in on `airaskillcity.com`. Newly invited AIRA Labs Software Developers, Full Stack Developers, Junior Developers and Business Development Managers sign in on `airalabs.online` with the password they create during invitation activation; existing Labs PIN accounts retain their PIN flow. Startup Skool students and Nice Jobs part-time participants retain their own portals. TEARN and TopRank staff domains are not specified here.
 
 ## Five delivery phases
 

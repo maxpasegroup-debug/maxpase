@@ -11,7 +11,7 @@ import { NiceJobsUnavailable } from "@/server/nicejobs/input";
 const display = Syne({ subsets: ["latin"], weight: ["700", "800"], variable: "--aira-display" });
 const text = Manrope({ subsets: ["latin"], weight: ["400", "500", "600"], variable: "--aira-text" });
 const startupFaqs = [
-  ["What is AIRA Startup School?", "It is the startup project inside AIRA Skill City: a place for curious minds and ambitious founders to learn, experiment and take a practical next step."],
+  ["What is AIRA Startup Skool?", "It is the startup project inside AIRA Skill City: a place for curious minds and ambitious founders to learn, experiment and take a practical next step."],
   ["What does the work focus on?", "Entrepreneurship, practical learning and founder projects. The school helps you turn an idea into focused work. It does not promise a company, funding or revenue."],
   ["How do I take part?", "Start with the application through the signup journey. Reading this page alone does not create an account or a founder project."],
   ["Who currently operates this site?", "The existing portal is operated within AIRA Skill City Private Limited. A proposed standalone entity change has not yet been verified in this system."],
@@ -21,7 +21,7 @@ const startupFaqs = [
 ] as const;
 const skillcityFaqs = [
   ["What is AIRA Skill City?", "AIRA Skill City is the company home for practical learning, entrepreneurship, technology and career development."],
-  ["Which projects sit inside it?", "AIRA Startup School, AIRA Labs and Nice Jobs each have their own public site, purpose and sign-in. This page introduces them. It is not one combined application."],
+  ["Which projects sit inside it?", "AIRA Startup Skool, AIRA Labs and Nice Jobs each have their own public site, purpose and sign-in. This page introduces them. It is not one combined application."],
   ["Who signs in here?", "The Skill City gateway is for people with a Skill City account. Founders, business enquiries and candidates use the project site that matches their work."],
   ["Who is the legal entity?", "The company is AIRA Skill City Private Limited."]
 ] as const;

@@ -30,7 +30,7 @@ function load(read: () => Promise<unknown>) {
 describe("Boss brand command center", () => {
   it("shows the verified parent path and only accessible operating records", async () => {
     const page = load(async () => ({
-      row: { id: "child", name: "Startup School", slug: "startup-school", status: "ACTIVE", website: null, organizationId: "company", organization: { company: { displayName: "AIRA Skill City" } } },
+      row: { id: "child", name: "Startup Skool", slug: "startup-school", status: "ACTIVE", website: null, organizationId: "company", organization: { company: { displayName: "AIRA Skill City" } } },
       parent: { id: "parent", name: "Parent Brand" }, children: [], products: null, projects: null,
       startupDivision: "startup-division", programs: [{ id: "pba", name: "PBA", kind: "PROGRAM", status: "DRAFT", durationDays: null, capacity: null }], canManagePrograms: false,
       commandHref: null, permissions: { work: false, approvals: false, people: false, products: false, manage: false }
@@ -60,6 +60,6 @@ describe("Boss brand command center", () => {
     expect(html).toContain('href="/app/aira/programs?organizationId=studio-division"');
     expect(html).toContain("GenZ Builder");
     expect(html).toContain("DRAFT");
-    expect(html).not.toContain("Startup School programmes");
+    expect(html).not.toContain("Startup Skool programmes");
   });
 });

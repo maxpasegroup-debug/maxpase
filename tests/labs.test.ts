@@ -51,7 +51,7 @@ it("requires an explicit verified customer grant and isolates enquiry, proposal 
   expect(await customerService.dashboard(one)).toEqual([]);
   expect(await db.operationalEvent.count({where:{organizationId:labs,entityId:grant.id,eventType:{in:["labs.customer_access_granted","labs.customer_access_revoked"]}}})).toBe(2);
 });
-it("limits Startup School learning to the signed-in participant",async()=>{
+it("limits Startup Skool learning to the signed-in participant",async()=>{
   const startup=(await db.organization.findUniqueOrThrow({where:{slug:"aira-startup-school"}})).id;
   const a=await human("startup-student-a",startup,["organization.read"]),b=await human("startup-student-b",startup,["organization.read"]);
   const ua=await db.user.findUniqueOrThrow({where:{id:a}}),ub=await db.user.findUniqueOrThrow({where:{id:b}});

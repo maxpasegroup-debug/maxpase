@@ -44,6 +44,15 @@ describe("Phase 06 AIRA company OS", () => {
     expect(await db.product.findUnique({ where: { organizationId_slug: { organizationId: company, slug: "nice-jobs" } } })).toMatchObject({ divisionId: career, type: "PLATFORM", lifecycle: "CONCEPT" });
     expect(await db.program.count()).toBe(0); expect(await db.batch.count()).toBe(0); expect(await db.location.count()).toBe(0);
   });
+  it("corrects only the known legacy division name and audits it once", async () => {
+    await db.organization.update({ where: { id: school }, data: { name: "AIRA Startup School" } });
+    const before = await db.auditEvent.count({ where: { entityId: school, action: "aira.division_name_corrected" } });
+    await db.$transaction(tx => seedAiraStructure(tx, company));
+    expect(await db.organization.findUniqueOrThrow({ where: { id: school } })).toMatchObject({ name: "AIRA Startup Skool", slug: "aira-startup-school", parentId: company });
+    expect(await db.auditEvent.count({ where: { entityId: school, action: "aira.division_name_corrected" } })).toBe(before + 1);
+    await db.$transaction(tx => seedAiraStructure(tx, company));
+    expect(await db.auditEvent.count({ where: { entityId: school, action: "aira.division_name_corrected" } })).toBe(before + 1);
+  });
   it("requires actual AIRA authority rather than a title or another company's permissions", async () => {
     await expect(service.enter(outsider)).rejects.toThrow();
     await expect(service.save(outsider, "programs", { organizationId: school, name: unique(), slug: unique() })).rejects.toThrow();
@@ -69,7 +78,7 @@ describe("Phase 06 AIRA company OS", () => {
     expect(await db.program.findUnique({ where: { id: priced.id } })).toMatchObject({ priceMinor: 0, currency: "INR" });
     await expect(service.save(admin, "programs", { organizationId: labs, name: unique(), slug: unique() }, p.id)).rejects.toThrow("cannot be changed");
   });
-  it("keeps Startup School publication separate from the shared programme editor", async () => {
+  it("keeps Startup Skool publication separate from the shared programme editor", async () => {
     const draft = await program(school, { description: "Planning only" });
     expect(draft.status).toBe("DRAFT");
     await expect(service.save(admin, "programs", { organizationId: school, name: "Unapproved", slug: unique(), status: "ACTIVE" })).rejects.toThrow("approved publication decision");

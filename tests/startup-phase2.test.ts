@@ -11,7 +11,6 @@ import { middleware } from "@/middleware";
 import { portalPaths, siteById } from "@/server/portals/sites";
 import { startupEmailSettings, StartupAuthUnavailable } from "@/server/portals/startup-auth";
 import { startupApplicationInput } from "@/server/portals/startup-applications";
-import type { PortalSite } from "@/server/portals/sites";
 
 const localRequire = createRequire(import.meta.url);
 const compiled = transpileModule(readFileSync("src/app/sites/startup-ui/landing.tsx", "utf8"), { compilerOptions: { module: ModuleKind.CommonJS, jsx: JsxEmit.ReactJSX, esModuleInterop: true } }).outputText;
@@ -20,10 +19,13 @@ const Icon = () => createElement("span", null);
 runInNewContext(compiled, { module: moduleTarget, exports: moduleTarget.exports, require: (name: string) => ({
   "next/link": { __esModule: true, default: ({ href, children }: { href: string; children: ReactNode }) => createElement("a", { href }, children) },
   "next/image": { __esModule: true, default: ({ src, alt }: { src: string; alt: string }) => createElement("img", { src, alt }) },
+  "next/font/google": { Instrument_Sans: () => ({ className: "test-font" }) },
+  "lenis/dist/lenis.css": {},
+  "./startup.css": {},
   "lucide-react": { ArrowDown: Icon, ArrowRight: Icon, ArrowUpRight: Icon },
   "./sia-assistant": { StartupSiaAssistant: () => createElement("span", null, "SIA guidance") }
 } as Record<string, unknown>)[name] ?? localRequire(name) });
-const StartupLanding = (moduleTarget.exports as { StartupLanding: ComponentType<{ site: PortalSite; paths: { home: string; login: string; signup: string } }> }).StartupLanding;
+const StartupLanding = (moduleTarget.exports as { StartupLanding: ComponentType<{ home: string; login: string; signup: string; name: string; description: string; image: string; ecosystem: string; focus: readonly string[]; faqs: readonly (readonly [string, string])[] }> }).StartupLanding;
 
 const previousSecret = process.env.AUTH_SECRET;
 beforeAll(() => { process.env.AUTH_SECRET = randomBytes(32).toString("base64url"); });
@@ -52,9 +54,11 @@ describe("Startup Skool application entry", () => {
 
   it("offers a guided application without presenting proposed fees or automatic admission", () => {
     const site = siteById("startup")!;
-    const html = renderToStaticMarkup(createElement(StartupLanding, { site, paths: portalPaths(site, true) }));
+    const paths = portalPaths(site, true);
+    const html = renderToStaticMarkup(createElement(StartupLanding, { home: paths.home, login: paths.login, signup: paths.signup, name: site.name, description: site.description, image: site.image, ecosystem: "https://airaskillcity.com", focus: site.focus, faqs: [] }));
     expect(html).toContain("/sites/startup/signup");
-    expect(html).toContain("Human-reviewed admission");
+    expect(html).toContain("SIA guidance");
+    expect(html).toContain("Apply to Startup Skool");
     expect(html).toContain("AIRA Skill City Private Limited");
     expect(html).not.toContain("₹35,000");
     expect(html).not.toContain("Pay now");

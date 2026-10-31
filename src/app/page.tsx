@@ -3,7 +3,7 @@ import Image from "next/image";
 import { ArrowDown, ArrowUpRight, ArrowRight, Grid2X2, GraduationCap, Lightbulb, Cpu, Sparkles } from "lucide-react";
 
 const companies = [
-  { number: "01", name: "AIRA Skill City", legal: "AIRA SKILL CITY PRIVATE LIMITED", description: "Skills. Startups. Careers.", icon: GraduationCap, brands: [["Aira Skill City", "https://airaskillcity.com"], ["Startup School", "https://airastartupskool.com"], ["AIRA Labs", "https://airalabs.online"], ["Nice Jobs", "https://nicejobs.online"]] },
+  { number: "01", name: "AIRA Skill City", legal: "AIRA SKILL CITY PRIVATE LIMITED", description: "Skills. Startups. Careers.", icon: GraduationCap, brands: [["Aira Skill City", "https://airaskillcity.com"], ["Startup Skool", "https://airastartupskool.com"], ["AIRA Labs", "https://airalabs.online"], ["Nice Jobs", "https://nicejobs.online"]] },
   { number: "02", name: "PEARN", legal: "PEARN PRIVATE LIMITED", description: "Teaching and learning, connected.", icon: Lightbulb, brands: [["TeachX Guru", "https://teachx.guru"], ["LearnX Guru", "https://learnx.guru"]] },
   { number: "03", name: "Top Rank AI", legal: "TOP RANK AI PRIVATE LIMITED", description: "A platform for intelligent possibilities.", icon: Cpu, brands: [] }
 ];

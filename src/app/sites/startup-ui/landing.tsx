@@ -192,7 +192,7 @@ export function StartupLanding({
           ))}
         </nav>
         <div className="ax-nav-end">
-          <Link className="ax-pill" href={signup}>Apply to Startup School</Link>
+          <Link className="ax-pill" href={signup}>Apply to Startup Skool</Link>
           <button className="ax-menu" type="button" aria-label="Menu" aria-expanded={menu} onClick={() => setMenu(value => !value)}>
             <span /><span /><span />
           </button>
@@ -203,7 +203,7 @@ export function StartupLanding({
           {nav.map(([label, id]) => (
             <a key={id} href={`#${id}`} onClick={() => setMenu(false)}>{label}</a>
           ))}
-          <Link href={signup} onClick={() => setMenu(false)}>Apply to Startup School</Link>
+          <Link href={signup} onClick={() => setMenu(false)}>Apply to Startup Skool</Link>
         </div>
       )}
 
@@ -224,7 +224,7 @@ export function StartupLanding({
               <path id="ax-orbit" d="M80 80m-58 0a58 58 0 1 1 116 0a58 58 0 1 1-116 0" />
             </defs>
             <text>
-              <textPath href="#ax-orbit">AIRA STARTUP SCHOOL · AIRA STARTUP SCHOOL · </textPath>
+              <textPath href="#ax-orbit">AIRA STARTUP SKOOL · AIRA STARTUP SKOOL · </textPath>
             </text>
           </svg>
           <p>Learn the mindset and turn an idea into focused work.</p>
@@ -305,7 +305,7 @@ export function StartupLanding({
           <h2>Your idea deserves to enter the world.</h2>
           <p>Learn how to validate your idea, present your product, connect with customers and take your first steps into the market. The school does not promise a company, funding, or revenue.</p>
           <p className="ax-now">Your journey starts now.</p>
-          <Link className="ax-pill" href={signup}>Apply to Startup School</Link>
+          <Link className="ax-pill" href={signup}>Apply to Startup Skool</Link>
         </div>
         <div className="ax-launch-art" aria-hidden="true">
           <article>
@@ -363,9 +363,9 @@ export function StartupLanding({
       <section className="ax-close">
         <p className="ax-kicker">Begin</p>
         <h2>Your next big idea starts here.</h2>
-        <p>Explore AIRA Startup School and take your first step towards building something meaningful.</p>
+        <p>Explore AIRA Startup Skool and take your first step towards building something meaningful.</p>
         <div className="ax-actions">
-          <Link className="ax-pill" href={signup}>Apply to Startup School</Link>
+          <Link className="ax-pill" href={signup}>Apply to Startup Skool</Link>
           <a className="ax-pill ax-pill-ghost" href="#programs">Explore programs</a>
         </div>
       </section>
@@ -376,7 +376,7 @@ export function StartupLanding({
           <p>Learn, experiment and turn an idea into focused founder work.</p>
           <span>AIRA Skill City Private Limited</span>
         </div>
-        <nav aria-label="AIRA Startup School footer">
+        <nav aria-label="AIRA Startup Skool footer">
           <a href="#about">About</a>
           <a href="#programs">Programs</a>
           <a href="#about">Contact</a>

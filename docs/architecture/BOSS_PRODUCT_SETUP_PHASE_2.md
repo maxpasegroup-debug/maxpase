@@ -5,7 +5,7 @@ Phase 2 extends the explicit `initializeGroupStructure` operator transaction. It
 | Product | Legal owner | Division | Brand link | Record state | Terms and authority |
 | --- | --- | --- | --- | --- | --- |
 | BGOS | AIRA SKILL CITY PRIVATE LIMITED | AIRA Labs | AIRA Labs | Reviewed draft; `CONCEPT` / `INACTIVE` | Commercial terms, product owner, independent approval authority and publication approval pending. |
-| PBA | AIRA SKILL CITY PRIVATE LIMITED | AIRA Startup School | Startup School | Reviewed draft; `CONCEPT` / `INACTIVE` | Commercial terms, product owner, independent approval authority and publication approval pending. |
+| PBA | AIRA SKILL CITY PRIVATE LIMITED | AIRA Startup Skool | Startup Skool | Reviewed draft; `CONCEPT` / `INACTIVE` | Commercial terms, product owner, independent approval authority and publication approval pending. |
 | GenZ Builder | AIRA SKILL CITY PRIVATE LIMITED | AIRA Skill Studio | No separate verified brand link | Reviewed draft; `CONCEPT` / `INACTIVE` | Commercial terms, product owner, independent approval authority and publication approval pending. |
 
 These records express reviewed **ownership and draft identity**, not reviewed selling terms. The generic business editor cannot change these controlled slugs to `ACTIVE` or `LIVE`, or silently change their names, division or brand. A future publication workflow must validate approved terms, legal issuer, product owner, independent approver and audit evidence before enabling sales. No prices, benefits, targets, tax rules or external messages are configured here.
