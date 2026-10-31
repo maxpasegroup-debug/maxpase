@@ -261,6 +261,37 @@
   letter-spacing: 0.22em;
 }
 
+.aira-card-icon {
+  position: absolute;
+  top: 45%;
+  left: 50%;
+  z-index: 1;
+  display: grid;
+  width: clamp(84px, 8vw, 112px);
+  height: clamp(84px, 8vw, 112px);
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--accent) 38%, transparent);
+  border-radius: 30px;
+  background: color-mix(in srgb, var(--accent) 8%, rgba(5, 8, 14, 0.42));
+  color: var(--accent);
+  box-shadow: 0 0 48px color-mix(in srgb, var(--accent) 22%, transparent), inset 0 0 28px color-mix(in srgb, var(--accent) 8%, transparent);
+  backdrop-filter: blur(8px);
+  transform: translate(-50%, -50%);
+  transition: transform 0.35s ease, box-shadow 0.35s ease;
+}
+
+.aira-card-icon svg {
+  width: 54px;
+  height: 54px;
+  stroke-width: 1.4;
+}
+
+.aira-card:hover .aira-card-icon,
+.aira-card:focus-visible .aira-card-icon {
+  transform: translate(-50%, calc(-50% - 6px)) rotate(-5deg);
+  box-shadow: 0 0 36px color-mix(in srgb, var(--accent) 34%, transparent);
+}
+
 .aira-card-visual {
   position: absolute;
   inset: 0;

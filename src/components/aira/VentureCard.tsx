@@ -1,8 +1,14 @@
 "use client";
 
-import { ArrowUpRight } from "lucide-react";
+import { ArrowUpRight, BriefcaseBusiness, Cpu, Rocket } from "lucide-react";
 import type { CSSProperties, MouseEvent } from "react";
 import type { Venture } from "./ventures";
+
+const ventureIcons = {
+  startup: Rocket,
+  labs: Cpu,
+  jobs: BriefcaseBusiness
+} satisfies Record<Venture["id"], typeof Rocket>;
 
 export function VentureCard({ venture, index }: { venture: Venture; index: number }) {
   function tilt(event: MouseEvent<HTMLAnchorElement>) {
@@ -19,6 +25,7 @@ export function VentureCard({ venture, index }: { venture: Venture; index: numbe
   }
 
   const external = venture.href.startsWith("http");
+  const Icon = ventureIcons[venture.id];
   return (
     <a
       className={`aira-card aira-card-${venture.id}`}
@@ -32,6 +39,7 @@ export function VentureCard({ venture, index }: { venture: Venture; index: numbe
     >
       <span className="aira-card-index">0{index + 1}</span>
       <span className={`aira-card-visual aira-card-visual-${venture.id}`} aria-hidden="true" />
+      <span className="aira-card-icon" aria-hidden="true"><Icon /></span>
       <span className="aira-card-copy">
         <strong>{venture.label}</strong>
         <em>{venture.description}</em>
