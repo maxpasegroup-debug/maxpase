@@ -32,10 +32,10 @@ function planetTexture() {
   const context = canvas.getContext("2d");
   if (!context) return new CanvasTexture(canvas);
   const base = context.createLinearGradient(0, 0, 0, 512);
-  base.addColorStop(0, "#07111f");
-  base.addColorStop(0.42, "#123056");
-  base.addColorStop(0.72, "#0c3a52");
-  base.addColorStop(1, "#081018");
+  base.addColorStop(0, "#171014");
+  base.addColorStop(0.42, "#570713");
+  base.addColorStop(0.72, "#39040D");
+  base.addColorStop(1, "#171014");
   context.fillStyle = base;
   context.fillRect(0, 0, 1024, 512);
 
@@ -79,7 +79,7 @@ export function Planet({ mobile }: { mobile: boolean }) {
   const planet = useRef<Mesh>(null);
   const map = useMemo(() => planetTexture(), []);
   const atmosphere = useMemo(() => new ShaderMaterial({
-    uniforms: { glow: { value: new Color("#d5ecff") } },
+    uniforms: { glow: { value: new Color("#E8D5A5") } },
     vertexShader: atmosphereVertex,
     fragmentShader: atmosphereFragment,
     transparent: true,
@@ -96,7 +96,7 @@ export function Planet({ mobile }: { mobile: boolean }) {
     <group position={[0, -18.2, -8]}>
       <mesh ref={planet} receiveShadow>
         <sphereGeometry args={[20, mobile ? 48 : 80, mobile ? 32 : 56]} />
-        <meshStandardMaterial map={map} color="#8eb6dc" roughness={0.72} metalness={0.18} />
+        <meshStandardMaterial map={map} color="#E8D5A5" roughness={0.72} metalness={0.18} />
       </mesh>
       <mesh scale={1.018}>
         <sphereGeometry args={[20, mobile ? 32 : 48, mobile ? 24 : 36]} />

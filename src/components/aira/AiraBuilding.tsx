@@ -14,7 +14,7 @@ function Metal({ position, args }: { position: Vec; args: Vec }) {
   return (
     <mesh position={position} castShadow receiveShadow>
       <boxGeometry args={args} />
-      <meshStandardMaterial color="#171c27" metalness={0.9} roughness={0.28} />
+      <meshStandardMaterial color="#171014" metalness={0.9} roughness={0.28} />
     </mesh>
   );
 }
@@ -23,16 +23,16 @@ function Glass({ position, args }: { position: Vec; args: Vec }) {
   return (
     <mesh position={position}>
       <boxGeometry args={args} />
-      <meshPhysicalMaterial color="#d7e9f8" metalness={0.04} roughness={0.06} transmission={0.62} thickness={0.45} transparent opacity={0.9} />
+      <meshPhysicalMaterial color="#E8D5A5" metalness={0.04} roughness={0.06} transmission={0.62} thickness={0.45} transparent opacity={0.9} />
     </mesh>
   );
 }
 
-function Glow({ position, args, color = "#67d7ff" }: { position: Vec; args: Vec; color?: string }) {
+function Glow({ position, args, color = "#D4AF62" }: { position: Vec; args: Vec; color?: string }) {
   return (
     <mesh position={position}>
       <boxGeometry args={args} />
-      <meshStandardMaterial color="#071018" emissive={color} emissiveIntensity={1.7} />
+      <meshStandardMaterial color="#171014" emissive={color} emissiveIntensity={1.7} />
     </mesh>
   );
 }
@@ -51,7 +51,7 @@ function WindowGrid({ origin, size, floors, columns, axis }: { origin: Vec; size
       panes.push(
         <mesh key={`${floor}-${column}`} position={position}>
           <boxGeometry args={axis === "z" ? [width / columns * 0.62, height / floors * 0.48, 0.05] : [0.05, height / floors * 0.48, width / columns * 0.62]} />
-          <meshStandardMaterial color="#102033" emissive="#8fd4ff" emissiveIntensity={0.45} metalness={0.35} roughness={0.18} />
+          <meshStandardMaterial color="#39040D" emissive="#D4AF62" emissiveIntensity={0.45} metalness={0.35} roughness={0.18} />
         </mesh>
       );
     }
@@ -115,11 +115,11 @@ export function AiraBuilding({ progress }: { progress: MutableRefObject<{ t: num
       <Metal position={[0, 16.1, -1.2]} args={[1.5, 4.1, 1.5]} />
       <mesh position={[0, 18.35, -1.2]} rotation={[Math.PI / 2, 0, 0]}>
         <torusGeometry args={[1.55, 0.055, 16, 64]} />
-        <meshStandardMaterial ref={crown} color="#071018" emissive="#7ad7ff" emissiveIntensity={1.4} />
+        <meshStandardMaterial ref={crown} color="#171014" emissive="#D4AF62" emissiveIntensity={1.4} />
       </mesh>
       <mesh position={[0, 18.35, -1.2]}>
         <sphereGeometry args={[0.18, 16, 16]} />
-        <meshStandardMaterial color="#e8f6ff" emissive="#d8f3ff" emissiveIntensity={2} />
+        <meshStandardMaterial color="#E8D5A5" emissive="#E8D5A5" emissiveIntensity={2} />
       </mesh>
 
       {[-5.3, 5.3].map(x => (

@@ -14,14 +14,14 @@ function SpaceEnvironment() {
   useLayoutEffect(() => {
     const generator = new PMREMGenerator(gl);
     const source = new Scene();
-    source.background = new Color("#030712");
-    const key = new DirectionalLight("#f4f7ff", 4);
+    source.background = new Color("#171014");
+    const key = new DirectionalLight("#F4E5C3", 4);
     key.position.set(10, 8, 6);
     source.add(key);
-    const rim = new DirectionalLight("#2f6dff", 2.4);
+    const rim = new DirectionalLight("#D4AF62", 2.4);
     rim.position.set(-8, 2, -4);
     source.add(rim);
-    const fill = new DirectionalLight("#89c8ff", 1.4);
+    const fill = new DirectionalLight("#E8D5A5", 1.4);
     fill.position.set(0, -2, 8);
     source.add(fill);
     const target = generator.fromScene(source, 0.04);
@@ -52,15 +52,15 @@ function JourneyRig({ progress }: { progress: MutableRefObject<{ t: number }> })
 function SceneContents({ progress, mobile, shadows }: { progress: MutableRefObject<{ t: number }>; mobile: boolean; shadows: boolean }) {
   return (
     <>
-      <color attach="background" args={["#02040c"]} />
-      <fog attach="fog" args={["#02040c", 120, 420]} />
+      <color attach="background" args={["#171014"]} />
+      <fog attach="fog" args={["#171014", 120, 420]} />
       <SpaceEnvironment />
       <JourneyRig progress={progress} />
-      <ambientLight intensity={0.12} color="#1c3358" />
+      <ambientLight intensity={0.12} color="#39040D" />
       <directionalLight
         position={[16, 18, 22]}
         intensity={2.8}
-        color="#f7fbff"
+        color="#F4E5C3"
         castShadow={shadows}
         shadow-mapSize={[512, 512]}
         shadow-camera-near={2}
@@ -70,8 +70,8 @@ function SceneContents({ progress, mobile, shadows }: { progress: MutableRefObje
         shadow-camera-top={18}
         shadow-camera-bottom={-18}
       />
-      <directionalLight position={[-10, 4, -6]} intensity={0.7} color="#2d5ea8" />
-      <pointLight position={[0, 6, 12]} intensity={8} distance={28} color="#8fd4ff" />
+      <directionalLight position={[-10, 4, -6]} intensity={0.7} color="#B89552" />
+      <pointLight position={[0, 6, 12]} intensity={8} distance={28} color="#D4AF62" />
       <StarField mobile={mobile} />
       <Planet mobile={mobile} />
       <AiraBuilding progress={progress} />

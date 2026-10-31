@@ -14,7 +14,7 @@ const ventureCopy: Array<Omit<Venture, "href">> = [
     label: "AIRA STARTUP SCHOOL",
     description: "Learn. Build. Launch.",
     cta: "EXPLORE STARTUP SCHOOL",
-    accent: "#e7b15a",
+    accent: "#B89552",
     tone: "A founder studio for practical learning and first ventures."
   },
   {
@@ -22,7 +22,7 @@ const ventureCopy: Array<Omit<Venture, "href">> = [
     label: "AIRA LABS",
     description: "Imagine. Experiment. Innovate.",
     cta: "EXPLORE AIRA LABS",
-    accent: "#49d6ff",
+    accent: "#D4AF62",
     tone: "A technology workshop for experiments, systems and new tools."
   },
   {
@@ -30,7 +30,7 @@ const ventureCopy: Array<Omit<Venture, "href">> = [
     label: "NICE JOBS",
     description: "Discover opportunities. Build your future.",
     cta: "EXPLORE NICE JOBS",
-    accent: "#8aa6ff",
+    accent: "#E8D5A5",
     tone: "A career hub where published opportunities stay clear before you commit."
   }
 ];

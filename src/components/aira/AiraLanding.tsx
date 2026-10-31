@@ -13,9 +13,9 @@ import "lenis/dist/lenis.css";
 import "./aira.css";
 
 const purposePillars = [
-  { title: "Skills and learning", copy: "Build practical capability through learning that connects to real work.", accent: "#e7b15a" },
-  { title: "Enterprise and innovation", copy: "A home for ideas, products and the work that makes them useful.", accent: "#49d6ff" },
-  { title: "Careers and opportunity", copy: "A route into approved opportunity, with the terms clear before you commit.", accent: "#8aa6ff" }
+  { title: "Skills and learning", copy: "Build practical capability through learning that connects to real work.", accent: "#D4AF62" },
+  { title: "Enterprise and innovation", copy: "A home for ideas, products and the work that makes them useful.", accent: "#B89552" },
+  { title: "Careers and opportunity", copy: "A route into approved opportunity, with the terms clear before you commit.", accent: "#E8D5A5" }
 ] as const;
 
 const SpaceScene = dynamic(() => import("./SpaceScene").then(module => module.SpaceScene), {

@@ -32,12 +32,12 @@ const discoverSteps = [
 ] as const;
 
 const themes = [
-  ["Entrepreneurship fundamentals", "How a founder looks at a problem before naming a product.", "#ff6b4a"],
-  ["Business strategy", "Choices about who the work is for, and what it is not.", "#7c5cff"],
-  ["Design thinking", "Sketch a response before anything is built.", "#14c8b8"],
-  ["Market research", "Listen before assuming there is a customer.", "#f2c14e"],
-  ["Financial fundamentals", "Read the shape of a simple model. This is not a funding offer.", "#ff8fab"],
-  ["Digital product development", "Turn a sketch into something people can try.", "#69a7ff"]
+  ["Entrepreneurship fundamentals", "How a founder looks at a problem before naming a product.", "#D4AF62"],
+  ["Business strategy", "Choices about who the work is for, and what it is not.", "#B89552"],
+  ["Design thinking", "Sketch a response before anything is built.", "#E8D5A5"],
+  ["Market research", "Listen before assuming there is a customer.", "#D4AF62"],
+  ["Financial fundamentals", "Read the shape of a simple model. This is not a funding offer.", "#B89552"],
+  ["Digital product development", "Turn a sketch into something people can try.", "#E8D5A5"]
 ] as const;
 
 const stages = [

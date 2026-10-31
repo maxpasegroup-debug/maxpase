@@ -80,48 +80,48 @@ export function BuildingInterior({ progress }: { progress: MutableRefObject<{ t:
     <group>
       <mesh position={[0, 0.06, -4]} receiveShadow>
         <boxGeometry args={[10.4, 0.08, 20]} />
-        <meshStandardMaterial color="#0c121b" metalness={0.86} roughness={0.18} />
+        <meshStandardMaterial color="#39040D" metalness={0.86} roughness={0.18} />
       </mesh>
       <mesh position={[0, 6.15, -4]}>
         <boxGeometry args={[9.6, 0.12, 18]} />
-        <meshStandardMaterial color="#161b24" metalness={0.7} roughness={0.4} />
+        <meshStandardMaterial color="#171014" metalness={0.7} roughness={0.4} />
       </mesh>
       {[-4.55, 4.55].map(x => (
         <mesh key={x} position={[x, 3.1, -4]} castShadow>
           <boxGeometry args={[0.16, 6, 16]} />
-          <meshStandardMaterial color="#121722" metalness={0.78} roughness={0.34} />
+          <meshStandardMaterial color="#39040D" metalness={0.78} roughness={0.34} />
         </mesh>
       ))}
       {[-8, -3, 2].map(z => (
         <mesh key={z} position={[0, 5.95, z]}>
           <boxGeometry args={[7.2, 0.04, 0.08]} />
-          <meshStandardMaterial ref={z === -3 ? strips : undefined} color="#071018" emissive="#7ad7ff" emissiveIntensity={0.4} />
+          <meshStandardMaterial ref={z === -3 ? strips : undefined} color="#171014" emissive="#D4AF62" emissiveIntensity={0.4} />
         </mesh>
       ))}
-      <pointLight position={[0, 4.4, 2.4]} color="#d5e8ff" intensity={8} distance={18} decay={2} />
-      <pointLight position={[0, 4.4, -3.1]} color="#b7e7ff" intensity={7} distance={16} decay={2} />
+      <pointLight position={[0, 4.4, 2.4]} color="#E8D5A5" intensity={8} distance={18} decay={2} />
+      <pointLight position={[0, 4.4, -3.1]} color="#E8D5A5" intensity={7} distance={16} decay={2} />
       {[-7, -2, 3].map((z, index) => (
         <pointLight
           key={z}
           ref={node => { lamps.current[index] = node; }}
           position={[0, 5.2, z]}
-          color="#d7ecff"
+          color="#E8D5A5"
           intensity={0.2}
           distance={14}
           decay={2}
         />
       ))}
-      {[[-0.6, "#e7b15a"], [-4.8, "#49d6ff"]].map(([z, color], index) => (
+      {[[-0.6, "#D4AF62"], [-4.8, "#D4AF62"]].map(([z, color], index) => (
         <group key={String(z)} ref={node => { signs.current[index] = node; }} position={[0, 2.15, Number(z)]}>
           {[-0.775, 0.775].map(x => (
             <group key={x} position={[x, 0, 0]}>
               <mesh>
                 <boxGeometry args={[1.55, 1.35, 0.07]} />
-                <meshStandardMaterial color="#070b12" emissive="#101820" emissiveIntensity={0.4} metalness={0.15} roughness={0.8} />
+                <meshStandardMaterial color="#171014" emissive="#39040D" emissiveIntensity={0.4} metalness={0.15} roughness={0.8} />
               </mesh>
               <mesh position={[0, 0.58, 0.045]}>
                 <boxGeometry args={[1.55, 0.03, 0.02]} />
-                <meshStandardMaterial color="#071018" emissive={String(color)} emissiveIntensity={1.8} />
+                <meshStandardMaterial color="#171014" emissive={String(color)} emissiveIntensity={1.8} />
               </mesh>
             </group>
           ))}
@@ -131,27 +131,27 @@ export function BuildingInterior({ progress }: { progress: MutableRefObject<{ t:
         <group key={z} position={[0, 2.4, z]}>
           <mesh position={[-1.85, 0, 0]}>
             <boxGeometry args={[0.16, 4.4, 0.28]} />
-            <meshStandardMaterial color="#141a24" metalness={0.84} roughness={0.3} />
+            <meshStandardMaterial color="#39040D" metalness={0.84} roughness={0.3} />
           </mesh>
           <mesh position={[1.85, 0, 0]}>
             <boxGeometry args={[0.16, 4.4, 0.28]} />
-            <meshStandardMaterial color="#141a24" metalness={0.84} roughness={0.3} />
+            <meshStandardMaterial color="#39040D" metalness={0.84} roughness={0.3} />
           </mesh>
           <mesh position={[0, 2.15, 0]}>
             <boxGeometry args={[3.86, 0.16, 0.28]} />
-            <meshStandardMaterial color="#141a24" emissive={z > 0 ? "#e7b15a" : "#49d6ff"} emissiveIntensity={0.8} metalness={0.7} roughness={0.3} />
+            <meshStandardMaterial color="#39040D" emissive={z > 0 ? "#D4AF62" : "#D4AF62"} emissiveIntensity={0.8} metalness={0.7} roughness={0.3} />
           </mesh>
         </group>
       ))}
       <mesh position={[0, 2.6, -13.4]}>
         <boxGeometry args={[9.2, 5.2, 0.16]} />
-        <meshStandardMaterial color="#10151e" metalness={0.7} roughness={0.4} />
+        <meshStandardMaterial color="#171014" metalness={0.7} roughness={0.4} />
       </mesh>
       {[-3.15, 0, 3.15].map((x, index) => (
         <group key={x} ref={node => { frames.current[index] = node; }} position={[x, 2.35, -12.55]}>
           <mesh>
             <boxGeometry args={[2.35, 3.35, 0.08]} />
-            <meshStandardMaterial color="#0e141d" metalness={0.8} roughness={0.24} />
+            <meshStandardMaterial color="#39040D" metalness={0.8} roughness={0.24} />
           </mesh>
           <mesh position={[0, 0, 0.08]} renderOrder={20}>
             <planeGeometry args={[1.84, 2.76]} />
@@ -170,7 +170,7 @@ export function BuildingInterior({ progress }: { progress: MutableRefObject<{ t:
             <planeGeometry args={[2.05, 3.05]} />
             <meshStandardMaterial
               ref={node => { portals.current[index] = node; }}
-              color="#05070c"
+              color="#171014"
               emissive={accents[index]}
               emissiveIntensity={0}
               transparent
@@ -180,7 +180,7 @@ export function BuildingInterior({ progress }: { progress: MutableRefObject<{ t:
           </mesh>
           <mesh position={[0, 1.78, 0.08]}>
             <boxGeometry args={[2.2, 0.045, 0.05]} />
-            <meshStandardMaterial color="#071018" emissive={accents[index]} emissiveIntensity={1.4} />
+            <meshStandardMaterial color="#171014" emissive={accents[index]} emissiveIntensity={1.4} />
           </mesh>
         </group>
       ))}

@@ -6,8 +6,8 @@ import type { Group, MeshStandardMaterial } from "three";
 import type { MutableRefObject } from "react";
 import { poseAt } from "./journey";
 
-const metal = { color: "#12161e", metalness: 0.9, roughness: 0.28 };
-const glass = { color: "#b7d4ee", metalness: 0.2, roughness: 0.04, transparent: true, opacity: 0.38 };
+const metal = { color: "#39040D", metalness: 0.9, roughness: 0.28 };
+const glass = { color: "#E8D5A5", metalness: 0.2, roughness: 0.04, transparent: true, opacity: 0.38 };
 
 export function BuildingEntrance({ progress }: { progress: MutableRefObject<{ t: number }> }) {
   const left = useRef<Group>(null);
@@ -30,15 +30,15 @@ export function BuildingEntrance({ progress }: { progress: MutableRefObject<{ t:
       </mesh>
       <mesh position={[-1.55, 2.15, 5.08]} castShadow>
         <boxGeometry args={[0.18, 4.5, 0.42]} />
-        <meshStandardMaterial {...metal} emissive="#143044" emissiveIntensity={0.4} />
+        <meshStandardMaterial {...metal} emissive="#39040D" emissiveIntensity={0.4} />
       </mesh>
       <mesh position={[1.55, 2.15, 5.08]} castShadow>
         <boxGeometry args={[0.18, 4.5, 0.42]} />
-        <meshStandardMaterial {...metal} emissive="#143044" emissiveIntensity={0.4} />
+        <meshStandardMaterial {...metal} emissive="#39040D" emissiveIntensity={0.4} />
       </mesh>
       <mesh position={[0, 4.28, 5.16]}>
         <boxGeometry args={[2.7, 0.06, 0.08]} />
-        <meshStandardMaterial ref={frame} color="#071018" emissive="#49d2ff" emissiveIntensity={0.8} />
+        <meshStandardMaterial ref={frame} color="#171014" emissive="#D4AF62" emissiveIntensity={0.8} />
       </mesh>
       <mesh position={[-3.15, 2.55, 5.02]} castShadow>
         <boxGeometry args={[2.15, 4.7, 0.12]} />
@@ -55,21 +55,21 @@ export function BuildingEntrance({ progress }: { progress: MutableRefObject<{ t:
       <group ref={left} position={[-1.42, 2.05, 5.12]}>
         <mesh position={[0.62, 0, 0]} castShadow>
           <boxGeometry args={[1.22, 3.7, 0.08]} />
-          <meshStandardMaterial color="#1a2230" metalness={0.84} roughness={0.22} emissive="#0b1c2c" emissiveIntensity={0.3} />
+          <meshStandardMaterial color="#39040D" metalness={0.84} roughness={0.22} emissive="#171014" emissiveIntensity={0.3} />
         </mesh>
         <mesh position={[0.08, 0, 0.05]}>
           <boxGeometry args={[0.03, 3.4, 0.02]} />
-          <meshStandardMaterial color="#071018" emissive="#67e1ff" emissiveIntensity={1.6} />
+          <meshStandardMaterial color="#171014" emissive="#D4AF62" emissiveIntensity={1.6} />
         </mesh>
       </group>
       <group ref={right} position={[1.42, 2.05, 5.12]}>
         <mesh position={[-0.62, 0, 0]} castShadow>
           <boxGeometry args={[1.22, 3.7, 0.08]} />
-          <meshStandardMaterial color="#1a2230" metalness={0.84} roughness={0.22} emissive="#0b1c2c" emissiveIntensity={0.3} />
+          <meshStandardMaterial color="#39040D" metalness={0.84} roughness={0.22} emissive="#171014" emissiveIntensity={0.3} />
         </mesh>
         <mesh position={[-0.08, 0, 0.05]}>
           <boxGeometry args={[0.03, 3.4, 0.02]} />
-          <meshStandardMaterial color="#071018" emissive="#67e1ff" emissiveIntensity={1.6} />
+          <meshStandardMaterial color="#171014" emissive="#D4AF62" emissiveIntensity={1.6} />
         </mesh>
       </group>
     </group>

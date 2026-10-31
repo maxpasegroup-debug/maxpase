@@ -46,7 +46,7 @@ function StarLayer({ count, size, radius, spread }: { count: number; size: numbe
       <bufferGeometry>
         <bufferAttribute attach="attributes-position" args={[positions, 3]} />
       </bufferGeometry>
-      <pointsMaterial color="#d5e6ff" size={size} sizeAttenuation transparent opacity={0.85} depthWrite={false} />
+      <pointsMaterial color="#E8D5A5" size={size} sizeAttenuation transparent opacity={0.85} depthWrite={false} />
     </points>
   );
 }
@@ -74,7 +74,7 @@ export function StarField({ mobile }: { mobile: boolean }) {
         <planeGeometry args={[22, 12]} />
         <meshBasicMaterial map={clouds[2]} transparent depthWrite={false} blending={AdditiveBlending} opacity={0.28} />
       </mesh>
-      <Sparkles count={mobile ? 30 : 90} scale={[36, 14, 48]} size={mobile ? 1.4 : 2} speed={0.22} color="#b7dcff" opacity={0.55} position={[0, 4, 8]} />
+      <Sparkles count={mobile ? 30 : 90} scale={[36, 14, 48]} size={mobile ? 1.4 : 2} speed={0.22} color="#E8D5A5" opacity={0.55} position={[0, 4, 8]} />
     </group>
   );
 }
