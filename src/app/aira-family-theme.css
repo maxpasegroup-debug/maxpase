@@ -1,0 +1,84 @@
+/* Shared AIRA Family colors for authenticated workspaces. Layout and behavior live in globals.css. */
+.workspace-shell {
+  --accent: var(--aira-burgundy);
+  --accent-dark: var(--aira-deep-burgundy);
+  --ink: var(--aira-deep-burgundy);
+  --muted: #695b60;
+  --line: var(--aira-border);
+  --surface-muted: var(--aira-soft-ivory);
+  background: var(--aira-soft-ivory);
+}
+.workspace-shell :focus-visible { outline-color: var(--aira-ruby); }
+.workspace-brand, .workspace-shell .boss-navigation a[aria-current] { color: var(--aira-burgundy); }
+.workspace-primary a[aria-current], .workspace-secondary a[aria-current] { background: var(--aira-light-gold); color: var(--aira-deep-burgundy); }
+.workspace-primary a:hover, .workspace-secondary a:hover { background: var(--aira-soft-ivory); }
+
+.boss-shell { --ink: var(--aira-deep-burgundy); --muted: #695b60; --line: var(--aira-border); --accent: var(--aira-burgundy); background: var(--aira-soft-ivory); }
+.boss-shell .workspace-sidebar, .boss-shell .workspace-drawer { background: var(--aira-deep-burgundy); color: var(--aira-ivory); background-image: none; }
+.boss-shell .workspace-brand, .boss-shell .workspace-brand span, .boss-shell .workspace-drawer .drawer-heading { color: var(--aira-ivory); }
+.boss-shell .workspace-brand svg, .boss-shell .workspace-brand small { color: var(--aira-gold); }
+.boss-shell .workspace-primary a { color: var(--aira-ivory); }
+.boss-shell .workspace-primary a:hover { color: var(--aira-white); background: #8b102580; }
+.boss-shell .workspace-primary a[aria-current] { color: var(--aira-white); background: linear-gradient(115deg, var(--aira-ruby), var(--aira-burgundy)); box-shadow: inset -3px 0 var(--aira-gold); }
+.boss-sidebar-nexa { border-color: #d4af6260; background: #570713b8; }
+.boss-sidebar-nexa small, .boss-shell .workspace-drawer .drawer-account span { color: var(--aira-light-gold); }
+.boss-sidebar-orb, .boss-dashboard-nexa-orb { background: radial-gradient(circle at 35% 28%, var(--aira-light-gold), var(--aira-ruby) 52%, var(--aira-deep-burgundy) 85%); box-shadow: 0 0 0 4px #d4af6229; }
+.boss-shell .workspace-header { background: var(--aira-white); }
+.boss-header-search { border-color: var(--aira-border); color: var(--aira-burgundy); background: var(--aira-soft-ivory); }
+.boss-header-search button { background: var(--aira-light-gold); color: var(--aira-deep-burgundy); }
+.boss-header-search:focus-within { outline-color: var(--aira-ruby); }
+.boss-shell .boss-navigation a[aria-current] { color: var(--aira-burgundy); box-shadow: inset 0 -3px var(--aira-gold); }
+.boss-department-steps li a[aria-current], .boss-hr-navigation a[aria-current] { background: var(--aira-soft-ivory); color: var(--aira-burgundy); }
+.boss-dashboard-hero { background: linear-gradient(105deg, var(--aira-deep-burgundy), var(--aira-burgundy) 60%, var(--aira-ruby)); }
+.boss-dashboard-hero::before { background-image: linear-gradient(#d4af6212 1px, transparent 1px), linear-gradient(90deg, #d4af6212 1px, transparent 1px); }
+.boss-dashboard-hero p:first-child, .boss-dashboard-hero h2 span, .boss-dashboard-hero-note small { color: var(--aira-gold); }
+.boss-dashboard-hero p:last-child, .boss-dashboard-hero-note { color: var(--aira-ivory); }
+.boss-dashboard-hero-note { border-color: #d4af6299; }
+.boss-dashboard-metric, .boss-dashboard-panel { border-color: var(--aira-border); color: var(--aira-deep-burgundy); box-shadow: 0 5px 24px #39040d08; }
+.boss-dashboard-metric:hover, .boss-dashboard-company:hover, .boss-dashboard-attention:hover { border-color: var(--aira-gold); background: var(--aira-soft-ivory); }
+.boss-dashboard-metric-icon, .boss-dashboard-company-mark, .boss-dashboard-attention-icon { background: var(--aira-soft-ivory); color: var(--aira-burgundy); }
+.boss-dashboard-panel h2, .boss-dashboard-nexa h2, .boss-dashboard-company, .boss-dashboard-attention { color: var(--aira-deep-burgundy); }
+.boss-dashboard-panel header a, .boss-dashboard-nexa-top a, .boss-dashboard-metric > svg:last-child, .boss-dashboard-company > svg:last-child, .boss-dashboard-attention > svg:last-child { color: var(--aira-burgundy); }
+.boss-dashboard-company, .boss-dashboard-attention { border-color: var(--aira-border); }
+.boss-dashboard-empty, .boss-dashboard-execution-list a:nth-child(odd) { background: var(--aira-soft-ivory); }
+.boss-dashboard-execution-list strong, .boss-dashboard-execution-list a { color: var(--aira-burgundy); }
+.boss-dashboard-nexa { background: linear-gradient(120deg, var(--aira-deep-burgundy), var(--aira-burgundy)); color: var(--aira-ivory); }
+.boss-dashboard-nexa h2, .boss-dashboard-nexa-body a { color: var(--aira-ivory); }
+.boss-dashboard-nexa-top a { color: var(--aira-gold); }
+.boss-dashboard-nexa-body p, .boss-dashboard-nexa > small { color: var(--aira-light-gold); }
+.boss-dashboard-nexa-body a { background: var(--aira-ruby); }
+.boss-dashboard-metric-copy small, .boss-dashboard-company-name small, .boss-dashboard-attention small, .boss-dashboard-company-stat small, .boss-dashboard-footnote { color: #695b60; }
+
+.sc-workspace { background: var(--aira-soft-ivory); color: var(--aira-deep-burgundy); }
+.sc-skip, .sc-heading p, .sc-workspace summary, .sc-list article header span, .sc-project header span { color: var(--aira-burgundy); }
+.sc-nav a { color: var(--aira-deep-burgundy); }
+.sc-nav a[aria-current="page"] { background: var(--aira-light-gold); color: var(--aira-deep-burgundy); }
+.sc-pipelines > .sc-section, .sc-pipelines > article { border-top-color: var(--aira-burgundy); }
+.sc-pipelines > :nth-child(2) { border-color: var(--aira-ruby); }
+.sc-pipelines > :nth-child(3) { border-color: var(--aira-gold); }
+.sc-work-form button { background: var(--aira-burgundy); }
+.sc-workspace :is(a,button,input,select,textarea,summary):focus-visible { outline-color: var(--aira-ruby); }
+
+.al-workspace { color: var(--aira-deep-burgundy); background: var(--aira-soft-ivory); }
+.al-workspace .al-nav { background: var(--aira-white); border-color: var(--aira-border); }
+.al-workspace .al-nav a { color: var(--aira-deep-burgundy); }
+.al-workspace .al-nav a[aria-current="page"] { background: var(--aira-burgundy); color: var(--aira-white); }
+.al-workspace .al-button { border-color: var(--aira-burgundy); background: var(--aira-burgundy); color: var(--aira-white); }
+.al-workspace .al-context, .al-workspace .al-section h2 small, .al-workspace .al-table-wrap td span:not(.al-status), .al-workspace li span { color: #695b60; }
+.al-workspace .al-table-wrap th { background: var(--aira-soft-ivory); }
+.al-workspace .al-status { background: var(--aira-soft-ivory); border-color: var(--aira-border); }
+.al-workspace :focus-visible { outline-color: var(--aira-ruby); }
+
+.startup-workspace, .startup-founder-page { background: var(--aira-soft-ivory); }
+.startup-workspace .startup-application-steps li[data-state="current"] { background: var(--aira-soft-ivory); }
+
+.nj-dashboard { background: var(--aira-soft-ivory); }
+.nj-dashboard-unified { background: var(--aira-soft-ivory); }
+.nj-dashboard-header > form, .nj-dashboard-sidebar-footer select { background: var(--aira-soft-ivory); border-color: var(--aira-border); }
+.nj-action-0, .nj-action-1, .nj-action-2 { background: var(--aira-soft-ivory); }
+.nj-action-0 { border-color: var(--aira-gold); }
+.nj-action-1 { border-color: var(--aira-ruby); }
+.nj-action-2 { border-color: var(--aira-burgundy); }
+.nj-row-icon { background: var(--aira-soft-ivory); }
+.nj-participant-nav a[aria-current="page"], .nj-boss-groups a[aria-current="page"] { background: var(--aira-soft-ivory); }
+.nj-dashboard :focus-visible { outline-color: var(--aira-ruby); }

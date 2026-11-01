@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Prisma } from "@prisma/client";
 import { notFound } from "next/navigation";
 import { requireSession } from "@/server/auth/guards";
 import { AccessError } from "@/server/authorization/engine";
@@ -19,6 +20,7 @@ import { marketingDivisionSlug } from "@/server/group/brand-marketing-scope";
 import { hrCompanyConfig } from "@/server/group/hr-company-config";
 import { HrCompanySettings } from "./hr-company-settings";
 import { RoleTemplateForm } from "@/app/app/boss/command/role-template-form";
+import { safeDiagnostic } from "@/server/security/diagnostics";
 
 type Query = { companyId?: string; brandId?: string; departmentId?: string; view?: string; search?: string; employmentStatus?: string; page?: string };
 export default async function BossDepartmentPage({ params, searchParams }: { params: Promise<{ department: string }>; searchParams: Promise<Query> }) {
@@ -35,7 +37,14 @@ export default async function BossDepartmentPage({ params, searchParams }: { par
   if (department === "hr") {
     const brandChoices = company ? await prisma.brand.findMany({ where: { id: { in: availableBrands.map(item => item.id) }, organizationId: company.organizationId }, select: { id: true, name: true, organizationId: true, status: true, parentBrand: { select: { name: true } } }, orderBy: { name: "asc" }, take: 100 }) : [];
     const employeePage = /^\d+$/.test(query.page ?? "") ? Math.max(1, Number(query.page)) : 1;
-    const employeeRows = await hrEmploymentService.list(session.userId, { companyId: company?.organizationId, brandId: query.view === "add-employee" ? undefined : brand?.id, departmentId: query.departmentId, status: query.employmentStatus, search: query.search, page: employeePage });
+    let employeeRows: Awaited<ReturnType<typeof hrEmploymentService.list>>;
+    try {
+      employeeRows = await hrEmploymentService.list(session.userId, { companyId: company?.organizationId, brandId: query.view === "add-employee" ? undefined : brand?.id, departmentId: query.departmentId, status: query.employmentStatus, search: query.search, page: employeePage });
+    } catch (error) {
+      if (!(error instanceof Prisma.PrismaClientKnownRequestError) || !["P2021", "P2022"].includes(error.code)) throw error;
+      const correlationId = safeDiagnostic("operation_failed", undefined, { stage: "readiness", reason: "database_schema_missing" });
+      return <section className="business-empty" role="alert"><h1>HR setup is pending</h1><p>The HR records cannot be loaded because the database schema does not match this release. No employee or access change was made. An operator must verify the database backup and apply the reviewed pending migrations.</p><p>Support reference: {correlationId}</p></section>;
+    }
     const employees = employeeRows.slice(0, 50);
     const employeeNextPage = employeeRows.length > 50;
     const departments = company ? await prisma.organization.findMany({ where: { type: "DEPARTMENT", OR: [{ parentId: company.organizationId }, { parent: { parentId: company.organizationId } }] }, select: { id: true, name: true }, orderBy: { name: "asc" }, take: 100 }) : [];

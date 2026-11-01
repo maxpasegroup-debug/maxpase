@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import "./aira-family-theme.css";
 import { ScrollMotion } from "./scroll-motion";
 
 export const metadata: Metadata = {
