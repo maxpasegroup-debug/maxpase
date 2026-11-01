@@ -27,12 +27,12 @@ export function createStaffOnboardingService(client: PrismaClient = prisma) {
     const ctx = await createAccessContext(actorUserId, client, undefined, { organizationId });
     const canPrepare = ["person.create", "user.create", "membership.manage", "membership.assign_role"].every(key => ctx.organizationIds(key).includes(organizationId));
     if (!canPrepare) return { canPrepare: false, roles: [], managers: [], existingPeople: [] };
+    const companyId = scope.slug === "aira-skill-city" ? scope.id : scope.parentId!;
     const [roles, managers] = await Promise.all([
       client.role.findMany({ where: { organizationId, status: "ACTIVE", principalType: "HUMAN", key: { in: Object.keys(staffRoleScopes) } }, select: { id: true, name: true, key: true, permissions: { select: { permission: { select: { key: true } } } } }, orderBy: { name: "asc" }, take: 100 }),
-      client.user.findMany({ where: { status: "ACTIVE", emailVerifiedAt: { not: null }, person: { memberships: { some: { organizationId, status: "ACTIVE" } } } }, select: { id: true, email: true }, orderBy: { email: "asc" }, take: 100 })
+      client.user.findMany({ where: { status: "ACTIVE", emailVerifiedAt: { not: null }, person: { memberships: { some: { status: "ACTIVE", OR: [{ organizationId }, { organizationId: companyId, scope: "DESCENDANTS" }] } } } }, select: { id: true, email: true }, orderBy: { email: "asc" }, take: 100 })
     ]);
     const isBoss = await boss.authority(actorUserId).then(() => true).catch(error => { if (error instanceof AccessError) return false; throw error; });
-    const companyId = scope.slug === "aira-skill-city" ? scope.id : scope.parentId!;
     const existingPeople = isBoss && ctx.organizationIds("person.read").includes(organizationId) ? await client.person.findMany({ where: { status: "ACTIVE", email: { not: null }, users: { none: {} }, employments: { some: { companyId, status: "ACTIVE" } }, memberships: { none: { organizationId } } }, select: { id: true, displayName: true, email: true, metadata: true, memberships: { select: { organizationId: true, organization: { select: { parentId: true } }, roles: { select: { id: true } } } } }, orderBy: { displayName: "asc" }, take: 50 }) : [];
     return { canPrepare, roles: roles.filter(role => isPreparedStaffRole(role.key, scope.slug) && hasStaffWorkspaceCapabilities(role.key, role.permissions.map(item => item.permission.key)) && (!["Director", "Division Director"].includes(role.name) || isBoss)).map(({ id, name }) => ({ id, name })), managers, existingPeople: existingPeople.filter(person => { try { return !JSON.parse(person.metadata ?? "{}").authenticationRealm && person.memberships.every(member => (member.organizationId === companyId || member.organization.parentId === companyId) && member.roles.length === 0); } catch { return false; } }).map(({ id, displayName, email }) => ({ id, displayName, email })) };
   }

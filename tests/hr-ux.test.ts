@@ -17,6 +17,12 @@ function load(path: string, mocks: Record<string, unknown>) {
 }
 const { CentralHrWorkspace } = load("src/app/app/boss/departments/[department]/central-hr.tsx", { "next/link": { __esModule: true, default: Link }, "@/lib/boss-departments": { departmentHref: (_: string, id?: string) => `/app/boss/departments/hr${id ? `?companyId=${id}` : ""}` } });
 const { HrEmployees } = load("src/app/app/boss/departments/[department]/hr-employees.tsx", { "next/link": { __esModule: true, default: Link }, "./hr-actions": { hrAction: () => ({}) } });
+const { HrStaffAppointment } = load("src/app/app/boss/departments/[department]/employees/[id]/access/staff-appointment.tsx", {
+  react: { ...require("react"), useActionState: (_action: unknown, initial: unknown) => [initial, () => {}, false], useState: (initial: unknown) => [initial, () => {}] },
+  "./actions": { accessAction: () => ({}) },
+  "@/components/staff-invite-panel": { StaffInvitePanel: ({ rows }: { rows: { role: string }[] }) => createElement("p", null, `Reviewed draft: ${rows[0]?.role}`) },
+  "@/app/app/boss/command/staff-actions": { bossStaffInviteAction: () => ({}), bossStaffReviewAction: () => ({}) }
+});
 
 const company = { organizationId: "company-a", legalName: "AIRA Skill City Private Limited", displayName: "AIRA Skill City" };
 
@@ -29,6 +35,25 @@ describe("HR people journey", () => {
     expect(html.match(/<select id="hr-company"/g)).toHaveLength(1);
     expect(html).not.toContain("boss-hr-navigation");
     expect(html).not.toContain("Payroll</a>");
+  });
+
+  it("offers only the prepared company officer and Labs developer appointments with their respective portals", () => {
+    const html = renderToStaticMarkup(createElement(HrStaffAppointment, { employmentId: "employment-a", scopes: [
+      { organizationId: "company-a", name: "AIRA Skill City company", roleId: "officer", roleName: "Administrative Officer", managers: [] },
+      { organizationId: "labs", name: "AIRA Labs", roleId: "developer", roleName: "Full Stack Developer", managers: [] }
+    ], drafts: [], deliveryReady: false }));
+    expect(html).toContain("airaskillcity.com");
+    expect(html).toContain("airalabs.online");
+    expect(html).toContain("Administrative Officer");
+    expect(html).toContain("Full Stack Developer");
+    expect(html).toContain('value="prepare-staff"');
+    expect(html).toContain("does not send an invitation or grant login access");
+  });
+
+  it("shows an existing staff draft for review without offering a second account", () => {
+    const html = renderToStaticMarkup(createElement(HrStaffAppointment, { employmentId: "employment-a", scopes: [], drafts: [{ scopeId: "labs", rows: [{ id: "user-a", email: "developer@example.invalid", role: "Full Stack Developer", reviewable: true, decisionsRecorded: false }], managers: [] }], deliveryReady: false }));
+    expect(html).toContain("Reviewed draft: Full Stack Developer");
+    expect(html).not.toContain('value="prepare-staff"');
   });
 
   it("shows one person across two brand employments and keeps draft access separate", () => {

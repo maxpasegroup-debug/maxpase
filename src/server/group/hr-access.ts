@@ -44,7 +44,7 @@ export function createHrAccess(client: PrismaClient = prisma) {
     return {
       employmentStatus: row.status,
       companyId: row.companyId,
-      portal: row.company.slug === "aira-skill-city" ? account && accountPortalRealm(account.person?.metadata) === "labs" ? "AIRA Labs" : "AIRA Skill City" : "NOT CONFIGURED",
+      portal: row.company.slug === "aira-skill-city" ? account ? accountPortalRealm(account.person?.metadata) === "labs" ? "AIRA Labs" : accountPortalRealm(account.person?.metadata) === "skillcity" ? "AIRA Skill City" : "NOT ASSIGNED" : "NOT ASSIGNED" : "NOT CONFIGURED",
       account: account ? { id: account.id, status: account.status, verified: !!account.emailVerifiedAt, realm: accountPortalRealm(account.person?.metadata) } : null,
       invitation: challenge,
       invitations,
@@ -59,10 +59,11 @@ export function createHrAccess(client: PrismaClient = prisma) {
     return client.$transaction(async db => {
       const { row, ctx } = await employee(actorId, input.employmentId, db);
       if (row.status !== "ACTIVE" || row.company.status !== "ACTIVE" || row.company.slug !== "aira-skill-city") throw new AccessError("Employee portal and active employment required");
-      const user = row.person.users.find(u => u.status === "ACTIVE" && u.emailVerifiedAt && u.email === row.person.email && accountPortalRealm(u.person?.metadata) === "skillcity");
-      if (!user) throw new AccessError("Verified Skill City employee account required");
       const target = await db.organization.findUnique({ where: { id: input.organizationId }, select: { id: true, slug: true, parentId: true, type: true, status: true } });
       if (!target || target.status !== "ACTIVE" || !(target.id === row.companyId && target.type === "COMPANY" && !input.brandId || target.parentId === row.companyId && target.type === "DIVISION" && !!input.brandId)) throw new AccessError("Organization scope unavailable");
+      const requiredRealm = target.slug === "aira-labs" && !!input.brandId ? "labs" : "skillcity";
+      const user = row.person.users.find(u => u.status === "ACTIVE" && u.emailVerifiedAt && u.email === row.person.email && accountPortalRealm(u.person?.metadata) === requiredRealm);
+      if (!user) throw new AccessError(`Verified ${requiredRealm === "labs" ? "AIRA Labs" : "Skill City"} employee account required`);
       if (input.brandId) {
         const assignment = await db.hrAssignment.findFirst({ where: { employmentId: row.id, brandId: input.brandId, status: "ACTIVE", brand: { organizationId: row.companyId, parentBrandId: null, status: "ACTIVE" } }, include: { brand: { select: { slug: true } } } });
         if (!assignment || marketingDivisionSlug(assignment.brand.slug) !== target.slug) throw new AccessError("Verified brand assignment required");
