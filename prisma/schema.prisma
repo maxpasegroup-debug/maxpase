@@ -1437,6 +1437,7 @@ enum GoalStatus {
 }
 
 model User {
+  hrDocumentUploads HrDocument[] @relation("HrDocumentUploader")
   bossNexaDirectives NexaDirective[] @relation("NexaBoss")
   assignedNexaDirectives NexaDirective[] @relation("NexaDirector")
   labsCustomerGrants LabsCustomerGrant[] @relation("LabsCustomer")
@@ -1540,6 +1541,8 @@ model Session {
 }
 
 model Person {
+  employments            Employment[]
+  managedHrAssignments   HrAssignment[] @relation("HrAssignmentManager")
   managedPips NiceJobsPip[]
   knowledgeManagerGroups NiceJobsKnowledgeVersion[]
   niceJobsApplications NiceJobsApplication[]
@@ -1583,6 +1586,11 @@ model Person {
 }
 
 model Organization {
+  hrOnboardingConfig HrCompanyOnboardingConfig?
+  hrDocumentCategories HrDocumentCategory[]
+  hrDocuments HrDocument[]
+  employments             Employment[] @relation("EmploymentCompany")
+  hrDepartments           HrAssignment[] @relation("HrAssignmentDepartment")
   nexaDirectives NexaDirective[]
   labsCustomerGrants LabsCustomerGrant[]
   niceJobsContentFiles NiceJobsContentFile[] @relation("NiceJobsFileCompany")
@@ -1760,6 +1768,8 @@ model TeamProfile {
 }
 
 model Brand {
+  hrDocuments HrDocument[]
+  hrAssignments  HrAssignment[]
   id             String          @id @default(cuid())
   organizationId String
   organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Restrict)
@@ -1780,6 +1790,123 @@ model Brand {
 
   @@unique([organizationId, slug])
   @@index([parentBrandId])
+}
+
+enum EmploymentState {
+  DRAFT
+  ACTIVE
+  ENDED
+}
+
+enum HrAssignmentState {
+  DRAFT
+  ACTIVE
+  TRANSFERRED
+  ENDED
+}
+
+model Employment {
+  documents HrDocument[]
+  id          String @id @default(cuid())
+  personId    String
+  companyId   String
+  person      Person @relation(fields: [personId], references: [id], onDelete: Restrict)
+  company     Organization @relation("EmploymentCompany", fields: [companyId], references: [id], onDelete: Restrict)
+  status      EmploymentState @default(DRAFT)
+  startDate   DateTime?
+  endDate     DateTime?
+  designation String?
+  employmentType String?
+  decisionReference String?
+  assignments HrAssignment[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([companyId, status])
+  @@index([personId, companyId])
+}
+
+model HrCompanyOnboardingConfig {
+  companyId String @id
+  company Organization @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  proposedPortalHost String?
+  proposedSenderEmail String?
+  decisionReference String?
+  updatedByUserId String
+  updatedAt DateTime @updatedAt
+}
+
+enum HrDocumentStatus {
+  UPLOADING
+  ACTIVE
+  FAILED
+  REPLACED
+  ARCHIVED
+}
+
+model HrDocumentCategory {
+  id String @id @default(cuid())
+  companyId String
+  company Organization @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  key String
+  label String
+  active Boolean @default(true)
+  createdAt DateTime @default(now())
+  @@unique([companyId, key])
+}
+
+model HrDocument {
+  id String @id @default(uuid())
+  employmentId String
+  employment Employment @relation(fields: [employmentId], references: [id], onDelete: Restrict)
+  companyId String
+  company Organization @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  brandId String?
+  brand Brand? @relation(fields: [brandId], references: [id], onDelete: Restrict)
+  categoryKey String
+  title String
+  filename String
+  mime String
+  bytes Int
+  assetId String? @unique
+  publicId String @unique
+  resourceType String?
+  format String?
+  status HrDocumentStatus @default(UPLOADING)
+  employeeVisible Boolean @default(false)
+  replacesId String? @unique
+  replaces HrDocument? @relation("HrDocumentVersions", fields: [replacesId], references: [id], onDelete: Restrict)
+  replacedBy HrDocument? @relation("HrDocumentVersions")
+  uploaderUserId String
+  uploader User @relation("HrDocumentUploader", fields: [uploaderUserId], references: [id], onDelete: Restrict)
+  archivedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([companyId, brandId, status, createdAt])
+  @@index([employmentId, categoryKey, createdAt])
+}
+
+model HrAssignment {
+  id              String @id @default(cuid())
+  employmentId    String
+  brandId         String
+  departmentId    String?
+  managerPersonId String?
+  designation     String
+  status          HrAssignmentState @default(DRAFT)
+  startDate       DateTime
+  endDate         DateTime?
+  decisionReference String?
+  employment      Employment @relation(fields: [employmentId], references: [id], onDelete: Restrict)
+  brand           Brand @relation(fields: [brandId], references: [id], onDelete: Restrict)
+  department      Organization? @relation("HrAssignmentDepartment", fields: [departmentId], references: [id], onDelete: Restrict)
+  manager         Person? @relation("HrAssignmentManager", fields: [managerPersonId], references: [id], onDelete: Restrict)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([employmentId, status])
+  @@index([brandId, status])
+  @@index([managerPersonId])
 }
 
 model Product {

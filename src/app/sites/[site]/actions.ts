@@ -120,9 +120,11 @@ export async function portalLoginAction(_state: PortalLoginState, form: FormData
     const { site, paths } = await requestPortal(String(form.get("site") ?? ""), true);
     if (site.id === "jobs") return { error: "Use the Nice Jobs phone and PIN sign-in form." };
     const password = form.get("password");
-    const result = site.id === "labs" && typeof password === "string" && /^[0-9]{6}$/.test(password)
+    const result = site.id === "labs" && form.get("labsAccount") === "customer"
       ? await labsPin.login({ email: form.get("email"), pin: password }, config.AUTH_SECRET)
-      : await authenticationService.loginPortal({ email: form.get("email"), password }, config.AUTH_SECRET, site.id);
+      : site.id === "labs" && form.get("labsAccount") !== "staff"
+        ? null
+        : await authenticationService.loginPortal({ email: form.get("email"), password }, config.AUTH_SECRET, site.id);
     if (!result) return { error: "Invalid credentials or gateway access unavailable." };
     await setPortalCookie(site, result.token, result.session.expiresAt);
     destination = paths.gateway;

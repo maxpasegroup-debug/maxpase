@@ -81,7 +81,7 @@ export function createAuthenticationService(client: PrismaClient = prisma, now =
         candidate = await client.user.findUnique({ where: { id: candidate.id }, include: { person: { select: { status: true, metadata: true } } } });
       } catch (error) { if (!(error instanceof AccessError)) throw error; }
     }
-    if (!candidate?.passwordHash || !valid || candidate.status !== "ACTIVE" || candidate.person && candidate.person.status !== "ACTIVE" || accountPortalRealm(candidate.person?.metadata) && portal !== accountPortalRealm(candidate.person?.metadata) || boss && JSON.parse(candidate.person?.metadata ?? "{}").credentialKind !== "BOSS_PIN" || portal === "labs" || portal === "startup" && accountPortalRealm(candidate.person?.metadata) === "startup" && !candidate.emailVerifiedAt) {
+    if (!candidate?.passwordHash || !valid || candidate.status !== "ACTIVE" || candidate.person && candidate.person.status !== "ACTIVE" || accountPortalRealm(candidate.person?.metadata) && portal !== accountPortalRealm(candidate.person?.metadata) || boss && JSON.parse(candidate.person?.metadata ?? "{}").credentialKind !== "BOSS_PIN" || portal === "labs" && JSON.parse(candidate.person?.metadata ?? "{}").credentialKind !== "STAFF_PASSWORD" || portal === "startup" && accountPortalRealm(candidate.person?.metadata) === "startup" && !candidate.emailVerifiedAt) {
       await client.auditEvent.create({ data: buildAuditEventData({ action: "auth.login", entityType: "User", result: "DENIED", metadata: { accountReference: securityKey("account", parsed.data.email) } }) });
       return null;
     }

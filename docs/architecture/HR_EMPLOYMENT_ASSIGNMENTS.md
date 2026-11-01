@@ -1,0 +1,11 @@
+# Central HR employment and assignment foundation
+
+The HR workspace at `/app/boss/departments/hr` uses one `Person` per individual. `Employment` records the relationship with a legal `Organization` of type `COMPANY`. `HrAssignment` records work in a registered `Brand`, including sub-brands. A Person may have employment in more than one company, but each company relationship must be created and authorized separately.
+
+Employment starts as `DRAFT`. The Boss records a decision reference before activation. A brand assignment also starts as `DRAFT` and requires active employment before activation. Transfers close the old row as `TRANSFERRED` and create a new row; ended rows stay available as history. Assignment dates, designation, department and manager are independent of login credentials. The database prevents two open employment rows for one person and company and two open assignments for one employment and brand.
+
+`User` remains the account identity. `Membership` and its roles remain the only access grants. Creating employment or an assignment does not create a user, role or membership. Ending employment closes its open assignments and revokes that person's memberships within the same company's organization tree in one transaction. Memberships of another legal company are retained. Operational events and audit records are written in the same transaction as each HR mutation.
+
+The existing AIRA Skill City invitation flow can link a Person with active AIRA employment. A new Person created through that staff draft flow receives draft employment. Invitation delivery and activation require active employment. Role and manager decisions, email delivery, OTP consumption and portal authorization remain in the existing staff services. No other legal company's employee portal and approved role templates are currently configured; such accounts stay uninvited until those prerequisites are verified.
+
+The additive PostgreSQL migration is `20261031000000_hr_employment_assignments`. It creates two tables, two enums, foreign keys and partial unique indexes. Its checksum is included in the readiness manifest. Apply it through the reviewed migration workflow before serving code that queries the new tables. This worktree has not migrated any default, staging or production database.

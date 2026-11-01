@@ -1,5 +1,6 @@
 import type { PermissionScope } from "@prisma/client";
 export const workforcePermissions: { key: string; name: string; scope: PermissionScope }[] = [
+  ...["hr.document.read", "hr.document.manage", "hr.document.category.manage"].map(key => ({ key, name: key.replaceAll(".", " "), scope: "GROUP" as const })),
   ...["aira.crm.self", "aira.crm.perform", "aira.crm.manage"].map(key => ({ key, name: key.replaceAll(".", " "), scope: "GROUP" as const })),
   ...["labs.customer.read", "labs.customer.manage"].map(key => ({ key, name: key.replaceAll(".", " "), scope: "GROUP" as const })),
   ...["labs.sales.read", "labs.sales.self", "labs.sales.perform", "labs.sales.manage", "labs.quote.prepare", "labs.quote.issue", "labs.delivery.manage", "labs.delivery.assignee"].map(key => ({ key, name: key.replaceAll(".", " "), scope: "GROUP" as const })),

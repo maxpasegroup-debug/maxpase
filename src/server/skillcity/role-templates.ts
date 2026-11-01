@@ -11,6 +11,7 @@ const divisionDirector = ["organization.read", "executive.read", "decision.read"
 const templates = [
   { scope: "aira-skill-city", key: "aira-03", name: "Director", permissions: director },
   { scope: "aira-skill-city", key: "aira-26", name: "Senior Academic Advisor", permissions: [...advisor, "labs.sales.self", "labs.sales.perform", "sia.access.read"] },
+  { scope: "aira-skill-city", key: "aira-administrative-officer", name: "Administrative Officer", permissions: ["organization.read", "company.read", "brand.read", "person.read", "reporting.read", "responsibility.read", "program.manage", "project.read", "task.read", "labs.sales.read"] },
   { scope: "aira-labs", key: "labs-division-director", name: "Division Director", permissions: [...divisionDirector, "labs.sales.self", "labs.sales.perform", "labs.sales.read", "labs.sales.manage", "labs.delivery.assignee", "labs.customer.manage"] },
   { scope: "aira-startup-school", key: "startup-division-director", name: "Division Director", permissions: [...divisionDirector, "program.manage", "aira.crm.self", "aira.crm.perform", "aira.crm.manage"] },
   { scope: "aira-skill-studio", key: "studio-division-director", name: "Division Director", permissions: [...divisionDirector, "aira.crm.self", "aira.crm.perform", "aira.crm.manage"] },

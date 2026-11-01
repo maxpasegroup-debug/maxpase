@@ -32,7 +32,7 @@ describe("PostgreSQL migration source", () => {
   });
 
   it("declares every Prisma model table and attaches all safeguards to declared tables", () => {
-    const tables = [...sql.matchAll(/^CREATE TABLE "public"\."([^"]+)"/gm)].map(match => match[1]);
+    const tables = migrationManifest.flatMap(([migrationName]) => [...readFileSync(`prisma/migrations/${migrationName}/migration.sql`, "utf8").matchAll(/^CREATE TABLE (?:"public"\.)?"([^"]+)"/gm)].map(match => match[1]));
     const models = Prisma.dmmf.datamodel.models.map(model => model.dbName ?? model.name);
     expect(new Set(tables).size).toBe(tables.length);
     expect(tables.sort()).toEqual(models.sort());

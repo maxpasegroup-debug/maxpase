@@ -886,8 +886,39 @@ progress { width: 120px; accent-color: var(--accent); }
 .boss-department-modules { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
 .boss-department-module a { justify-self: start; min-height: 40px; padding-top: 8px; color: var(--accent); font-weight: 700; }
 .boss-department a:focus-visible, .boss-simple-dashboard a:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.boss-hr-layout { display: grid; grid-template-columns: 210px minmax(0, 1fr); align-items: start; gap: 14px; }
+.boss-hr-navigation { display: grid; gap: 3px; padding: 10px; border: 1px solid var(--line); border-radius: 9px; background: #fff; }
+.boss-hr-navigation a { display: flex; align-items: center; min-height: 39px; padding: 7px 10px; border-radius: 6px; font-size: 13px; }
+.boss-hr-navigation a[aria-current] { background: #e9f2ff; color: var(--accent); font-weight: 700; }
+.boss-hr-content { min-width: 0; display: grid; gap: 12px; }
+.boss-hr-content .executive-band { margin: 0; }
+.boss-hr-employee { margin-top: 10px; padding: 12px; border: 1px solid var(--line); border-radius: 9px; min-width: 0; }
+.boss-hr-employee summary { cursor: pointer; overflow-wrap: anywhere; }
+.boss-hr-employee li { margin: 10px 0; overflow-wrap: anywhere; }
+.boss-hr-action-form { display: flex; flex-wrap: wrap; align-items: end; gap: 10px; margin: 12px 0; padding: 12px; border: 1px solid var(--line); border-radius: 8px; }
+.boss-hr-action-form label { display: grid; gap: 5px; flex: 1 1 185px; min-width: 0; font-size: 13px; }
+.boss-hr-action-form :is(input, select) { width: 100%; min-height: 42px; min-width: 0; }
+.boss-hr-action-form p { flex-basis: 100%; margin: 0; }
+.boss-hr-action-form :focus-visible, .boss-hr-employee summary:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.boss-hr-document-form { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; max-width: 850px; }
+.boss-hr-document-form label { display: grid; gap: 5px; flex: 1 1 220px; min-width: 0; }
+.boss-hr-document-form :is(input,select) { width: 100%; min-width: 0; min-height: 44px; }
+.boss-hr-doc-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.boss-hr-doc-actions button { border: 0; background: transparent; color: var(--accent); cursor: pointer; text-decoration: underline; font: inherit; }
+.boss-hr-documents :focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.boss-hr-context { display: flex; flex-wrap: wrap; gap: 10px 20px; align-items: end; }
+.boss-hr-context > div { min-width: min(100%, 240px); flex: 1; }
+.boss-hr-context form { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 5px; }
+.boss-hr-context select { flex: 1; min-width: 160px; }
+.boss-hr-context > p { flex-basis: 100%; margin: 0; color: var(--muted); }
+.boss-hr-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 9px; }
+.boss-hr-summary > div { display: grid; gap: 4px; padding: 12px; border: 1px solid var(--line); border-radius: 7px; }
+.boss-hr-summary strong { font-size: 20px; overflow-wrap: anywhere; }
+.boss-hr-summary span { color: var(--muted); font-size: 12px; }
+.boss-central-hr a:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
 @media (max-width: 900px) { .boss-simple-metrics, .boss-department-modules { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (max-width: 650px) { .boss-simple-metrics, .boss-simple-columns, .boss-department-steps, .boss-department-modules, .boss-simple-shortcuts { grid-template-columns: 1fr; } }
+@media (max-width: 900px) { .boss-hr-layout { grid-template-columns: 1fr; } .boss-hr-navigation { display: flex; overflow-x: auto; } .boss-hr-navigation a { flex: none; } }
+@media (max-width: 650px) { .boss-simple-metrics, .boss-simple-columns, .boss-department-steps, .boss-department-modules, .boss-simple-shortcuts, .boss-hr-summary { grid-template-columns: 1fr; } }
 .boss-dashboard-hero { position: relative; display: flex; align-items: center; justify-content: space-between; gap: 24px; overflow: hidden; min-height: 154px; padding: 22px 34px; border-radius: 12px; background: linear-gradient(105deg, #061a41 0%, #0a326f 58%, #2770df 100%); color: #fff; isolation: isolate; }
 .boss-dashboard-hero::before { content: ""; position: absolute; inset: 0; z-index: -1; background-image: linear-gradient(rgb(160 201 255 / 7%) 1px, transparent 1px), linear-gradient(90deg, rgb(160 201 255 / 7%) 1px, transparent 1px); background-size: 52px 52px; }
 .boss-dashboard-hero p:first-child { margin: 0 0 5px; color: #accbfa; letter-spacing: .22em; font-size: 11px; font-weight: 700; }

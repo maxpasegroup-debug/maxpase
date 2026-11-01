@@ -2,8 +2,9 @@ import type { Prisma } from "@prisma/client";
 import { AccessError, createAccessContext } from "@/server/authorization/engine";
 import { siteById, type PortalId } from "./sites";
 import { accountPortalRealm } from "@/server/auth/account-realm";
+import { labsStaffRoleKeys, hasStaffWorkspaceCapabilities } from "@/server/skillcity/staff-roles";
 
-const skillCityStaffRoles = new Set(["Director", "Division Director", "Business Development & Operations Manager", "Senior Academic Advisor", "Junior Academic Advisor", "Software Developer", "Full Stack Developer", "Junior Developer"]);
+const skillCityStaffRoles = new Set(["Director", "Division Director", "Business Development & Operations Manager", "Senior Academic Advisor", "Junior Academic Advisor", "Administrative Officer", "Software Developer", "Full Stack Developer", "Junior Developer"]);
 
 export async function requirePortalAccess(db: Prisma.TransactionClient, userId: string, id: PortalId, credentialSetup = false) {
   const site = siteById(id);
@@ -35,13 +36,22 @@ export async function requirePortalAccess(db: Prisma.TransactionClient, userId: 
   const ctx = await createAccessContext(userId, db, undefined, scope);
   await ctx.requireAccess("organization.read", scope);
   if (id === "labs") {
-    const user = await db.user.findUnique({ where: { id: userId }, select: { personId: true, emailVerifiedAt: true, person: { select: { metadata: true } } } });
+    const user = await db.user.findUnique({ where: { id: userId }, select: { personId: true, status: true, emailVerifiedAt: true, person: { select: { metadata: true } } } });
     const metadata = JSON.parse(user?.person?.metadata ?? "{}");
-    if (accountPortalRealm(user?.person?.metadata) !== "labs" || metadata.credentialKind !== "LABS_PIN") throw new AccessError("Labs is for verified customer accounts; employees use Skill City");
+    if (accountPortalRealm(user?.person?.metadata) !== "labs" || user?.status !== "ACTIVE" || !user.emailVerifiedAt) throw new AccessError("Verified Labs account required");
+    if (metadata.credentialKind === "STAFF_PASSWORD") {
+      if (metadata.staffOnboarding !== "ACTIVE" || !user.personId || !(await db.employment.findFirst({ where: { personId: user.personId, companyId: division.parent.id, status: "ACTIVE" } })) || !(await db.hrAssignment.findFirst({ where: { employment: { personId: user.personId, companyId: division.parent.id, status: "ACTIVE" }, status: "ACTIVE", brand: { slug: "aira-labs", organizationId: division.parent.id, status: "ACTIVE" } } }))) throw new AccessError("Active Labs employee appointment required");
+      const membership = await db.membership.findFirst({
+        where: { personId: user.personId, organizationId: division.id, status: "ACTIVE" },
+        include: { roles: { include: { role: { include: { permissions: { include: { permission: true } } } } } } }
+      });
+      if (!membership || !membership.roles.some(item => item.role.status === "ACTIVE" && item.role.principalType === "HUMAN" && item.role.organizationId === division.id && labsStaffRoleKeys.some(key => key === item.role.key) && hasStaffWorkspaceCapabilities(item.role.key, item.role.permissions.map(p => p.permission.key)))) throw new AccessError("Prepared Labs employee role required");
+    } else if (metadata.credentialKind !== "LABS_PIN") throw new AccessError("Labs account type unavailable");
   }
   if (id === "labs" && !credentialSetup) {
     const user = await db.user.findUnique({ where: { id: userId }, select: { person: { select: { metadata: true } } } });
-    if (JSON.parse(user?.person?.metadata ?? "{}").labsPinChangeRequired === true) throw new AccessError("Change the initial PIN before entering the workspace");
+    const metadata = JSON.parse(user?.person?.metadata ?? "{}");
+    if (metadata.credentialKind === "LABS_PIN" && metadata.labsPinChangeRequired === true) throw new AccessError("Change the initial PIN before entering the workspace");
   }
   return { site, divisionId: division.id, companyId: division.parent.id, ctx };
 }

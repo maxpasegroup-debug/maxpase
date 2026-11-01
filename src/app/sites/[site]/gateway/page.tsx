@@ -27,12 +27,17 @@ import { ParticipantDashboard } from "@/app/app/nicejobs/participant-dashboard";
 import { isParticipantDashboardView } from "@/lib/nicejobs-dashboard";
 import { LabsCustomerWorkspace } from "../../labs-ui/customer-workspace";
 import { labsCustomerService } from "@/server/labs/customer";
+import { LabsWorkspace } from "../../labs-ui/workspace";
+import { DeveloperWorkspace } from "../../skillcity-ui/developer-workspace";
+import { skillCityDeveloperDesk } from "@/server/skillcity/developer-desk";
+import { accountPortalRealm } from "@/server/auth/account-realm";
 import { StartupStudentWorkspace } from "../../startup-ui/student-workspace";
 import { StartupApplicantWorkspace, StartupReviewWorkspace } from "../../startup-ui/applicant-workspace";
 import { StartupFounderWorkspace, StartupFounderManagerWorkspace } from "../../startup-ui/founder-workspace";
 import { StartupPilotRegisterWorkspace } from "../../startup-ui/pilot-register-workspace";
 import { skillCityEmployeeDashboard, employeeViews } from "@/server/skillcity/employee-dashboard";
 import { SkillCityWorkspace } from "../../skillcity-ui/workspace";
+import { SkillCityHrProfile } from "../../skillcity-ui/hr-profile";
 import { DirectorReportWorkspace } from "../../skillcity-ui/director-report";
 import { MarketingWorkspace } from "@/components/marketing-workspace";
 import { StartupCommercialWorkspace } from "@/components/startup-commercial-workspace";
@@ -44,6 +49,7 @@ export default async function Gateway({ params, searchParams }: { params: Promis
   if(site.id==="labs"&&session.needsPinChange)redirect(paths.gateway.replace(/\/gateway$/,"")+"/pin");
   await consumeSecurityBudget(securityKey("authenticated", session.userId), 300, 60);
   const view = typeof query.view === "string" ? query.view : "overview";
+  if (site.id === "skillcity" && view === "my-profile") return <SkillCityHrProfile userId={session.userId} home={paths.gateway}/>;
   let startupCanReview = false;
   if (site.id === "skillcity" && view === "startup-applications") return <StartupReviewWorkspace userId={session.userId} email={session.email} home={paths.gateway}/>;
   if (site.id === "skillcity" && view === "founder-management") return <StartupFounderManagerWorkspace userId={session.userId} email={session.email} home={paths.gateway}/>;
@@ -61,6 +67,24 @@ export default async function Gateway({ params, searchParams }: { params: Promis
     return <SkillCityWorkspace data={data} email={session.email} userId={session.userId} base={paths.gateway} home={paths.home}/>;
   }
   if (site.id === "skillcity") notFound();
+  if (site.id === "labs") {
+    const identity = await prisma.user.findUnique({ where: { id: session.userId }, select: { person: { select: { metadata: true } } } });
+    const metadata = JSON.parse(identity?.person?.metadata ?? "{}");
+    if (accountPortalRealm(identity?.person?.metadata) === "labs" && metadata.credentialKind === "STAFF_PASSWORD") {
+      const access = await requirePortalAccess(prisma, session.userId, "labs");
+      const role = access.ctx.grants.filter(grant => grant.organizationId === access.divisionId && grant.key === "organization.read");
+      if (role.some(grant => ["Full Stack Developer", "Software Developer", "Junior Developer"].includes(grant.roleName ?? ""))) {
+        if (view !== "overview") notFound();
+        const desk = await skillCityDeveloperDesk.workspace(session.userId);
+        return <main className="portal-workspace portal-labs sc-workspace"><header className="portal-header"><Link href={paths.home}>AIRA Labs</Link><span>{session.email}</span><form action={portalLogoutAction}><input type="hidden" name="site" value="labs"/><button>Sign out</button></form></header><DeveloperWorkspace desk={desk} portal="labs"/></main>;
+      }
+      if (role.some(grant => grant.roleName === "Business Development Manager")) {
+        if (!["overview", "sales", "people"].includes(view)) notFound();
+        return <LabsWorkspace userId={session.userId} email={session.email} base={paths.gateway} home={paths.home} query={query} businessDevelopmentManager/>;
+      }
+      notFound();
+    }
+  }
   if (site.id === "labs" && await labsCustomerService.isCustomer(session.userId)) {
     if (view !== "overview") notFound();
     return <LabsCustomerWorkspace userId={session.userId} email={session.email} home={paths.home}/>;

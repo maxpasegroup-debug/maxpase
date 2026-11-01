@@ -9,6 +9,7 @@ export function labsStaffViewsForRole(key: string): readonly string[] {
 export const staffRoleScopes: Record<string, string> = {
   "aira-03": "aira-skill-city",
   "aira-26": "aira-skill-city",
+  "aira-administrative-officer": "aira-skill-city",
   "labs-division-director": "aira-labs",
   "startup-division-director": "aira-startup-school",
   "studio-division-director": "aira-skill-studio",
@@ -25,6 +26,7 @@ export const staffRoleScopes: Record<string, string> = {
 const requiredCapabilities: Record<string, string[]> = {
   "aira-03": ["organization.read", "executive.read", "decision.decide", "person.create", "membership.assign_role"],
   "aira-26": ["organization.read", "product.read", "labs.sales.self", "aira.crm.self"],
+  "aira-administrative-officer": ["organization.read", "person.read", "reporting.read", "responsibility.read"],
   "labs-division-director": ["organization.read", "executive.read", "decision.decide", "person.create", "membership.assign_role", "labs.sales.manage"],
   "startup-division-director": ["organization.read", "executive.read", "decision.decide", "person.create", "membership.assign_role", "aira.crm.manage"],
   "studio-division-director": ["organization.read", "executive.read", "decision.decide", "person.create", "membership.assign_role", "aira.crm.manage"],
@@ -38,8 +40,8 @@ const requiredCapabilities: Record<string, string[]> = {
   "labs-business-development-manager": ["organization.read", "notification.read", "labs.sales.self", "labs.sales.read", "labs.sales.manage"]
 };
 
-export function staffPortalForRole(_key: string): "skillcity" {
-  return "skillcity";
+export function staffPortalForRole(key: string): "skillcity" | "labs" {
+  return labsStaffRoleKeys.some(role => role === key) ? "labs" : "skillcity";
 }
 
 export function isPreparedStaffRole(key: string, organizationSlug: string) {

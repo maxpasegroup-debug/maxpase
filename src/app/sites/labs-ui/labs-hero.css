@@ -4,13 +4,12 @@
   background: var(--aira-black);
 }
 .al-public .al-labs-stage {
-  width: min(100% - 32px, 1480px);
-  margin: 0 auto 32px;
+  width: 100%;
+  min-height: 100svh;
+  margin: 0;
   overflow: hidden;
-  border: 1px solid #d4af623d;
-  border-radius: 0 0 24px 24px;
+  border-bottom: 1px solid #d4af623d;
   background: var(--aira-black);
-  box-shadow: 0 28px 90px #0905077a;
 }
 
 .al-public .al-header.al-labs-header {
@@ -19,7 +18,7 @@
   align-items: center;
   gap: 20px;
   min-height: 68px;
-  padding: 12px clamp(20px, 3.5vw, 40px);
+  padding: 12px clamp(24px, 5vw, 104px);
   border-bottom: 1px solid var(--aira-burgundy);
   background: var(--aira-black);
 }
@@ -60,20 +59,20 @@
 
 .al-public .al-hero.al-labs-hero {
   display: grid;
-  grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.4fr);
+  grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
   align-items: center;
-  gap: 18px clamp(24px, 3vw, 48px);
+  gap: 18px clamp(32px, 5vw, 96px);
   height: auto;
-  min-height: 0;
+  min-height: calc(100svh - 68px);
   max-height: none;
-  padding: clamp(24px, 2.5vw, 34px) clamp(20px, 3.5vw, 48px) 18px;
+  padding: clamp(24px, 3vw, 48px) clamp(24px, 5vw, 104px) 22px;
   background: radial-gradient(circle at 76% 57%, #5707133d, transparent 46%), var(--aira-black);
   color: var(--aira-ivory);
   scroll-margin-top: 20px;
 }
 .al-public .al-hero.al-labs-hero::before { content: none; }
 .al-public .al-hero.al-labs-hero > div { position: relative; max-width: none; padding: 0; }
-.al-public .al-labs-intro { min-width: 0; max-width: 560px !important; }
+.al-public .al-labs-intro { min-width: 0; max-width: 650px !important; }
 .al-public .al-labs-hero .al-eyebrow {
   margin: 0 0 10px;
   color: var(--aira-gold);
@@ -85,7 +84,7 @@
   max-width: 22ch;
   margin: 0 0 10px;
   color: var(--aira-ivory);
-  font-size: clamp(2.2rem, 4vw, 3.35rem);
+  font-size: clamp(2.6rem, 4.2vw, 5rem);
   line-height: 1.08;
   letter-spacing: -.035em;
   text-wrap: balance;
@@ -114,7 +113,7 @@
   scroll-margin-top: 20px;
 }
 .al-labs-core { margin: 0; }
-.al-labs-core-image { position: relative; aspect-ratio: 8 / 5; overflow: hidden; border-radius: 15px; background: #100c0d; isolation: isolate; }
+.al-labs-core-image { position: relative; height: clamp(300px, calc(100svh - 345px), 640px); overflow: hidden; border-radius: 15px; background: #100c0d; isolation: isolate; }
 .al-labs-core-image img { object-fit: cover; object-position: center 44%; }
 .al-labs-core-image::before { position: absolute; inset: 0; z-index: 1; content: ""; pointer-events: none; background: radial-gradient(ellipse 28% 33% at 50% 43%, #d4af6230, transparent 72%), radial-gradient(ellipse 50% 70% at 72% 55%, #57071326, transparent 80%); animation: al-labs-ambient 10s ease-in-out infinite; }
 .al-labs-core-image::after { position: absolute; inset: 0; z-index: 3; content: ""; pointer-events: none; box-shadow: inset 0 0 42px #09050799; }
@@ -143,10 +142,10 @@
 @keyframes al-labs-orbit-reverse { from { transform: translate(-50%, -50%) rotate(34deg); } to { transform: translate(-50%, -50%) rotate(-326deg); } }
 @keyframes al-labs-node-pulse { 50% { opacity: .28; } }
 @media (max-width: 980px) {
-  .al-public .al-hero.al-labs-hero { grid-template-columns: 1fr; }
+  .al-public .al-hero.al-labs-hero { grid-template-columns: 1fr; min-height: 0; }
   .al-public .al-labs-intro { max-width: 790px !important; }
   .al-public .al-labs-visual { width: 100%; }
-  .al-labs-core-image { aspect-ratio: 16 / 9; }
+  .al-labs-core-image { height: auto; aspect-ratio: 16 / 9; }
 }
 @media (max-width: 880px) {
   .al-public .al-header.al-labs-header { display: flex; flex-wrap: wrap; gap: 10px 18px; }
@@ -154,7 +153,6 @@
   .al-labs-header-actions { margin-left: auto; }
 }
 @media (max-width: 600px) {
-  .al-public .al-labs-stage { width: 100%; margin: 0 0 24px; border-radius: 0; border-inline: 0; }
   .al-public .al-header.al-labs-header { padding: 12px 16px; }
   .al-public .al-labs-brand { font-size: 15px; }
   .al-public .al-labs-header nav { justify-content: flex-start; gap: 17px; overflow-x: auto; padding: 4px 0 3px; }

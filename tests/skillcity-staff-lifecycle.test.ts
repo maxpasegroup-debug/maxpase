@@ -19,6 +19,12 @@ const invite = createStaffInvite(db, env, () => new Date(), async (_url, init) =
   return new Response(JSON.stringify({ id: "mock-receipt" }), { status: 200 });
 });
 const email = () => `staff-${randomUUID()}@test.invalid`;
+async function activateLabsAppointment(personId: string) {
+  const brand = await db.brand.upsert({ where: { organizationId_slug: { organizationId: companyId, slug: "aira-labs" } }, create: { organizationId: companyId, slug: "aira-labs", name: "AIRA Labs", status: "ACTIVE" }, update: {} });
+  await db.employment.updateMany({ where: { personId, companyId, status: "DRAFT" }, data: { status: "ACTIVE", startDate: new Date() } });
+  const employment = await db.employment.findFirstOrThrow({ where: { personId, companyId, status: "ACTIVE" } });
+  await db.hrAssignment.create({ data: { employmentId: employment.id, brandId: brand.id, designation: "Full Stack Developer", status: "ACTIVE", startDate: new Date(), decisionReference: "synthetic-labs-appointment" } });
+}
 
 beforeAll(async () => {
   await postgres.initialize();
@@ -44,21 +50,23 @@ describe("Skill City Boss employee lifecycle", () => {
     expect((await db.membership.findFirstOrThrow({ where: { personId: user.personId!, organizationId: labsId } })).status).toBe("INVITED");
     expect((await db.reportingRelationship.findFirstOrThrow({ where: { personId: user.personId!, organizationId: labsId } })).status).toBe("INACTIVE");
     expect(await db.auditEvent.count({ where: { entityId: user.id, action: "staff.onboarding_draft_created" } })).toBe(1);
+    await activateLabsAppointment(user.personId!);
     await invite.send(bossId, { userId: user.id, verificationEvidence: "synthetic identity checked" });
-    expect(invitationText).toContain("https://airaskillcity.com/activate");
+    expect(invitationText).toContain("https://airalabs.online/activate");
     const challenge = await db.emailAuthChallenge.findFirstOrThrow({ where: { userId: user.id, purpose: "STAFF_INVITE" } });
     expect(challenge.status).toBe("SENT");
-    await expect(invite.activate({ challengeId: challenge.id, code, password: "synthetic-password-123", confirmPassword: "synthetic-password-123", portal: "labs" })).rejects.toThrow();
-    await invite.activate({ challengeId: challenge.id, code, password: "synthetic-password-123", confirmPassword: "synthetic-password-123", portal: "skillcity" });
+    await expect(invite.activate({ challengeId: challenge.id, code, password: "synthetic-password-123", confirmPassword: "synthetic-password-123", portal: "skillcity" })).rejects.toThrow();
+    await invite.activate({ challengeId: challenge.id, code, password: "synthetic-password-123", confirmPassword: "synthetic-password-123", portal: "labs" });
     expect((await db.user.findUniqueOrThrow({ where: { id: user.id } })).status).toBe("ACTIVE");
     expect((await db.reportingRelationship.findFirstOrThrow({ where: { personId: user.personId!, organizationId: labsId } })).status).toBe("ACTIVE");
-    expect(await createAuthenticationService(db).loginPortal({ email: address, password: "synthetic-password-123" }, secret, "labs")).toBeNull();
-    expect(await createAuthenticationService(db).loginPortal({ email: address, password: "synthetic-password-123" }, secret, "skillcity")).not.toBeNull();
+    expect(await createAuthenticationService(db).loginPortal({ email: address, password: "synthetic-password-123" }, secret, "labs")).not.toBeNull();
+    expect(await createAuthenticationService(db).loginPortal({ email: address, password: "synthetic-password-123" }, secret, "skillcity")).toBeNull();
     await expect(invite.activate({ challengeId: challenge.id, code, password: "synthetic-password-123", confirmPassword: "synthetic-password-123", portal: "labs" })).rejects.toThrow();
   });
   it("reuses an eligible unclaimed AIRA Person but refuses duplicate and foreign identities", async () => {
     const address = email();
     const person = await db.person.create({ data: { displayName: "Existing synthetic person", email: address, memberships: { create: { organizationId: companyId } } } });
+    await db.employment.create({ data: { personId: person.id, companyId, status: "ACTIVE", startDate: new Date() } });
     const listed = await staff.options(bossId, labsId);
     expect(listed.existingPeople.some(row => row.id === person.id)).toBe(true);
     const before = await db.person.count({ where: { email: address } });
@@ -82,6 +90,7 @@ describe("Skill City Boss employee lifecycle", () => {
     await staff.reviewDraft(bossId, { userId: draft.id, scopeDecisionReference: "scope-review-006", managerUserId: managerId, managerDecisionReference: "manager-review-006" });
     expect((await db.user.findUniqueOrThrow({ where: { id: draft.id } })).status).toBe("INACTIVE");
     expect(await db.auditEvent.count({ where: { entityId: draft.id, action: "staff.onboarding_decisions_reviewed" } })).toBe(1);
+    await activateLabsAppointment((await db.user.findUniqueOrThrow({ where: { id: draft.id } })).personId!);
     await invite.send(bossId, { userId: draft.id, verificationEvidence: "synthetic identity checked" });
     expect((await db.emailAuthChallenge.findFirstOrThrow({ where: { userId: draft.id, purpose: "STAFF_INVITE" } })).status).toBe("SENT");
   });
