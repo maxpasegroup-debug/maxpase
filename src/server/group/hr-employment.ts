@@ -9,7 +9,7 @@ import { marketingDivisionSlug } from "./brand-marketing-scope";
 
 const id = z.string().min(1).max(200);
 const reference = z.string().trim().min(8).max(200);
-const personDraft = z.object({ companyId: id, personId: id.optional(), displayName: z.string().trim().min(2).max(200).optional(), email: z.email().max(254).transform(v => v.toLowerCase()).optional(), linkExisting: z.boolean().optional(), designation: z.string().trim().max(120).optional(), employmentType: z.string().trim().min(2).max(80).optional(), joiningDate: z.coerce.date().optional() }).strict();
+const personDraft = z.object({ companyId: id, personId: id.optional(), displayName: z.string().trim().min(2).max(200).optional(), email: z.email().max(254).transform(v => v.toLowerCase()).optional(), linkExisting: z.boolean().optional(), designation: z.string().trim().max(120).optional(), employmentType: z.string().trim().min(2).max(80).optional(), joiningDate: z.coerce.date().optional(), initialBrandIds: z.array(id).max(20).optional(), initialDepartmentId: id.optional(), initialManagerPersonId: id.optional(), assignmentDecisionReference: reference.optional() }).strict();
 const assignmentDraft = z.object({ employmentId: id, brandId: id, departmentId: id.optional(), managerPersonId: id.optional(), designation: z.string().trim().min(2).max(120), startDate: z.coerce.date(), decisionReference: reference }).strict();
 
 export function createHrEmploymentService(client: PrismaClient = prisma) {
@@ -37,10 +37,10 @@ export function createHrEmploymentService(client: PrismaClient = prisma) {
     }
     const state = z.enum(["DRAFT", "ACTIVE", "ENDED"]).safeParse(query.status);
     const page = z.number().int().min(1).max(Number.MAX_SAFE_INTEGER).parse(query.page ?? 1);
-    return client.employment.findMany({ where: { companyId: { in: query.companyId ? [query.companyId] : ids }, ...(query.brandId || query.departmentId ? { assignments: { some: { ...(query.brandId ? { brandId: query.brandId } : {}), ...(query.departmentId ? { departmentId: query.departmentId } : {}) } } } : {}), ...(state.success ? { status: state.data } : {}), ...(query.search ? { person: { displayName: { contains: query.search.slice(0, 100), mode: "insensitive" } } } : {}) }, include: { person: { select: { id: true, displayName: true, email: true, status: true, users: { select: { id: true, status: true, emailVerifiedAt: true, emailAuthChallenges: { where: { purpose: "STAFF_INVITE" }, select: { status: true, createdAt: true }, orderBy: { createdAt: "desc" }, take: 1 } }, take: 1 } } }, company: { select: { name: true, slug: true } }, assignments: { include: { brand: { select: { name: true, organizationId: true } }, department: { select: { name: true } }, manager: { select: { displayName: true } } }, orderBy: { createdAt: "desc" }, take: 100 } }, orderBy: [{ createdAt: "desc" }, { id: "desc" }], skip: (page - 1) * 50, take: 51 });
+    return client.employment.findMany({ where: { companyId: { in: query.companyId ? [query.companyId] : ids }, ...(query.brandId || query.departmentId ? { assignments: { some: { ...(query.brandId ? { brandId: query.brandId } : {}), ...(query.departmentId ? { departmentId: query.departmentId } : {}) } } } : {}), ...(state.success ? { status: state.data } : {}), ...(query.search ? { person: { displayName: { contains: query.search.slice(0, 100), mode: "insensitive" } } } : {}) }, include: { person: { select: { id: true, displayName: true, email: true, status: true, users: { select: { id: true, email: true, status: true, emailVerifiedAt: true, emailAuthChallenges: { where: { purpose: "STAFF_INVITE" }, select: { status: true, createdAt: true }, orderBy: { createdAt: "desc" }, take: 1 } } } } }, company: { select: { name: true, slug: true } }, assignments: { include: { brand: { select: { name: true, organizationId: true } }, department: { select: { name: true } }, manager: { select: { displayName: true } } }, orderBy: { createdAt: "desc" }, take: 100 } }, orderBy: [{ createdAt: "desc" }, { id: "desc" }], skip: (page - 1) * 50, take: 51 });
   }
   async function get(actorId: string, employmentId: string) {
-    const row = await client.employment.findUnique({ where: { id: employmentId }, include: { person: { select: { id: true, displayName: true, email: true } }, company: { select: { name: true } }, assignments: { include: { brand: { select: { id: true, name: true } } }, orderBy: { createdAt: "desc" } } } });
+    const row = await client.employment.findUnique({ where: { id: employmentId }, include: { person: { select: { id: true, displayName: true, email: true } }, company: { select: { name: true } }, assignments: { include: { brand: { select: { id: true, name: true } }, department: { select: { name: true } }, manager: { select: { displayName: true } } }, orderBy: { createdAt: "desc" } } } });
     if (!row) throw new AccessError("Employee unavailable");
     await authorized(actorId, client, row.companyId);
     return row;
@@ -48,8 +48,20 @@ export function createHrEmploymentService(client: PrismaClient = prisma) {
   async function create(actorId: string, raw: unknown) {
     const input = personDraft.parse(raw);
     if (!input.personId && (!input.displayName || !input.email)) throw new AccessError("Choose an existing person or provide a name and email");
+    const initialBrandIds = [...new Set(input.initialBrandIds ?? [])];
+    if (!initialBrandIds.length && (input.initialDepartmentId || input.initialManagerPersonId || input.assignmentDecisionReference)) throw new AccessError("Select a brand before configuring an assignment");
+    if (initialBrandIds.length && (!input.designation || !input.joiningDate || !input.assignmentDecisionReference)) throw new AccessError("Designation, joining date and decision reference are required for brand assignments");
     return client.$transaction(async db => {
       const ctx = await authorized(actorId, db, input.companyId, "person.create");
+      if (initialBrandIds.length) {
+        await ctx.requireAccess("person.update", { organizationId: input.companyId });
+        const found = await db.brand.findMany({ where: { id: { in: initialBrandIds }, organizationId: input.companyId, status: "ACTIVE" }, select: { id: true } });
+        if (found.length !== initialBrandIds.length) throw new AccessError("An assignment brand is unavailable in this company");
+        if (input.initialDepartmentId) {
+          const department = await db.organization.findFirst({ where: { id: input.initialDepartmentId, type: "DEPARTMENT" }, select: { id: true } });
+          if (!department || !ancestry(ctx.nodes, department.id).some(node => node.id === input.companyId)) throw new AccessError("Department unavailable in this company");
+        }
+      }
       let personId = input.personId;
       if (personId) {
         const person = await db.person.findUnique({ where: { id: personId }, select: { id: true, status: true } });
@@ -67,8 +79,20 @@ export function createHrEmploymentService(client: PrismaClient = prisma) {
       }
       const open = await db.employment.findFirst({ where: { personId, companyId: input.companyId, status: { not: "ENDED" } } });
       if (open) throw new AccessError("An open employment record already exists");
+      if (input.initialManagerPersonId) {
+        if (!initialBrandIds.length || input.initialManagerPersonId === personId) throw new AccessError("Choose a distinct manager for an assigned brand");
+        const manager = await db.employment.findFirst({ where: { personId: input.initialManagerPersonId, companyId: input.companyId, status: "ACTIVE" }, select: { id: true } });
+        const scopes = ctx.nodes.filter(node => ancestry(ctx.nodes, node.id).some(parent => parent.id === input.companyId)).map(node => node.id);
+        const verified = await db.user.findFirst({ where: { personId: input.initialManagerPersonId, status: "ACTIVE", emailVerifiedAt: { not: null }, person: { memberships: { some: { organizationId: { in: scopes }, status: "ACTIVE" } } } }, select: { id: true } });
+        const assignments = manager ? await db.hrAssignment.findMany({ where: { employmentId: manager.id, brandId: { in: initialBrandIds }, status: "ACTIVE" }, select: { brandId: true } }) : [];
+        if (!manager || !verified || initialBrandIds.some(brandId => !assignments.some(assignment => assignment.brandId === brandId))) throw new AccessError("Verified manager with an active assignment to every selected brand required");
+      }
       const row = await db.employment.create({ data: { personId: personId!, companyId: input.companyId, designation: input.designation || null, employmentType: input.employmentType ?? null, startDate: input.joiningDate ?? null } });
       await operationalEvent(db, { actorUserId: actorId, actorPersonId: ctx.user!.personId, organizationId: input.companyId, action: "hr.employment_drafted", entityType: "Employment", entityId: row.id, result: "SUCCESS" });
+      for (const brandId of initialBrandIds) {
+        const assignment = await db.hrAssignment.create({ data: { employmentId: row.id, brandId, departmentId: input.initialDepartmentId, managerPersonId: input.initialManagerPersonId, designation: input.designation!, startDate: input.joiningDate!, decisionReference: input.assignmentDecisionReference } });
+        await operationalEvent(db, { actorUserId: actorId, actorPersonId: ctx.user!.personId, organizationId: input.companyId, action: "hr.assignment_drafted", entityType: "HrAssignment", entityId: assignment.id, result: "SUCCESS", metadata: { decisionReference: input.assignmentDecisionReference, brandId } });
+      }
       return row.id;
     });
   }

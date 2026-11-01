@@ -916,6 +916,56 @@ progress { width: 120px; accent-color: var(--accent); }
 .boss-hr-summary strong { font-size: 20px; overflow-wrap: anywhere; }
 .boss-hr-summary span { color: var(--muted); font-size: 12px; }
 .boss-central-hr a:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.boss-central-hr { max-width: 1320px; margin-inline: auto; }
+.boss-hr-header { align-items: center; }
+.boss-hr-topbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap-reverse; gap: 16px; border-bottom: 1px solid var(--line); margin-bottom: 22px; }
+.boss-hr-tabs { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.boss-hr-tabs > a, .boss-hr-tabs > details > summary { display: inline-flex; min-height: 44px; align-items: center; padding: 9px 14px; cursor: pointer; color: var(--text); }
+.boss-hr-tabs > a[aria-current] { border-bottom: 3px solid var(--accent); font-weight: 700; }
+.boss-hr-tabs details { position: relative; }
+.boss-hr-tabs details > div { position: absolute; z-index: 5; right: 0; min-width: 190px; display: grid; padding: 8px; border: 1px solid var(--line); border-radius: 10px; background: #fff; box-shadow: 0 12px 30px #17101420; }
+.boss-hr-tabs details a { padding: 10px; }
+.boss-hr-company-switch { display: flex; align-items: center; gap: 8px; margin-bottom: 7px; }
+.boss-hr-company-switch select { max-width: min(320px, 45vw); min-width: 0; }
+.boss-hr-intro { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 14px; margin-bottom: 15px; }
+.boss-hr-intro h2, .boss-hr-intro p { margin: 0; }
+.boss-hr-intro p { color: var(--muted); }
+.boss-hr-attention { padding: 10px 14px; border: 1px solid var(--line); border-radius: 10px; background: #fff; }
+.boss-hr-attention strong { margin-right: 5px; }
+.boss-hr-filter { display: flex; flex-wrap: wrap; align-items: end; gap: 10px; margin-bottom: 14px; }
+.boss-hr-filter label { display: grid; flex: 1 1 165px; gap: 4px; min-width: 0; font-size: 12px; }
+.boss-hr-filter input, .boss-hr-filter select { min-width: 0; width: 100%; min-height: 44px; }
+.boss-hr-directory small { display: block; color: var(--muted); overflow-wrap: anywhere; }
+.boss-hr-directory td { vertical-align: top; overflow-wrap: anywhere; }
+.boss-hr-directory td > div + div { margin-top: 8px; }
+.boss-hr-empty { text-align: center; padding: 30px 12px; }
+.boss-hr-pages { display: flex; gap: 14px; margin: 12px 0; }
+.boss-hr-structure { list-style: none; padding: 0; display: grid; gap: 9px; }
+.boss-hr-structure li { display: flex; flex-wrap: wrap; gap: 12px; justify-content: space-between; padding: 12px; border: 1px solid var(--line); border-radius: 8px; }
+.boss-hr-onboarding { width: min(100%, 740px); margin-inline: auto; }
+.boss-hr-steps { display: grid; grid-template-columns: repeat(4, 1fr); list-style: none; gap: 8px; padding: 0; margin: 24px 0; }
+.boss-hr-steps li { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 13px; }
+.boss-hr-steps li span { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; background: var(--line); color: var(--text); flex: none; }
+.boss-hr-steps li[aria-current] { color: var(--accent); font-weight: 700; }
+.boss-hr-steps li[aria-current] span { background: var(--accent); color: #fff; }
+.boss-hr-wizard-form > div:not([hidden]) { display: grid; gap: 14px; }
+.boss-hr-wizard-form label { display: grid; gap: 5px; }
+.boss-hr-wizard-form input:not([type=checkbox]), .boss-hr-wizard-form select { width: 100%; min-height: 44px; }
+.boss-hr-wizard-form .boss-hr-inline-check, .boss-hr-brand-choice { display: flex; align-items: center; gap: 10px; }
+.boss-hr-brand-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.boss-hr-brand-choice { padding: 12px; border: 1px solid var(--line); border-radius: 8px; overflow-wrap: anywhere; }
+.boss-hr-wizard-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 25px; }
+.boss-hr-access-warning { border-left: 3px solid var(--accent); padding: 10px 12px; background: #fff; }
+.boss-hr-profile { max-width: 1200px; margin-inline: auto; }
+.boss-hr-profile > .boss-hr-tabs { margin: 8px 0 22px; border-bottom: 1px solid var(--line); }
+.boss-hr-profile-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 18px 0; }
+.boss-hr-profile-facts > div { display: grid; gap: 4px; padding: 14px; border: 1px solid var(--line); border-radius: 9px; min-width: 0; }
+.boss-hr-profile-facts span, .boss-hr-history span { color: var(--muted); font-size: 13px; }
+.boss-hr-profile-facts strong { overflow-wrap: anywhere; }
+.boss-hr-history { list-style: none; padding: 0; display: grid; gap: 8px; }
+.boss-hr-history li { display: grid; gap: 4px; padding: 12px; border-bottom: 1px solid var(--line); }
+.boss-central-hr :focus-visible, .boss-hr-documents :focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+@media (max-width: 700px) { .boss-hr-company-switch { width: 100%; } .boss-hr-company-switch select { flex: 1; max-width: none; } .boss-hr-directory table { width: 100%; min-width: 0; } .boss-hr-directory thead { display: none; } .boss-hr-directory tbody, .boss-hr-directory tr, .boss-hr-directory td { display: block; width: 100%; } .boss-hr-directory tr { border: 1px solid var(--line); border-radius: 10px; margin-bottom: 10px; padding: 12px; } .boss-hr-directory td { padding: 5px 0; border: 0; } .boss-hr-directory td:nth-child(n+2)::before { display: block; font-size: 11px; font-weight: 700; color: var(--muted); } .boss-hr-directory td:nth-child(2)::before { content: "Company and brands"; } .boss-hr-directory td:nth-child(3)::before { content: "Work"; } .boss-hr-directory td:nth-child(4)::before { content: "Manager"; } .boss-hr-directory td:nth-child(5)::before { content: "Employment"; } .boss-hr-directory td:nth-child(6)::before { content: "Account"; } .boss-hr-brand-grid, .boss-hr-profile-facts { grid-template-columns: 1fr; } .boss-hr-steps li { font-size: 0; } .boss-hr-steps li span { font-size: 13px; } }
 @media (max-width: 900px) { .boss-simple-metrics, .boss-department-modules { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 900px) { .boss-hr-layout { grid-template-columns: 1fr; } .boss-hr-navigation { display: flex; overflow-x: auto; } .boss-hr-navigation a { flex: none; } }
 @media (max-width: 650px) { .boss-simple-metrics, .boss-simple-columns, .boss-department-steps, .boss-department-modules, .boss-simple-shortcuts, .boss-hr-summary { grid-template-columns: 1fr; } }
