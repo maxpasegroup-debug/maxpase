@@ -2455,3 +2455,248 @@ progress { width: 120px; accent-color: var(--accent); }
 .startup-program-filters{display:flex;align-items:end;flex-wrap:wrap;gap:12px}.startup-program-filters label{display:grid;gap:5px;min-width:min(100%,190px);flex:1}.startup-program-filters input,.startup-program-filters select{width:100%;min-height:44px}.startup-program-controls{display:grid;gap:18px;min-width:0}.startup-program-controls .business-form{margin-top:12px}.startup-program-controls .row-actions{display:flex;flex-wrap:wrap;gap:10px}.startup-program-controls textarea{min-height:84px}.startup-program-controls button:focus-visible,.startup-program-filters a:focus-visible,.startup-program-filters button:focus-visible{outline:3px solid var(--aira-burgundy);outline-offset:3px}@media(max-width:640px){.startup-program-filters{display:grid}.startup-program-filters label{min-width:0}}
 
 .startup-admissions-counts{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:14px 0}.startup-admissions-counts>div{min-width:0;padding:15px;border:1px solid #d9e3f1;border-radius:12px;background:#f8fbff}.startup-admissions-counts dt{font-size:.8rem;color:var(--aira-burgundy);overflow-wrap:anywhere}.startup-admissions-counts dd{margin:5px 0 0;font-size:1.5rem;font-weight:700}.startup-admissions .record-details dd{overflow-wrap:anywhere;white-space:pre-wrap}.startup-admissions-review{display:grid;gap:12px;max-width:630px;margin-top:18px;padding:16px;border:1px solid #d9e3f1;border-radius:12px}.startup-admissions-review label{display:grid;gap:6px}.startup-admissions-review :is(select,textarea){width:100%;min-width:0;min-height:44px}.startup-admissions-review button:focus-visible{outline:3px solid var(--aira-burgundy);outline-offset:3px}@media(max-width:700px){.startup-admissions-counts{grid-template-columns:repeat(2,minmax(0,1fr))}.startup-admissions .record-details{grid-template-columns:1fr}}
+
+/* Keep every Startup Skool journey surface in the public site's burgundy, black and gold palette. */
+.startup-public,
+.startup-auth-page,
+.startup-workspace,
+.startup-founder-page,
+.portal-startup,
+.portal-startup.portal-workspace,
+.portal-login.startup-login {
+  --startup-ink: var(--aira-ivory);
+  --startup-line: rgba(212,175,98,.28);
+  color: var(--startup-ink);
+  background: var(--aira-black);
+}
+.startup-public-header,
+.startup-simple-header,
+.startup-work-header,
+.startup-founder-header,
+.portal-startup.portal-workspace .portal-header {
+  border-color: var(--startup-line);
+  background: var(--aira-deep-burgundy);
+  color: var(--aira-ivory);
+}
+.startup-public-brand,
+.startup-simple-header > a:first-child,
+.startup-work-header > a:first-child,
+.startup-founder-header > a,
+.startup-founder-header > span,
+.startup-work-header span,
+.startup-founder-summary span,
+.startup-founder-milestone-head > div > span,
+.startup-founder-notes time,
+.startup-founder-help,
+.startup-operations-briefing small {
+  color: var(--aira-light-gold);
+}
+.startup-public-brand small,
+.startup-kicker,
+.startup-public-hero h1 em,
+.startup-public-lede,
+.startup-public-note,
+.startup-section-heading p:last-child,
+.startup-steps article > span,
+.startup-paths article > span,
+.startup-steps p,
+.startup-paths p,
+.startup-public-faq details p {
+  color: var(--aira-gold);
+}
+.startup-public-section,
+.startup-path-section {
+  background: var(--aira-deep-burgundy);
+  color: var(--aira-ivory);
+}
+.startup-steps article,
+.startup-paths article,
+.startup-auth-card,
+.startup-app-card,
+.startup-founder-summary > div,
+.startup-founder-step,
+.startup-work-help,
+.startup-guide,
+.startup-application-steps li,
+.portal-startup.portal-workspace .portal-records,
+.portal-login.startup-login .portal-login-panel {
+  border-color: var(--startup-line);
+  background: var(--aira-deep-burgundy);
+  color: var(--aira-ivory);
+  box-shadow: 0 12px 34px rgba(0,0,0,.2);
+}
+.startup-visual-note,
+.startup-sia-mark {
+  border: 1px solid var(--startup-line);
+  background: var(--aira-deep-burgundy);
+  color: var(--aira-light-gold);
+}
+.startup-public-visual { background: var(--aira-black); }
+.startup-public-footer { border-top: 1px solid var(--startup-line); }
+.startup-public-footer,
+.startup-founder-tier,
+.startup-founder-state {
+  background: var(--aira-deep-burgundy);
+  color: var(--aira-light-gold);
+}
+.startup-auth-layout > aside > p:not(.startup-kicker),
+.startup-auth-layout ol,
+.startup-auth-card > p,
+.startup-app-card > p,
+.startup-work-intro > p:last-child,
+.startup-work-help p,
+.startup-founder-feedback,
+.startup-founder-intro p,
+.startup-founder-notes,
+.startup-status-line {
+  color: var(--aira-ivory);
+}
+.startup-founder-feedback {
+  border-left-color: var(--aira-gold);
+  background: rgba(212,175,98,.12);
+}
+.startup-form :is(input:not([type=checkbox]), select, textarea),
+.startup-review-form :is(select, textarea),
+.startup-founder-form :is(input, select, textarea),
+.startup-work-header button,
+.startup-founder-header form button,
+.startup-secondary {
+  border-color: var(--startup-line);
+  background: var(--aira-black);
+  color: var(--aira-ivory);
+}
+.startup-form :is(input, select, textarea)::placeholder,
+.startup-review-form textarea::placeholder { color: rgba(244,229,195,.62); }
+.startup-form label small,
+.startup-help,
+.startup-footnote,
+.startup-founder-intro > a,
+.startup-founder-summary span,
+.startup-founder-milestone-head > div > span,
+.startup-founder-notes time {
+  color: var(--aira-light-gold);
+}
+.startup-form label,
+.startup-review-form label,
+.startup-founder-form label,
+.startup-work-intro .startup-kicker {
+  color: var(--aira-ivory);
+}
+.startup-primary,
+.startup-nav-cta,
+.startup-login .portal-button,
+.portal-startup.portal-workspace .portal-button {
+  background: var(--aira-gold);
+  color: var(--aira-black) !important;
+}
+.startup-primary:hover,
+.startup-nav-cta:hover,
+.startup-login .portal-button:hover,
+.portal-startup.portal-workspace .portal-button:hover {
+  background: var(--aira-light-gold);
+}
+.startup-secondary {
+  border-color: var(--aira-gold);
+  color: var(--aira-light-gold);
+}
+.startup-status-line,
+.startup-resend,
+.startup-founder-notes li,
+.startup-review-form { border-color: var(--startup-line); }
+.startup-status-line strong { color: var(--aira-light-gold); }
+.startup-message {
+  border-left-color: var(--aira-gold);
+  background: rgba(212,175,98,.14);
+  color: var(--aira-ivory) !important;
+}
+.startup-error {
+  border-left-color: #ed6262;
+  background: rgba(237,98,98,.14);
+  color: #ffd5d5 !important;
+}
+.startup-application-steps li { border-color: var(--startup-line); }
+.startup-application-steps li > span {
+  background: var(--aira-gold);
+  color: var(--aira-black);
+}
+.startup-application-steps li[data-state="current"] {
+  border-color: var(--aira-gold);
+  background: rgba(212,175,98,.14);
+}
+.portal-startup.portal-workspace .portal-header { border-bottom: 1px solid var(--startup-line); }
+.portal-startup.portal-workspace .portal-workspace-heading > p:not(.portal-kicker),
+.portal-startup.portal-workspace .portal-records p,
+.portal-startup.portal-workspace .portal-records li span,
+.portal-startup.portal-workspace .portal-records time {
+  color: var(--aira-ivory);
+}
+.portal-startup.portal-workspace .portal-wordmark > span,
+.portal-login.startup-login .portal-wordmark > span,
+.portal-login.startup-login .portal-back,
+.portal-login.startup-login .portal-login-panel .portal-kicker,
+.portal-login.startup-login .startup-login-cta small {
+  color: var(--aira-light-gold);
+}
+.portal-login.startup-login .portal-login-panel > svg { color: var(--aira-gold); }
+.portal-login.startup-login .portal-login-panel .portal-button {
+  border: 1px solid var(--aira-gold);
+  background: var(--aira-gold);
+  color: var(--aira-black);
+}
+.portal-login.startup-login .portal-login-panel .portal-button:hover {
+  background: var(--aira-light-gold);
+}
+.portal-login.startup-login .portal-login-panel .muted,
+.portal-login.startup-login .startup-login-cta { color: var(--aira-ivory); }
+.portal-login.startup-login .startup-login-cta { border-color: var(--startup-line); }
+.portal-login.startup-login .portal-login-panel a:not(.portal-button) { color: var(--aira-light-gold); }
+.startup-auth-page :is(a, button, input, textarea, select, summary):focus-visible,
+.startup-workspace :is(a, button, input, textarea, select, summary):focus-visible,
+.startup-founder-page :is(a, button, input, textarea, select, summary):focus-visible,
+.startup-public :is(a, button, input, textarea, select, summary):focus-visible,
+.startup-login :is(a, button, input):focus-visible {
+  outline-color: var(--aira-gold);
+}
+.ax .sia-guide-panel,
+.startup-auth-page .sia-guide-panel,
+.startup-workspace .sia-guide-panel,
+.startup-founder-page .sia-guide-panel,
+.startup-login .sia-guide-panel,
+.portal-startup .sia-guide-panel {
+  border-color: var(--startup-line);
+  background: var(--aira-deep-burgundy);
+  color: var(--aira-ivory);
+}
+.ax .sia-guide-head,
+.startup-auth-page .sia-guide-head,
+.startup-workspace .sia-guide-head,
+.startup-founder-page .sia-guide-head,
+.startup-login .sia-guide-head,
+.portal-startup .sia-guide-head {
+  color: var(--aira-light-gold);
+}
+.ax .sia-guide-head button,
+.startup-auth-page .sia-guide-head button,
+.startup-workspace .sia-guide-head button,
+.startup-founder-page .sia-guide-head button,
+.startup-login .sia-guide-head button,
+.portal-startup .sia-guide-head button {
+  background: var(--aira-black);
+  color: var(--aira-light-gold);
+}
+.ax .sia-guide-panel details,
+.startup-auth-page .sia-guide-panel details,
+.startup-workspace .sia-guide-panel details,
+.startup-founder-page .sia-guide-panel details,
+.startup-login .sia-guide-panel details,
+.portal-startup .sia-guide-panel details {
+  border-color: var(--startup-line);
+}
+.ax .sia-guide-panel small,
+.startup-auth-page .sia-guide-panel small,
+.startup-workspace .sia-guide-panel small,
+.startup-founder-page .sia-guide-panel small,
+.startup-login .sia-guide-panel small,
+.portal-startup .sia-guide-panel small {
+  color: var(--aira-light-gold);
+}

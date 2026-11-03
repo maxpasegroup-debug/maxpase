@@ -3,7 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { useLayoutEffect, useRef, useState, type CSSProperties } from "react";
-import { Instrument_Sans } from "next/font/google";
+import { Anton, Instrument_Sans } from "next/font/google";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import Lenis from "lenis";
@@ -16,6 +16,7 @@ const sans = Instrument_Sans({
   style: ["normal", "italic"],
   weight: ["400", "500", "600", "700"]
 });
+const display = Anton({ subsets: ["latin"], weight: "400", variable: "--aira-condensed" });
 
 const nav = [
   ["Discover", "discover"],
@@ -95,7 +96,7 @@ export function StartupLanding({
     let smooth: Lenis | null = null;
     let ticker: ((time: number) => void) | null = null;
 
-    const guide = page.querySelector<HTMLElement>(".ax-guide");
+    const guide = page.querySelector<HTMLElement>(".ax-guide-bob");
     let tx = 0;
     let ty = 0;
     let cx = 0;
@@ -163,6 +164,34 @@ export function StartupLanding({
         stagger: 0.08,
         scrollTrigger: { trigger: ".ax-grow", start: "top 70%", once: true }
       });
+      const hero = page.querySelector<HTMLElement>(".ax-hero");
+      if (hero) {
+        const transition = gsap.timeline({
+          scrollTrigger: {
+            trigger: hero,
+            start: "top top",
+            end: "+=145%",
+            scrub: 0.8,
+            pin: true,
+            anticipatePin: 1,
+            invalidateOnRefresh: true,
+            onUpdate: self => hero.classList.toggle("is-card", self.progress > 0.12)
+          }
+        });
+        transition.to(".ax-hero-copy, .ax-float", { autoAlpha: 0, y: -28, stagger: 0.04, duration: 0.28, ease: "power1.in" }, 0);
+        transition.to(".ax-transition-type", { autoAlpha: 1, duration: 0.45, ease: "power1.out" }, 0.12);
+        transition.to(".ax-guide", {
+          top: "50%",
+          left: "50%",
+          bottom: "auto",
+          width: () => Math.min(window.innerWidth * (window.innerWidth <= 900 ? 0.54 : 0.21), window.innerWidth <= 900 ? 300 : 340),
+          xPercent: -50,
+          yPercent: -50,
+          duration: 1,
+          ease: "power2.inOut"
+        }, 0);
+        transition.to(".ax-transition-meta", { autoAlpha: 1, y: 0, duration: 0.3, ease: "power1.out" }, 0.72);
+      }
     }, page);
 
     const refresh = () => ScrollTrigger.refresh();
@@ -180,7 +209,7 @@ export function StartupLanding({
   }, []);
 
   return (
-    <main ref={root} className={`ax ${sans.className}`}>
+    <main ref={root} className={`ax ${sans.className} ${display.variable}`}>
       <header className="ax-nav">
         <Link className="ax-brand" href={home}>
           <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M9 1.2 10.7 7.3 16.8 9 10.7 10.7 9 16.8 7.3 10.7 1.2 9 7.3 7.3Z" fill="currentColor" /></svg>
@@ -218,6 +247,11 @@ export function StartupLanding({
             <Image src="/images/aira-vr-guide.jpg" alt="A person wearing a VR headset" fill priority sizes="(max-width: 900px) 88vw, 44vw" />
           </div>
         </div>
+        <div className="ax-transition-type" aria-hidden="true">
+          <span>STARTUP</span>
+          <span>SKOOL</span>
+        </div>
+        <p className="ax-transition-meta" aria-hidden="true">AIRA STARTUP SKOOL <span>·</span> Learn / Experiment / Build</p>
         <div className="ax-ring ax-float">
           <svg viewBox="0 0 160 160" aria-hidden="true">
             <defs>
