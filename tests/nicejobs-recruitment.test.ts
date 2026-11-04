@@ -97,6 +97,33 @@ beforeEach(async () => {
 afterAll(() => postgres.dispose(), 30000);
 
 describe("Nice Jobs interview, approval and offer controls", () => {
+  it("invites orientation after the short application and blocks detailed review until current evidence is complete", async () => {
+    const guidedVersion = await publish({ preOfferRequired: true, preOffer: preOfferFixture, application: { fields: [
+      { key: "interest", label: "Interest", type: "TEXT", phase: "SHORT", required: true },
+      { key: "experience", label: "Experience", type: "NUMBER", phase: "DETAILED", required: true }
+    ] } }, "JOB-001");
+    const draft = await applications.create(candidate, { versionId: guidedVersion, divisionId: labs });
+    await expect(applications.mutate(candidate, { reference: draft.reference, revision: draft.revision, action: "SUBMIT", answers: { interest: "Interested", experience: 2 } })).rejects.toThrow("configured application journey");
+    await expect(applications.mutate(candidate, { reference: draft.reference, revision: draft.revision, action: "START", answers: {} })).rejects.toThrow("Required: Interest");
+    const invited = await applications.mutate(candidate, { reference: draft.reference, revision: draft.revision, action: "START", answers: { interest: "Interested" } });
+    expect(invited.status).toBe("ORIENTATION_INVITED");
+    expect(invited.nextStep).toContain("orientation");
+    expect(await db.niceJobsOffer.count()).toBe(0);
+    await expect(applications.mutate(candidate, { reference: invited.reference, revision: invited.revision, action: "START", answers: { interest: "Interested" } })).rejects.toThrow();
+    await expect(applications.mutate(candidate, { reference: invited.reference, revision: invited.revision, action: "COMPLETE_DETAILS", answers: { interest: "Interested", experience: 2 } })).rejects.toThrow("Complete orientation");
+    await expect(applications.mutate(manager, { reference: invited.reference, revision: invited.revision, action: "ELIGIBILITY", reason: "Early review" })).rejects.toThrow();
+    const pre = createPreOfferService(db);
+    let evidence = (await pre.detail(candidate, invited.reference))!;
+    await pre.mutate(candidate, { reference: invited.reference, revision: evidence.revision, fingerprint: evidence.fingerprint, action: "COMPLETE_ORIENTATION", acknowledged: true, answers: { understood: true }, idempotencyKey: crypto.randomUUID() });
+    evidence = (await pre.detail(candidate, invited.reference))!;
+    await pre.mutate(candidate, { reference: invited.reference, revision: evidence.revision, fingerprint: evidence.fingerprint, action: "ACCEPT_POLICIES", acknowledged: true, idempotencyKey: crypto.randomUUID() });
+    const ready = await applications.detail(candidate, invited.reference, true);
+    await expect(applications.mutate(candidate, { reference: invited.reference, revision: ready.revision, action: "COMPLETE_DETAILS", answers: { interest: "Interested" } })).rejects.toThrow("Required: Experience");
+    const submitted = await applications.mutate(candidate, { reference: invited.reference, revision: ready.revision, action: "COMPLETE_DETAILS", answers: { interest: "Interested", experience: 2 } });
+    expect(submitted.status).toBe("SUBMITTED");
+    expect(await db.niceJobsApplicationHistory.findMany({ where: { applicationId: (await row(submitted)).id }, orderBy: { revision: "asc" }, select: { action: true } })).toEqual(expect.arrayContaining([{ action: "START" }, { action: "PRE_OFFER_ORIENTATION" }, { action: "PRE_OFFER_POLICIES" }, { action: "COMPLETE_DETAILS" }]));
+    expect(await db.niceJobsOffer.count()).toBe(0);
+  });
   it("completes one approved 100-day candidate journey with no skipped decision, policy or enrollment",async()=>{
     await db.permission.upsert({where:{key:"sia.access.read"},update:{},create:{key:"sia.access.read",name:"Read SIA availability",scope:"GROUP"}});
     const previousCandidate=candidate;

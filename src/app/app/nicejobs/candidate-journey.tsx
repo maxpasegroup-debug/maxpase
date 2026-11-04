@@ -1,9 +1,13 @@
 import { CircleCheck, Circle, CircleAlert } from "lucide-react";
 
-export function CandidateJourney({status,eligibility,screening,orientation,policies,interviewRequired,interviewCompleted,offerIssued,offerAccepted,offerExpired,enrollment,programme}:{status:string;eligibility:string;screening:string;orientation:boolean|null;policies:boolean|null;interviewRequired:boolean|null;interviewCompleted:boolean;offerIssued:boolean;offerAccepted:boolean;offerExpired:boolean;enrollment:string|null;programme:{durationDays:number;dayMode:string;timezone:string;jobVersion:number}|null}){
+export function CandidateJourney({status,eligibility,screening,orientation,policies,interviewRequired,interviewCompleted,offerIssued,offerAccepted,offerExpired,enrollment,programme,guided=false}:{status:string;eligibility:string;screening:string;orientation:boolean|null;policies:boolean|null;interviewRequired:boolean|null;interviewCompleted:boolean;offerIssued:boolean;offerAccepted:boolean;offerExpired:boolean;enrollment:string|null;programme:{durationDays:number;dayMode:string;timezone:string;jobVersion:number}|null;guided?:boolean}){
   const closed=["REJECTED","WITHDRAWN","CLOSED","OFFER_DECLINED"].includes(status);
   const steps=[
-    {name:"Application",state:status==="DRAFT"?"Pending":"Recorded"},
+    ...(guided ? [
+      {name:"Short application",state:status==="DRAFT"?"Pending":"Recorded"},
+      {name:"Orientation invitation",state:status==="DRAFT"?"Pending":"Recorded / not an offer"},
+      {name:"Detailed application",state:["DRAFT","ORIENTATION_INVITED"].includes(status)?"Pending":"Recorded"}
+    ] : [{name:"Application",state:status==="DRAFT"?"Pending":"Recorded"}]),
     {name:"Human screening",state:eligibility==="ELIGIBLE" && screening==="PASSED" ?"Recorded":"Pending"},
     {name:"Interview",state:interviewRequired===null?"Not configured":interviewRequired===false?"Not required by role policy":interviewCompleted?"Recorded":"Pending"},
     {name:"Role orientation",state:orientation===null?"Not configured":orientation?"Recorded":"Pending"},

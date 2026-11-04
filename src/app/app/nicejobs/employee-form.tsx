@@ -1,5 +1,5 @@
 "use client";
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { useRouter } from "next/navigation";
 import { applicationAction, type ApplicationActionState } from "./application-actions";
 export type EmployeeField = { name: string; label: string; type?: "text" | "textarea" | "date" | "datetime-local" | "checkbox" | "select"; required?: boolean; value?: string; choices?: { id: string; name: string }[] };
@@ -26,9 +26,11 @@ function EmployeeCommandForm({ realm, command, label, fields }: { realm: string;
 }
 export function WorkerSia({ realm, requestKeys }: { realm: string; requestKeys: string[] }) {
   const router = useRouter();
-  const [state, action, pending] = useActionState(async (s: ApplicationActionState, form: FormData) => { const result = await applicationAction(s, form); if (result.response || result.error) router.refresh(); return result; }, {});
-  return <section className="nj-worker-sia"><h2>TARA</h2><form action={action} className="nj-form"><input type="hidden" name="realm" value={realm} /><input type="hidden" name="operation" value="EMPLOYEE_SIA" /><input type="hidden" name="idempotencyKey" value={requestKeys[0]} /><label>Ask TARA<textarea name="message" required maxLength={2000} /></label><button className="button" disabled={pending}>{pending ? "Checking work..." : "Ask TARA"}</button></form>
-    <div className="nj-quick-actions">{["What should I do first?", "Show my tasks", "What's overdue?", "Help me with this task", "I'm blocked", "Submit today's report", "Show my leads", "Show my follow-ups", "Show my SOP", "Show my resources", "Show my messages", "How am I doing?", "What should I improve?", "What are my current improvement objectives?"].map((q, i) => <form key={q} action={action}><input type="hidden" name="realm" value={realm} /><input type="hidden" name="operation" value="EMPLOYEE_SIA" /><input type="hidden" name="idempotencyKey" value={requestKeys[i + 1]} /><button name="message" value={q} disabled={pending}>{q}</button></form>)}</div>
-    {state.error && <p role="alert">{state.error}</p>}{state.response && <div aria-live="polite"><ul>{state.response.actions.map(a => <li key={a}>{a}</li>)}</ul><dl>{state.response.facts.map((f, i) => <div key={i}><dt>{f.label}</dt><dd>{f.value}</dd></div>)}</dl>{state.response.limitations.map(l => <p key={l} className="muted">{l}</p>)}</div>}
+  const [requestKey, setRequestKey] = useState(requestKeys[0]);
+  const [message, setMessage] = useState("");
+  const [state, action, pending] = useActionState(async (s: ApplicationActionState, form: FormData) => { const result = await applicationAction(s, form); setRequestKey(crypto.randomUUID()); if (result.response) router.refresh(); return result; }, {});
+  return <section className="nj-worker-sia"><h2>TARA</h2><p>Ask about your assigned work. TARA currently supports the suggested questions and cannot make manager decisions.</p><form action={action} className="nj-form"><input type="hidden" name="realm" value={realm} /><input type="hidden" name="operation" value="EMPLOYEE_SIA" /><input type="hidden" name="idempotencyKey" value={requestKey} /><label>Ask TARA<textarea name="message" value={message} onChange={event => setMessage(event.target.value)} required maxLength={2000} disabled={pending} /></label><button className="button" disabled={pending}>{pending ? "Checking work..." : "Ask TARA"}</button></form>
+    <div className="nj-quick-actions">{["What should I do first?", "Show my tasks", "What's overdue?", "Help me with this task", "I'm blocked", "Submit today's report", "Show my leads", "Show my follow-ups", "Show my SOP", "Show my resources", "Show my messages", "How am I doing?", "What should I improve?", "What are my current improvement objectives?"].map(q => <button key={q} type="button" onClick={() => setMessage(q)} disabled={pending}>{q}</button>)}</div>
+    {state.error && <p role="alert">{state.error}</p>}{state.response && <p role="status">TARA guidance was recorded below. Check your task and manager instructions before acting.</p>}
   </section>;
 }

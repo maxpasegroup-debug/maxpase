@@ -5,6 +5,7 @@ import { curriculumIssues, curriculumSchedule, type CurriculumOjt } from "@/serv
 import type { z } from "zod";
 import type { quizConfiguration } from "@/server/nicejobs/onboarding-input";
 import { isTimezone } from "@/lib/timezone";
+import { firstCycleProgress } from "@/server/nicejobs/first-cycle";
 
 type Quiz = z.infer<typeof quizConfiguration>;
 type Activity = CurriculumOjt["stages"][number]["activities"][number];
@@ -12,6 +13,7 @@ const blankQuiz = (): Quiz => ({form:{fields:[],duplicatePolicy:"ACTIVE_PER_VERS
 export function CurriculumBuilder({value,update,resources,reviewer,renderQuiz}:{value:CurriculumOjt;update:(value:CurriculumOjt)=>void;resources:{id:string;name:string;type:string}[];reviewer:string;renderQuiz:(q:Quiz,update:(q:Quiz)=>void)=>ReactNode}) {
   const [stageIndex,setStage]=useState(0),[selectedDay,setDay]=useState(1),[preview,setPreview]=useState(false),[startDate,setStartDate]=useState("");
   const issues=curriculumIssues(value),stage=value.stages[stageIndex],activity=stage?.activities.find(a=>a.dayNumber===selectedDay),p=value.curriculum!;
+  const firstCycle = firstCycleProgress(value);
   const patch=(changes:Partial<Activity>)=>update({...value,stages:value.stages.map((s,i)=>i===stageIndex?{...s,activities:s.activities.map(a=>a.key===activity?.key?{...a,...changes}:a)}:s)});
   const policy=(changes:Partial<typeof p>)=>update({...value,curriculum:{...p,...changes}});
   let dates:ReturnType<typeof curriculumSchedule>=[];
@@ -22,6 +24,7 @@ export function CurriculumBuilder({value,update,resources,reviewer,renderQuiz}:{
   }
   return <fieldset className="nj-curriculum"><legend>100-day curriculum</legend>
     <div className="nj-curriculum-toolbar"><strong>{issues.length ? "Incomplete draft" : "Complete schedule / Awaiting job review"}</strong><button type="button" className="button button-secondary" aria-pressed={preview} onClick={()=>setPreview(!preview)}>{preview?<Pencil size={16}/>:<Eye size={16}/>} {preview?"Edit day":"Participant preview"}</button></div>
+    <p role="status">First cycle: {firstCycle.drafted} of {firstCycle.required} days contain draft lesson, practice, outcome and evidence instructions. Each day and the full 100-day schedule still need authorized review before publication.</p>
     <p>OJT reviewer: {reviewer}. <a href="#programme-setup">Manager and reviewer assignments</a></p>
     <div className="nj-curriculum-policy"><label>Day counting<select value={p.dayMode??""} onChange={e=>policy({dayMode:(e.target.value||null) as typeof p.dayMode,workingWeekdays:[]})}><option value="">Choose calendar or working days</option><option value="CALENDAR">Calendar days</option><option value="WORKING">Working days</option></select></label>
       <label>Programme timezone<input value={p.timezone??""} placeholder="Asia/Kolkata" maxLength={100} onChange={e=>policy({timezone:e.target.value||null})}/></label>

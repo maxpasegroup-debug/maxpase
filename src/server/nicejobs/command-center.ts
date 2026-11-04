@@ -54,7 +54,22 @@ export function createWorkforceCommandCenter(client: PrismaClient = prisma, now:
     const divisions = await client.organization.findMany({ where: { id: { in: commandIds }, parentId: b.company.id }, select: { id: true, name: true }, orderBy: { name: "asc" }, take: 50 });
     const applicationIds = scoped("nicejobs.application.read");
     const screening = applicationIds.length ? await client.niceJobsApplication.findMany({ where: { companyId: b.company.id, divisionId: { in: applicationIds }, status: { in: ["SUBMITTED", "ELIGIBILITY", "SCREENING", "MANAGEMENT_REVIEW"] }, area: { version: { template: { productId: b.product.id } } } }, select: { reference: true, status: true, eligibilityStatus: true, screeningStatus: true, updatedAt: true, area: { select: { version: { select: { title: true } } } } }, orderBy: [{ updatedAt: "asc" }, { id: "asc" }], take: 11 }) : null;
-    return { company: b.company.name, companyId: b.company.id, divisionId: q.divisionId ?? null, divisions, metrics, items: items.slice(0, 12), screening: screening?.slice(0, 10).map(a => ({ reference: a.reference, title: a.area.version.title, status: a.status, eligibility: a.eligibilityStatus, screening: a.screeningStatus, updatedAt: a.updatedAt, href: link("applications", "&reference=" + encodeURIComponent(a.reference)) })) ?? null, screeningTruncated: !!screening && screening.length > 10, scheduler: "NOT_CONFIGURED" as const, payoutProvider: "NOT_CONFIGURED" as const, asOf: clock };
+    const offerIds = scoped("nicejobs.offer.issue");
+    const offers = offerIds.length ? await client.niceJobsOffer.findMany({ where: { status: "READY", application: { companyId: b.company.id, divisionId: { in: offerIds }, area: { version: { template: { productId: b.product.id } } } } }, select: { id: true, application: { select: { reference: true, area: { select: { version: { select: { title: true } } } } } } }, orderBy: [{ updatedAt: "asc" }, { id: "asc" }], take: 6 }) : null;
+    const reviewIds = scoped("nicejobs.ojt.review");
+    const training = reviewIds.length ? await client.niceJobsTrainingProgress.findMany({
+      where: { status: "SUBMITTED", onboarding: { reviewerUserId: userId, application: { companyId: b.company.id, divisionId: { in: reviewIds }, area: { version: { template: { productId: b.product.id } } } } } },
+      select: { id: true, phase: true, onboarding: { select: { application: { select: { reference: true } } } } },
+      orderBy: [{ assignedAt: "asc" }, { id: "asc" }], take: 6,
+    }) : null;
+    const managerQueue = {
+      applications: screening?.slice(0, 5).map(a => ({ id: a.reference, title: a.area.version.title, detail: a.status.replaceAll("_", " "), href: link("applications", "&reference=" + encodeURIComponent(a.reference)) })) ?? null,
+      offers: offers?.slice(0, 5).map(o => ({ id: o.id, title: o.application.area.version.title, detail: "Ready for authorized human issuance", href: link("applications", "&reference=" + encodeURIComponent(o.application.reference)) })) ?? null,
+      training: training?.slice(0, 5).map(p => ({ id: p.id, title: "Training evidence", detail: p.phase.replaceAll("_", " ") + " evidence awaits your review", href: link("my-reviews", "&reference=" + encodeURIComponent(p.onboarding.application.reference)) })) ?? null,
+      missedTasks: taskIds.length ? items.filter(item => item.kind === "TASK").slice(0, 5) : null,
+      help: blockerIds.length ? items.filter(item => item.kind === "BLOCKER").slice(0, 5) : null,
+    };
+    return { company: b.company.name, companyId: b.company.id, divisionId: q.divisionId ?? null, divisions, metrics, items: items.slice(0, 12), managerQueue, screening: screening?.slice(0, 10).map(a => ({ reference: a.reference, title: a.area.version.title, status: a.status, eligibility: a.eligibilityStatus, screening: a.screeningStatus, updatedAt: a.updatedAt, href: link("applications", "&reference=" + encodeURIComponent(a.reference)) })) ?? null, screeningTruncated: !!screening && screening.length > 10, scheduler: "NOT_CONFIGURED" as const, payoutProvider: "NOT_CONFIGURED" as const, asOf: clock };
   }
   return { overview };
 }

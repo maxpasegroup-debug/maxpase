@@ -16,6 +16,7 @@ import { KnowledgeWorkspace, knowledgeViews } from "./knowledge-workspace";
 import { LeadWorkspace, leadViews } from "./lead-workspace";
 import { WorkforceControlWorkspace, workforceControlViews } from "./workforce-control-workspace";
 import { BossSia } from "./boss-sia";
+import { BossJobSetup } from "./boss-job-setup";
 
 const icons = { overview: LayoutDashboard, opportunities: BriefcaseBusiness, applicants: ClipboardList, workforce: Users, earnings: Wallet, system: Settings };
 export async function BossWorkspace({ userId, realm, base, query }: { userId: string; realm: string; base: string; query: Record<string, string | string[] | undefined> }) {
@@ -29,7 +30,7 @@ export async function BossWorkspace({ userId, realm, base, query }: { userId: st
     const href = (destination: string) => niceJobsControlHref(base, destination, scopedQuery);
     const assistance = ["workforce-command", "boss-system","training-management"].includes(view) ? await niceJobsControlPanel.assistance(userId, scope,view==="training-management") : null;
     const props = { userId, realm, base, query: { ...scopedQuery, view, control: "boss", ...(view === "content-management" && nav.divisionId ? { organizationId: nav.divisionId } : {}) } };
-    const content = view === "boss-system" ? <section className="nj-boss-system"><h1>System and launch readiness</h1>
+    const content = view === "job-setup" ? <BossJobSetup userId={userId} realm={realm} base={base} /> : view === "boss-system" ? <section className="nj-boss-system"><h1>System and launch readiness</h1>
       <dl className="nj-detail"><div><dt>TARA preparation</dt><dd>{assistance?.state.replaceAll("_", " ")}</dd></div><div><dt>Scheduled processing</dt><dd>Not configured / explicit authorized processing only</dd></div><div><dt>External WhatsApp delivery</dt><dd>Not configured / provider contract and live verification required</dd></div><div><dt>Payout delivery</dt><dd>Not configured / payout intents are not transferred funds</dd></div><div><dt>Real participant pilot</dt><dd>Not verified / manager and participant sign-off required</dd></div></dl>
       <h2>Human decision boundaries</h2><ul><li>Offers require management approval; acceptance records the candidate and immutable policy versions.</li><li>Activation requires readiness evidence and an authorized human.</li><li>Compensation rules, incentive decisions and settlements retain their independent approvals.</li><li>External messages require a verified provider, current consent, an approved policy and independent human approval followed by explicit dispatch confirmation.</li></ul>
       {realm === "corporate" && <p><Link href="/app/communications">Open separately authorized communication controls</Link></p>}

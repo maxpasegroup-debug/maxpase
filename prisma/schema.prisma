@@ -2583,6 +2583,10 @@ model SiaRun {
   outputTokens   Int?
   estimatedCost  Float?
   rationale      String?
+  // Nice Jobs TARA transcript. Null for other SIA uses and historical runs.
+  conversationPrompt String? @db.VarChar(2000)
+  conversationResponse String? @db.Text
+  conversationContext String? @db.VarChar(240)
   auditId        String?
   audit          AuditEvent?  @relation(fields: [auditId], references: [id], onDelete: Restrict)
   createdAt      DateTime     @default(now())
@@ -2590,6 +2594,7 @@ model SiaRun {
 
   @@unique([userId, siaId, idempotencyKey])
   @@index([siaId, organizationId, createdAt])
+  @@index([userId, conversationContext, createdAt])
 }
 
 model SiaAction {

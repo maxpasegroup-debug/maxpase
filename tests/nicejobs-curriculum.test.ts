@@ -4,9 +4,24 @@ import { ojtConfiguration } from "@/server/nicejobs/onboarding-input";
 import { fixtureProgramme } from "./fixtures/nicejobs-programme";
 import { learningSummary } from "@/server/nicejobs/learning-summary";
 import { configuration } from "@/server/nicejobs/input";
+import { firstCycleDraft, firstCycleProgress } from "@/server/nicejobs/first-cycle";
 
 const complete=()=>ojtConfiguration.parse(fixtureProgramme("synthetic-reviewer").ojt);
 describe("100-day curriculum and calendar",()=>{
+  it("prepares 30 role-specific draft days without fabricating approved training or unlocking publication",()=>{
+    const advisor=firstCycleDraft("JOB-001"),mentor=firstCycleDraft("JOB-DCM");
+    for(const draft of [advisor,mentor]){
+      const days=draft.stages.flatMap(stage=>stage.activities);
+      expect(days).toHaveLength(100);
+      expect(firstCycleProgress(draft)).toEqual({drafted:30,required:30});
+      expect(days.slice(0,30).every(day=>day.required && day.evidenceRequired && day.reviewRequired && !!day.learningText && !!day.instruction && !!day.expectedOutcome && !!day.evidenceRequirements)).toBe(true);
+      expect(days.slice(30).every(day=>!day.title && !day.learningText)).toBe(true);
+      expect(curriculumIssues(draft).length).toBeGreaterThan(0);
+      expect(configuration.safeParse({schemaVersion:1,ojt:draft}).success).toBe(true);
+    }
+    expect(advisor.stages[0].activities[0].title).not.toBe(mentor.stages[0].activities[0].title);
+    expect(advisor.stages[0].activities[0].learningText).toContain("manager-approved");
+  });
   it("bounds the saved curriculum size and requires uploaded references for oversized inline lessons",()=>{
     const ojt=complete();for(const stage of ojt.stages)for(const day of stage.activities){day.learningText="a".repeat(4000);day.instruction="b".repeat(4000);day.expectedOutcome="c".repeat(2000);day.evidenceRequirements="d".repeat(2000);}
     const parsed=configuration.safeParse({schemaVersion:1,ojt});expect(parsed.success).toBe(false);if(!parsed.success)expect(parsed.error.message).toContain("750 KiB");

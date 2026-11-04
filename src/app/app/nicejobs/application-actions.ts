@@ -118,7 +118,7 @@ export async function applicationAction(_state: ApplicationActionState, form: Fo
     const answers = form.has("answers") ? JSON.parse(String(form.get("answers"))) : undefined;
     const result = operation === "CREATE" ? await applicationService.create(userId, { versionId: form.get("versionId"), divisionId: form.get("divisionId"), answers: answers ?? {} }) : await applicationService.mutate(userId, { reference: form.get("reference"), revision: Number(form.get("revision")), action: operation, ...(answers !== undefined ? { answers } : {}), ...(form.get("reason") ? { reason: form.get("reason") } : {}), ...(form.get("candidateMessage") ? { candidateMessage: form.get("candidateMessage") } : {}), ...(form.get("category") ? { category: form.get("category") } : {}), ...(form.get("reviewResult") ? { reviewResult: form.get("reviewResult") } : {}) });
     revalidatePath("/app/nicejobs"); revalidatePath("/sites/jobs/gateway");
-    return { success: operation === "SUBMIT" ? "Application submitted: " + result.applicationId : "Saved", reference: result.reference, applicationId: result.applicationId };
+    return { success: operation === "START" ? "Orientation invitation recorded. This is not an offer." : ["SUBMIT", "COMPLETE_DETAILS"].includes(operation) ? "Application submitted for review: " + result.applicationId : "Saved", reference: result.reference, applicationId: result.applicationId };
   } catch (e) {
     if (e instanceof LeadDuplicateError) return { error: e.message, duplicates: { matches: e.matches, token: e.token } };
     if (e instanceof NiceJobsError) return { error: e.message };

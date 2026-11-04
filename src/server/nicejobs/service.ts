@@ -238,9 +238,30 @@ export function createNiceJobsService(client: PrismaClient = prisma) {
       const b = await boundary(db, userId), keys = ["nicejobs.job.read", "nicejobs.worker.read", "nicejobs.worker.assign", "nicejobs.job.create"];
       const ids = [...new Set(keys.flatMap(k => b.ctx.organizationIds(k)))];
       if (!ids.length) throw new AccessError("Access denied");
-      const divisions = await db.organization.findMany({ where: { id: { in: ids }, parentId: b.company.id, type: "DIVISION", status: "ACTIVE" }, select: { id: true, name: true }, take: 12, orderBy: { name: "asc" } });
+      const divisions = await db.organization.findMany({ where: { id: { in: ids }, parentId: b.company.id, type: "DIVISION", status: "ACTIVE" }, select: { id: true, name: true, slug: true }, take: 12, orderBy: { name: "asc" } });
       const createIds = b.ctx.organizationIds("nicejobs.job.create"), canCreate = (await b.ctx.decide("nicejobs.job.create", { organizationId: b.company.id })).allowed && divisions.some(d => createIds.includes(d.id));
-      return { companyId: b.company.id, companyName: "AIRA SKILL CITY PRIVATE LIMITED", divisions, createIds, canCreate, canSeed: canCreate && divisions.filter(d => d.name !== "AIRA Career Hub").every(d => createIds.includes(d.id)) && divisions.length === 4, canSeedOpportunities: canCreate && divisions.length === 4 && divisions.every(d => createIds.includes(d.id)), assignIds: b.ctx.organizationIds("nicejobs.worker.assign").filter(id => b.ctx.organizationIds("person.read").includes(id) && b.ctx.organizationIds("nicejobs.job.read").includes(id)), readJobs: b.ctx.organizationIds("nicejobs.job.read").length > 0, readWorkers: b.ctx.organizationIds("nicejobs.worker.read").length > 0 };
+      return { companyId: b.company.id, companyName: "AIRA SKILL CITY PRIVATE LIMITED", divisions, createIds, canCreate, canSeed: canCreate && divisions.filter(d => d.name !== "AIRA Career Hub").every(d => createIds.includes(d.id)) && divisions.length === 4, canSeedOpportunities: canCreate && divisions.length === 4 && divisions.every(d => createIds.includes(d.id)), canSeedLaunch: canCreate && ["aira-startup-school", "aira-skill-studio", "aira-career-hub"].every(slug => divisions.some(d => d.slug === slug && createIds.includes(d.id))), assignIds: b.ctx.organizationIds("nicejobs.worker.assign").filter(id => b.ctx.organizationIds("person.read").includes(id) && b.ctx.organizationIds("nicejobs.job.read").includes(id)), readJobs: b.ctx.organizationIds("nicejobs.job.read").length > 0, readWorkers: b.ctx.organizationIds("nicejobs.worker.read").length > 0 };
+    });
+  }
+  async function launchSetup(userId: string) {
+    return client.$transaction(async db => {
+      const b = await boundary(db, userId);
+      const readable = b.ctx.organizationIds("nicejobs.job.read");
+      if (!readable.length) throw new AccessError("Access denied");
+      const codes = ["JOB-001", "JOB-DCM"] as const;
+      const rows = [];
+      for (const code of codes) {
+        const template = await db.niceJobsTemplate.findUnique({ where: { companyId_code: { companyId: b.company.id, code } }, select: { id: true, productId: true } });
+        if (!template || template.productId !== b.product.id) { rows.push({ code, version: null, setup: null }); continue; }
+        const latest = await db.niceJobsVersion.findFirst({ where: { templateId: template.id }, orderBy: { number: "desc" }, include: versionInclude });
+        if (!latest || !latest.areas.length || !latest.areas.every(area => readable.includes(area.divisionId))) {
+          rows.push({ code, version: null, setup: null }); continue;
+        }
+        await areas(db, b, latest.areas.map(area => area.divisionId), "nicejobs.job.read");
+        const setup = await programmeChecklist(db, b.company.id, latest);
+        rows.push({ code, version: latest, setup });
+      }
+      return rows;
     });
   }
   async function seedKnown(userId: string) {
@@ -283,15 +304,15 @@ export function createNiceJobsService(client: PrismaClient = prisma) {
       return { records: rows.slice(0, 25), nextCursor: rows.length > 25 ? rows[24].id : null };
     });
   }
-  async function seedInitialOpportunities(userId: string) {
+  async function seedInitialOpportunities(userId: string, launchOnly = false) {
     return client.$transaction(async db => {
       const b = await boundary(db, userId);
       await b.ctx.requireAccess("nicejobs.job.create", { organizationId: b.company.id });
       const legalName = (await db.companyProfile.findUniqueOrThrow({ where: { organizationId: b.company.id } })).legalName;
-      const brand = await db.brand.findUniqueOrThrow({ where: { organizationId_slug: { organizationId: b.company.id, slug: "aira-labs" } } });
-      if (!legalName || brand.slug !== "aira-labs" || brand.status !== "ACTIVE") throw new input.NiceJobsUnavailable("Canonical employer or brand unavailable");
+      const brand = await db.brand.findUnique({ where: { organizationId_slug: { organizationId: b.company.id, slug: "aira-labs" } } });
+      if (!legalName || !launchOnly && (!brand || brand.status !== "ACTIVE")) throw new input.NiceJobsUnavailable("Canonical employer or brand unavailable");
       const rows = [];
-      for (const job of initialOpportunities(b.company.id, legalName, brand.id)) {
+      for (const job of initialOpportunities(b.company.id, legalName, brand?.id ?? "").filter(job => !launchOnly || ["JOB-001", "JOB-DCM"].includes(job.code))) {
         const divisions = await db.organization.findMany({ where: { slug: { in: job.slugs }, parentId: b.company.id, type: "DIVISION", status: "ACTIVE" }, select: { id: true }, take: 12 });
         if (divisions.length !== job.slugs.length) throw new input.NiceJobsUnavailable("Canonical opportunity scope unavailable");
         await areas(db, b, divisions.map(division => division.id), "nicejobs.job.create");
@@ -301,7 +322,7 @@ export function createNiceJobsService(client: PrismaClient = prisma) {
         if (previous && opportunityProfile(previous.configuration)) { rows.push(previous); continue; }
         const legacyStub = previous?.title === "Academic Advisor \u2014 Junior" && previous.status === "DRAFT" && previous.revision === 0 && !previous.publishedAt && !previous.description && !previous.configuration && !previous.context;
         if (previous && !legacyStub && !previous.publishedAt) throw new input.NiceJobsError("An existing draft contains work. Review it before initializing this catalogue entry.");
-        const configuration = JSON.stringify(input.configuration.parse({ schemaVersion: 1, preOfferRequired: true, preOffer: null, opportunity: job.opportunity, application: { fields: [{ key: "motivation", label: "Why are you interested in this opportunity?", type: "TEXTAREA", required: true }, { key: "availability", label: "What is your availability?", type: "TEXT", required: true }] } }));
+        const configuration = JSON.stringify(input.configuration.parse({ schemaVersion: 1, preOfferRequired: true, preOffer: null, opportunity: job.opportunity, application: { fields: [{ key: "motivation", label: "Why are you interested in this opportunity?", type: "TEXTAREA", phase: "SHORT", required: true }, { key: "availability", label: "What is your availability?", type: "TEXT", phase: "DETAILED", required: true }] } }));
         let row;
         if (legacyStub && previous && template) {
           await b.ctx.requireAccess("nicejobs.job.edit", { organizationId: b.company.id });
@@ -367,6 +388,6 @@ export function createNiceJobsService(client: PrismaClient = prisma) {
       return records.filter(r=>files.some(f=>f.id===r.privateReference && f.organizationId===r.organizationId)).map(r=>({id:r.id,name:r.title+" / v"+r.number,type:r.resourceType!}));
     });
   }
-  return { create, edit, newVersion, changeJob, jobs, detail, assign, transition, workforce, options, seedKnown, seedInitialOpportunities, opportunityOptions, people, visibility, trainingResources };
+  return { create, edit, newVersion, changeJob, jobs, detail, assign, transition, workforce, options, launchSetup, seedKnown, seedInitialOpportunities, opportunityOptions, people, visibility, trainingResources };
 }
 export const niceJobsService = createNiceJobsService();

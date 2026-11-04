@@ -11,12 +11,13 @@ import { createExecutionService } from "@/server/domain/execution-service";
 import { createCommunicationsService } from "@/server/communications/service";
 import { messageInput } from "@/server/communications/input";
 import { selection, conversationInput, personalityInput, defaultPersonality, memoryInput, actionInput, taskParameters } from "./input";
-import { registeredTool, allSiaToolRegistry, type SiaResponse } from "./registry";
+import { registeredTool, allSiaToolRegistry, resultSchema, type SiaResponse } from "./registry";
 import { configuredProvider, type SiaProvider } from "./provider";
 import { buildToolContext, memorySource, resolver, toolAuthority, type Selection, type Context } from "./context";
 import { workerQuestion } from "./worker-context";
 import { applicantQuestion } from "@/server/nicejobs/application-guidance";
 import { createApplicationService } from "@/server/nicejobs/applications";
+import { createEmployeeService } from "@/server/nicejobs/employee";
 const hash = (v: unknown) => createHash("sha256").update(JSON.stringify(v)).digest("hex");
 type DB = Prisma.TransactionClient;
 
@@ -156,12 +157,17 @@ export function createSiaService(client: PrismaClient = prisma, provider: SiaPro
   async function converse(userId: string, raw: unknown): Promise<SiaResponse> {
     const v = conversationInput.parse(raw), started = Date.now();
     const ctx = await human(client, userId, v); await ctx.requireAccess(v.audience === "WORKER" ? "nicejobs.workspace.self" : v.audience === "APPLICANT" ? "nicejobs.application.self" : "executive.read", v);
+    const conversationContext = v.audience === "APPLICANT" ? `APPLICANT:${v.applicationReference}` : v.audience === "WORKER" ? await (async () => {
+      const day = await createEmployeeService(client).day(userId);
+      if (day.assignment.divisionId !== v.organizationId) throw new AccessError("Worker scope unavailable");
+      return `WORKER:${day.assignment.id}`;
+    })() : null;
     const fingerprint = hash(v);
     let run = await client.$transaction(async db => {
       const h = await human(db, userId, v);
       const prior = await db.siaRun.findUnique({ where: { userId_siaId_idempotencyKey: { userId, siaId: v.siaId, idempotencyKey: v.idempotencyKey } } });
       if (prior) { if (prior.fingerprint !== fingerprint) throw new AccessError("Conversation replay mismatch"); return prior; }
-      const r = await db.siaRun.create({ data: { siaId: v.siaId, userId, organizationId: v.organizationId, projectId: v.projectId, idempotencyKey: v.idempotencyKey, fingerprint, intent: "PENDING", provider: provider.name, model: provider.model, status: "PROCESSING" } });
+      const r = await db.siaRun.create({ data: { siaId: v.siaId, userId, organizationId: v.organizationId, projectId: v.projectId, idempotencyKey: v.idempotencyKey, fingerprint, intent: "PENDING", provider: provider.name, model: provider.model, status: "PROCESSING", conversationContext, conversationPrompt: conversationContext ? v.message : null } });
       await event(db, h, v, "sia.request_started", "SiaRun", r.id);
       return r;
     });
@@ -173,6 +179,7 @@ export function createSiaService(client: PrismaClient = prisma, provider: SiaPro
         await toolAuthority(client, userId, v, tool.key);
         result = { facts: [], signals: [], recommendations: [], actions: ["Prepare a task proposal with its title, scope, reason and independent approval policy. No task has been created."], approvals: [], limitations: ["Deterministic development mode. Natural language cannot execute a write."], provider: provider.name, calculatedAt: new Date().toISOString(), context: {} };
       } else result = await buildToolContext(client, userId, v, tool.key);
+      if (conversationContext?.startsWith("WORKER:") && result.context.assignmentId !== conversationContext.slice("WORKER:".length)) throw new AccessError("Worker context changed");
       // Results are live, never a cached snapshot that could survive revocation.
       const fresh = await toolAuthority(client, userId, v, tool.key);
       await client.$transaction(async db => {
@@ -182,7 +189,8 @@ export function createSiaService(client: PrismaClient = prisma, provider: SiaPro
           await event(db, h, v, "sia.tool_selected", "SiaRun", run.id, { toolKey: tool.key, risk: tool.risk });
           if (result.recommendations.length) await event(db, h, v, "sia.recommendation_generated", "SiaRun", run.id, { count: result.recommendations.length });
           const audit = await event(db, h, v, "sia.tool_completed", "SiaRun", run.id, { toolKey: tool.key });
-          run = await db.siaRun.update({ where: { id: run.id }, data: { status: "SUCCEEDED", toolKey: tool.key, intent: tool.key, latencyMs: Date.now() - started, inputTokens: selected.inputTokens, outputTokens: selected.outputTokens, estimatedCost: selected.estimatedCost, failureCode: null, auditId: audit.auditId, rationale: JSON.stringify({ conclusion: "Authorized domain evidence retrieved", evidence: result.recommendations.flatMap(r => r.evidence), type: "CONCISE_RATIONALE_NOT_CHAIN_OF_THOUGHT" }) } });
+          const historyResponse = v.audience === "WORKER" ? { ...result, facts: [], signals: [], recommendations: [], actions: ["Open Today for current assignments and guidance. Ask your manager if you need help."], approvals: [], context: {}, limitations: ["Historical detail is omitted because access to work, lead and financial records can change. Open the current workspace for live information."] } : result;
+          run = await db.siaRun.update({ where: { id: run.id }, data: { status: "SUCCEEDED", toolKey: tool.key, intent: tool.key, latencyMs: Date.now() - started, inputTokens: selected.inputTokens, outputTokens: selected.outputTokens, estimatedCost: selected.estimatedCost, failureCode: null, auditId: audit.auditId, rationale: JSON.stringify({ conclusion: "Authorized domain evidence retrieved", evidence: result.recommendations.flatMap(r => r.evidence), type: "CONCISE_RATIONALE_NOT_CHAIN_OF_THOUGHT" }), conversationResponse: conversationContext ? JSON.stringify(historyResponse) : null } });
         }
       });
       if (!fresh.active) throw new AccessError("Access denied");
@@ -196,6 +204,23 @@ export function createSiaService(client: PrismaClient = prisma, provider: SiaPro
       });
       throw new AccessError(failureCode === "UNSUPPORTED_INTENT" ? "Request not supported in deterministic mode. Choose a registered business question." : failureCode === "MODEL_UNAVAILABLE" ? "Model unavailable. No answer or action was invented." : "Tool, authorized context or data unavailable. No business action was executed.");
     }
+  }
+  async function transcript(userId: string, raw: unknown) {
+    const request = z.discriminatedUnion("audience", [
+      z.object({ audience: z.literal("APPLICANT"), reference: z.string().uuid() }).strict(),
+      z.object({ audience: z.literal("WORKER") }).strict(),
+    ]).parse(raw);
+    const context = request.audience === "APPLICANT" ? await (async () => {
+      await createApplicationService(client).detail(userId, request.reference, true);
+      return `APPLICANT:${request.reference}`;
+    })() : `WORKER:${(await createEmployeeService(client).day(userId)).assignment.id}`;
+    const rows = await client.siaRun.findMany({ where: { userId, conversationContext: context, status: "SUCCEEDED", toolKey: { in: request.audience === "APPLICANT" ? ["get_application_guide"] : ["get_worker_day"] }, conversationResponse: { not: null } }, select: { id: true, conversationPrompt: true, conversationResponse: true, createdAt: true, provider: true }, orderBy: [{ createdAt: "desc" }, { id: "desc" }], take: 20 });
+    return rows.reverse().flatMap(row => {
+      try {
+        const parsed = resultSchema.safeParse(JSON.parse(row.conversationResponse!));
+        return parsed.success && row.conversationPrompt ? [{ id: row.id, prompt: row.conversationPrompt, response: parsed.data, at: row.createdAt, provider: row.provider }] : [];
+      } catch { return []; }
+    });
   }
   async function applicantAvailability(userId: string, applicationReference: string) {
     const applications = createApplicationService(client);
@@ -252,6 +277,6 @@ export function createSiaService(client: PrismaClient = prisma, provider: SiaPro
     const providers = await client.siaRun.groupBy({ by: ["provider", "model", "status"], where, _count: true });
     return { requests: aggregate._count, inputTokens: aggregate._sum.inputTokens, outputTokens: aggregate._sum.outputTokens, estimatedCost: aggregate._sum.estimatedCost, averageLatencyMs: aggregate._avg.latencyMs, providers };
   }
-  return { proposeCommunication, workspace, configure, setTool, saveMemory, reviewMemory, propose, proposeWithin, execute, converse, applicantAvailability, preview, usage };
+  return { proposeCommunication, workspace, configure, setTool, saveMemory, reviewMemory, execute, propose, proposeWithin, converse, transcript, applicantAvailability, preview, usage };
 }
 export const siaService = createSiaService();

@@ -22,6 +22,7 @@ export async function JobSpace({ userId, realm, base, query, worker }: Props) {
   const job = application.data;
   const enrollment = job.status === "OFFER_ACCEPTED" ? await dashboardRead(() => onboardingService.enrollment(userId, reference)) : null;
   let activeAssignment = false;
+  let workIdentity: Awaited<ReturnType<typeof employeeService.day>>["assignment"] | null = null;
   let workReadStatus: "UNAVAILABLE" | "UNAUTHORIZED" | null = null;
   if (worker) {
     const day = await dashboardRead(() => employeeService.day(userId));
@@ -29,9 +30,10 @@ export async function JobSpace({ userId, realm, base, query, worker }: Props) {
     if (day.data?.assignment.trainingReference) {
       const source = await dashboardRead(() => prisma.niceJobsApplication.findUnique({ where: { reference }, select: { id: true } }));
       activeAssignment = !!source.data && source.data.id === day.data.assignment.trainingReference;
+      if (activeAssignment) workIdentity = day.data.assignment;
     }
   }
-  const tabs = ["overview", "application", ...(enrollment?.data ? ["training"] : []), ...(activeAssignment ? ["work", "resources", "earnings"] : [])];
+  const tabs = ["overview", "application", ...(enrollment?.data ? ["today", "training"] : []), ...(activeAssignment ? ["work-id", "work", "resources", "earnings"] : [])];
   const requested = typeof query.tab === "string" ? query.tab : "overview";
   const tab = tabs.includes(requested) ? requested : "overview";
   const href = (next: string) => `${base}?view=job-space&reference=${encodeURIComponent(reference)}&tab=${next}`;
@@ -42,9 +44,11 @@ export async function JobSpace({ userId, realm, base, query, worker }: Props) {
     <Link className={styles.back} href={`${base}?view=home`}><ArrowLeft size={17} aria-hidden="true" /> My Workspace</Link>
     <header className={styles.header}><div className={styles.icon}><BriefcaseBusiness size={26} aria-hidden="true" /></div><div><p>{job.company} / {job.division}</p><h1>{job.title}</h1><span>{activeAssignment ? "Active work assignment" : `Application: ${applicationStage(job.status)} / ${job.status.replaceAll("_", " ").toLowerCase()}`}</span></div></header>
     <nav className={styles.tabs} aria-label={`${job.title} space`}>{tabs.map(item => <Link key={item} href={href(item)} aria-current={tab === item ? "page" : undefined}>{item[0].toUpperCase() + item.slice(1)}</Link>)}</nav>
-    {tab === "overview" && <div className={styles.overview}><section><h2>Your next step</h2><p>{activeAssignment ? "Open today's work, review assigned tasks and submit the required evidence." : enrollment?.data ? "Continue your recorded training and check feedback." : job.nextStep}</p><Link href={href(activeAssignment ? "work" : enrollment?.data ? "training" : "application")}>Continue <ArrowRight size={17} aria-hidden="true" /></Link></section><section><h2>In this job space</h2><p><FileText size={18} aria-hidden="true" /> Application and decisions</p><p role={enrollment && enrollment.status !== "AVAILABLE" ? "status" : undefined}><BookOpenCheck size={18} aria-hidden="true" /> {enrollment?.data ? `Training: ${enrollment.data.status.replaceAll("_", " ").toLowerCase()}` : trainingState}</p><p role={workReadStatus ? "status" : undefined}><BriefcaseBusiness size={18} aria-hidden="true" /> {activeAssignment ? "Work tools available" : workState}</p><p><Wallet size={18} aria-hidden="true" /> {activeAssignment ? "Wallet records are shown separately from payout status" : "Earnings are not available before worker activation"}</p></section></div>}
+    {tab === "overview" && <div className={styles.overview}><section><h2>Your next step</h2><p>{activeAssignment ? "Open today's work, review assigned tasks and submit the required evidence." : enrollment?.data ? "Open Today for your lesson, practice, report and reviewer feedback." : job.nextStep}</p><Link href={href(activeAssignment ? "work" : enrollment?.data ? "today" : "application")}>Continue <ArrowRight size={17} aria-hidden="true" /></Link></section><section><h2>In this job space</h2><p><FileText size={18} aria-hidden="true" /> Application and decisions</p><p role={enrollment && enrollment.status !== "AVAILABLE" ? "status" : undefined}><BookOpenCheck size={18} aria-hidden="true" /> {enrollment?.data ? `Training: ${enrollment.data.status.replaceAll("_", " ").toLowerCase()}` : trainingState}</p><p role={workReadStatus ? "status" : undefined}><BriefcaseBusiness size={18} aria-hidden="true" /> {activeAssignment ? "Work tools available" : workState}</p><p><Wallet size={18} aria-hidden="true" /> {activeAssignment ? "Wallet records are shown separately from payout status" : "Earnings are not available before worker activation"}</p></section></div>}
     {tab === "application" && <ApplicationWorkspace {...shared} query={{ ...shared.query, view: "my-applications" }} />}
+    {tab === "today" && enrollment?.data && <OnboardingWorkspace {...shared} query={{ ...shared.query, view: "my-day" }} />}
     {tab === "training" && enrollment?.data && <OnboardingWorkspace {...shared} query={{ ...shared.query, view: "my-onboarding" }} />}
+    {tab === "work-id" && workIdentity && <section className={styles.overview}><div><h2>Work ID</h2><p>This private work identity is linked to your active, approved assignment. It is not a government ID or proof of payment.</p><dl><dt>Name</dt><dd>{workIdentity.name}</dd><dt>Role</dt><dd>{workIdentity.title}</dd><dt>Company</dt><dd>{workIdentity.company}</dd><dt>Assignment reference</dt><dd>{workIdentity.id}</dd><dt>Start date</dt><dd>{workIdentity.startDate ? workIdentity.startDate.toISOString().slice(0, 10) + " UTC" : "Not recorded"}</dd></dl></div></section>}
     {tab === "work" && activeAssignment && <EmployeeWorkspace {...shared} query={{ ...shared.query, view: "my-day" }} />}
     {tab === "resources" && activeAssignment && <KnowledgeWorkspace {...shared} query={{ ...shared.query, view: "worker-resources" }} />}
     {tab === "earnings" && activeAssignment && <section className={styles.overview}><h2>Wallet</h2><p>Your wallet may include other authorized work. Verified earnings, pending amounts and payout status are separate; a recorded amount does not mean it was paid.</p><Link href={`${base}?view=worker-wallet`}>Open Wallet <ArrowRight size={17} aria-hidden="true" /></Link></section>}

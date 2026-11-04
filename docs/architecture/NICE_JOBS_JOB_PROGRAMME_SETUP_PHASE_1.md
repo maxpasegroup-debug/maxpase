@@ -1,5 +1,9 @@
 # Nice Jobs Job And Programme Setup
 
+## Current Boss Launch Path (2026-11-04)
+
+`/app/boss/nicejobs?view=job-setup` presents only `JOB-001` (Academic Advisor) and `JOB-DCM` (Defence Career Mentor) for the immediate launch. It reads the existing versioned job registry and full server-side setup checklist, displays every outstanding requirement, and opens the existing editor for employer, terms, nominated manager/reviewers, orientation, policies, training and publication. Its draft-creation action is idempotent and creates only these two unpublished identities; it preserves an existing `JOB-001` record. Historical third-role drafts remain in the registry, outside this focused launch path. Nothing is published by opening or creating a draft. The existing authorization, review, publication and public-read gates continue to apply. Existing records retain their persisted titles until an authorized draft edit changes them.
+
 Subsequent extension: the [100-Day Curriculum Builder](NICE_JOBS_100_DAY_CURRICULUM_PHASE_3.md) now adds a required complete-schedule gate to this checklist. The original phase descriptions below describe the earlier boundary; training outcomes or a duration alone no longer satisfy current launch readiness.
 
 Implemented locally: 2026-10-11. This is Phase 1 of the job-to-training setup improvements, not a replacement for the historical Nice Jobs Phase 01 workforce foundation.

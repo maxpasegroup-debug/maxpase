@@ -68,7 +68,7 @@ afterAll(() => postgres.dispose(), 30000);
 describe("Nice Jobs applications and screening", () => {
   it("creates three owner-supplied drafts without inventing employer or compensation details", async () => {
     const seeded = await jobs.seedInitialOpportunities(manager);
-    expect(seeded.map(v => v.title)).toEqual(["Junior Academic Advisor", "Business Automation Manager", "Defence Career Mentor"]);
+    expect(seeded.map(v => v.title)).toEqual(["Academic Advisor", "Business Automation Manager", "Defence Career Mentor"]);
     expect((await jobs.seedInitialOpportunities(manager)).map(v => v.id)).toEqual(seeded.map(v => v.id));
     const profiles = seeded.map(v => opportunityProfile(v.configuration)!);
     expect(profiles[1].legalEmployer.organizationId).toBe(company);

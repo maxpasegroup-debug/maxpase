@@ -3,7 +3,7 @@ import { z } from "zod";
 import { prisma } from "@/server/db";
 import { createAccessContext, AccessError } from "@/server/authorization/engine";
 import { operationalEvent, notify } from "@/server/domain/operational-events";
-import { applicationStates, formConfiguration, validateAnswers, evaluate } from "./application-configuration";
+import { applicationStates, formConfiguration, validateAnswers, evaluate, guidedLaunchApplication } from "./application-configuration";
 import { NiceJobsError, NiceJobsUnavailable, configuration } from "./input";
 import { opportunityProfile, publicationIssues } from "./opportunity-configuration";
 import { programmeChecklist } from "./programme-checklist";
@@ -11,7 +11,7 @@ import { programmeChecklist } from "./programme-checklist";
 const include = { candidate: { select: { displayName: true } }, company: { select: { name: true } }, area: { include: { division: { select: { name: true, parentId: true, status: true } }, version: { include: { template: true, areas: { take: 13, select: { divisionId: true } } } } } } } satisfies Prisma.NiceJobsApplicationInclude;
 const pageInput = z.object({ companyId: z.string().max(200).optional(), divisionId: z.string().max(200).optional(), versionId: z.string().max(200).optional(), status: z.enum(applicationStates).optional(), interviewFrom: z.string().date().optional(), interviewTo: z.string().date().optional(), search: z.string().trim().max(120).default(""), after: z.string().max(200).optional(), recent: z.boolean().optional(), limit: z.number().int().min(1).max(100).default(25) }).strict();
 const createInput = z.object({ versionId: z.string().min(1).max(200), divisionId: z.string().min(1).max(200), answers: z.unknown().default({}) }).strict();
-const mutationInput = z.object({ reference: z.string().uuid(), revision: z.number().int().min(0), action: z.enum(["SAVE", "SUBMIT", "WITHDRAW", "ELIGIBILITY", "SCREENING", "ELIGIBILITY_REVIEW", "SCREENING_REVIEW", "SHORTLIST", "REJECT", "CLOSE"]), answers: z.unknown().optional(), reason: z.string().trim().max(1000).optional(), candidateMessage: z.string().trim().max(1000).optional(), category: z.string().trim().max(120).optional(), reviewResult: z.enum(["ELIGIBLE", "INELIGIBLE", "PASSED", "FAILED"]).optional() }).strict();
+const mutationInput = z.object({ reference: z.string().uuid(), revision: z.number().int().min(0), action: z.enum(["SAVE", "START", "COMPLETE_DETAILS", "SUBMIT", "WITHDRAW", "ELIGIBILITY", "SCREENING", "ELIGIBILITY_REVIEW", "SCREENING_REVIEW", "SHORTLIST", "REJECT", "CLOSE"]), answers: z.unknown().optional(), reason: z.string().trim().max(1000).optional(), candidateMessage: z.string().trim().max(1000).optional(), category: z.string().trim().max(120).optional(), reviewResult: z.enum(["ELIGIBLE", "INELIGIBLE", "PASSED", "FAILED"]).optional() }).strict();
 const parseConfig = (raw: string | null) => raw ? configuration.parse(JSON.parse(raw)) : null;
 export function createApplicationService(client: PrismaClient = prisma) {
   async function publicOpportunities(raw: unknown = {}) {
@@ -46,7 +46,8 @@ export function createApplicationService(client: PrismaClient = prisma) {
   type Boundary = Awaited<ReturnType<typeof boundary>>;
   type Row = Prisma.NiceJobsApplicationGetPayload<{ include: typeof include }>;
   function publicRecord(row: Row) {
-    return { reference: row.reference, applicationId: row.applicationId, revision: row.revision, status: row.status, eligibilityStatus: row.eligibilityStatus, screeningStatus: row.screeningStatus, submittedAt: row.submittedAt, updatedAt: row.updatedAt, candidateMessage: row.candidateMessage, title: row.area.version.title, company: row.company.name, division: row.area.division.name, disclosure: candidateDisclosure(row.area.version.configuration), nextStep: row.status === "DRAFT" ? "Complete and submit your application" : row.status === "SHORTLISTED" ? "Await interview preparation" : row.status === "INTERVIEW" ? "Check your interview schedule" : row.status === "MANAGEMENT_REVIEW" ? "Await management decision" : row.status === "APPROVED" ? "Await offer preparation" : row.status === "OFFER" ? "Review your offer" : row.status === "OFFER_ACCEPTED" ? "Enroll in orientation from your accepted offer" : row.status === "OFFER_DECLINED" ? "No further action" : ["REJECTED", "WITHDRAWN", "CLOSED"].includes(row.status) ? "No further action" : row.eligibilityStatus === "NOT_CONFIGURED" || row.screeningStatus === "NOT_CONFIGURED" ? "Await configured review criteria" : "Application under review" };
+    const guided = guidedLaunchApplication(row.area.version.template.code, parseConfig(row.area.version.configuration));
+    return { reference: row.reference, applicationId: row.applicationId, revision: row.revision, status: row.status, eligibilityStatus: row.eligibilityStatus, screeningStatus: row.screeningStatus, submittedAt: row.submittedAt, updatedAt: row.updatedAt, candidateMessage: row.candidateMessage, title: row.area.version.title, code: row.area.version.template.code, guided, company: row.company.name, division: row.area.division.name, disclosure: candidateDisclosure(row.area.version.configuration), nextStep: row.status === "DRAFT" ? guided ? "Complete the short application" : "Complete and submit your application" : row.status === "ORIENTATION_INVITED" ? "Open your application to complete orientation or submit detailed answers" : row.status === "SHORTLISTED" ? "Await interview preparation" : row.status === "INTERVIEW" ? "Check your interview schedule" : row.status === "MANAGEMENT_REVIEW" ? "Await management decision" : row.status === "APPROVED" ? "Await offer preparation" : row.status === "OFFER" ? "Review your issued offer" : row.status === "OFFER_ACCEPTED" ? "Enroll in approved training" : row.status === "OFFER_DECLINED" ? "No further action" : ["REJECTED", "WITHDRAWN", "CLOSED"].includes(row.status) ? "No further action" : row.eligibilityStatus === "NOT_CONFIGURED" || row.screeningStatus === "NOT_CONFIGURED" ? "Await configured review criteria" : "Application under review" };
   }
   async function load(db: Prisma.TransactionClient, b: Boundary, reference: string, own: boolean) {
     const row = await db.niceJobsApplication.findFirst({ where: { reference, companyId: b.company.id, ...(own ? { candidateId: b.personId } : { divisionId: { in: b.ctx.organizationIds("nicejobs.application.read") } }), area: { version: { template: { companyId: b.company.id, productId: b.product.id } }, division: { parentId: b.company.id, status: "ACTIVE" } } }, include });
@@ -93,11 +94,11 @@ export function createApplicationService(client: PrismaClient = prisma) {
       throw e;
     }
   }
-  function checkedAnswers(config: ReturnType<typeof formConfiguration>, raw: unknown, submit: boolean) {
-    try { return validateAnswers(config, raw, submit); } catch (e) { throw new NiceJobsError(e instanceof Error ? e.message : "Check application fields"); }
+  function checkedAnswers(config: ReturnType<typeof formConfiguration>, raw: unknown, submit: boolean, phase: "ALL" | "SHORT" = "ALL") {
+    try { return validateAnswers(config, raw, submit, phase); } catch (e) { throw new NiceJobsError(e instanceof Error ? e.message : "Check application fields"); }
   }
   async function mutate(userId: string, raw: unknown) {
-    const data = mutationInput.parse(raw), own = ["SAVE", "SUBMIT", "WITHDRAW"].includes(data.action);
+    const data = mutationInput.parse(raw), own = ["SAVE", "START", "COMPLETE_DETAILS", "SUBMIT", "WITHDRAW"].includes(data.action);
     if (!own && data.answers !== undefined || data.action !== "REJECT" && (data.category || data.candidateMessage) || !["ELIGIBILITY_REVIEW", "SCREENING_REVIEW"].includes(data.action) && data.reviewResult) throw new NiceJobsError("Unexpected decision fields");
     return client.$transaction(async db => {
       const b = await boundary(db, userId, own), row = await load(db, b, data.reference, own);
@@ -106,21 +107,31 @@ export function createApplicationService(client: PrismaClient = prisma) {
       const patch: Prisma.NiceJobsApplicationUpdateManyMutationInput = { revision: { increment: 1 } };
       let evidence: unknown;
       if (own && (data.reason || data.category || data.candidateMessage)) throw new NiceJobsError("Unexpected candidate decision fields");
-      if (["SAVE", "SUBMIT"].includes(data.action)) {
-        if (row.status !== "DRAFT" || row.area.version.status !== "PUBLISHED" || row.area.version.template.status !== "PUBLISHED" || row.area.version.template.publishedVersionId !== row.versionId || row.area.version.template.visibility !== "PUBLIC") throw new NiceJobsError("This draft cannot be submitted or edited");
+      const guided = guidedLaunchApplication(row.area.version.template.code, config);
+      if (["SAVE", "START", "COMPLETE_DETAILS", "SUBMIT"].includes(data.action)) {
+        if (!(row.status === "DRAFT" || guided && row.status === "ORIENTATION_INVITED" && ["SAVE", "COMPLETE_DETAILS"].includes(data.action)) || row.area.version.status !== "PUBLISHED" || row.area.version.template.status !== "PUBLISHED" || row.area.version.template.publishedVersionId !== row.versionId || row.area.version.template.visibility !== "PUBLIC") throw new NiceJobsError("This application cannot be submitted or edited");
         if (publicationIssues(opportunityProfile(row.area.version.configuration), row.area.version.description, row.area.version.engagement).length) throw new NiceJobsError("This job's publication details are incomplete. Applications are unavailable.");
         if (!(await programmeChecklist(db, b.company.id, row.area.version)).ready) throw new NiceJobsError("This job's programme setup is incomplete. Applications are unavailable.");
-        patch.answers = JSON.stringify(checkedAnswers(form, data.answers ?? answers, data.action === "SUBMIT"));
-        if (data.action === "SUBMIT") {
+        if (guided && data.action === "SUBMIT" || !guided && ["START", "COMPLETE_DETAILS"].includes(data.action) || data.action === "START" && row.status !== "DRAFT" || data.action === "COMPLETE_DETAILS" && row.status !== "ORIENTATION_INVITED") throw new NiceJobsError("Use the configured application journey for this job");
+        if (guided && row.status === "ORIENTATION_INVITED") {
+          const { requirePreOffer } = await import("./pre-offer");
+          await requirePreOffer(db, row.id, row.area.version.configuration);
+        }
+        patch.answers = JSON.stringify(checkedAnswers(form, data.answers ?? answers, data.action !== "SAVE", data.action === "START" ? "SHORT" : "ALL"));
+        if (data.action === "START" || data.action === "SUBMIT") {
           const year = new Date().getUTCFullYear();
           const counter = await db.niceJobsApplicationSequence.upsert({ where: { year }, create: { year, value: 1 }, update: { value: { increment: 1 } } });
           patch.applicationId = `NJ-${year}-${String(counter.value).padStart(6, "0")}`;
-          patch.status = "SUBMITTED"; patch.submittedAt = new Date();
+          patch.status = data.action === "START" ? "ORIENTATION_INVITED" : "SUBMITTED";
+        }
+        if (data.action === "COMPLETE_DETAILS" || data.action === "SUBMIT") {
+          patch.status = "SUBMITTED";
+          patch.submittedAt = new Date();
           patch.eligibilityStatus = evaluate(config, JSON.parse(patch.answers as string), "eligibility").status === "NOT_CONFIGURED" ? "NOT_CONFIGURED" : "PENDING";
           patch.screeningStatus = evaluate(config, JSON.parse(patch.answers as string), "screening").status === "NOT_CONFIGURED" ? "NOT_CONFIGURED" : "PENDING";
         }
       } else if (data.action === "WITHDRAW") {
-        if (!form.withdrawalStates.includes(row.status as typeof form.withdrawalStates[number])) throw new NiceJobsError("Withdrawal is not permitted at this stage");
+        if (!form.withdrawalStates.includes(row.status as typeof form.withdrawalStates[number]) && !(guided && row.status === "ORIENTATION_INVITED")) throw new NiceJobsError("Withdrawal is not permitted at this stage");
         patch.status = "WITHDRAWN";
       } else {
         const key = { ELIGIBILITY: "evaluate", SCREENING: "evaluate", ELIGIBILITY_REVIEW: "evaluate", SCREENING_REVIEW: "evaluate", SHORTLIST: "shortlist", REJECT: "reject", CLOSE: "close" }[data.action as "ELIGIBILITY" | "SCREENING" | "ELIGIBILITY_REVIEW" | "SCREENING_REVIEW" | "SHORTLIST" | "REJECT" | "CLOSE"];
@@ -162,7 +173,7 @@ export function createApplicationService(client: PrismaClient = prisma) {
       if (changed.count !== 1) throw new NiceJobsError("This application changed. Refresh before retrying.");
       const updated = await db.niceJobsApplication.findUniqueOrThrow({ where: { id: row.id }, include });
       await record(db, b, updated, data.action, row.status, data.reason, evidence);
-      if (data.action !== "SAVE") await notification(db, b, updated);
+      if (data.action !== "SAVE") await notification(db, b, updated, data.action === "START" ? "Your orientation is ready. Complete it before your detailed application. This is not an offer." : undefined, data.action === "START" ? "Orientation invitation" : "Application update");
       return publicRecord(updated);
     });
   }
@@ -204,7 +215,7 @@ export function createApplicationService(client: PrismaClient = prisma) {
       const b = await boundary(db, userId, own), row = await load(db, b, reference, own);
       const form = formConfiguration(parseConfig(row.area.version.configuration));
       const decisionAvailable = row.area.version.template.status === "PUBLISHED" && row.area.version.status === "PUBLISHED" && !!row.area.version.publishedAt;
-const common = { ...publicRecord(row), candidateName: row.candidate.displayName, answers: JSON.parse(row.answers), form: own ? { ...form, rejectionCategories: [] } : form, canEdit: row.status === "DRAFT" && (await programmeChecklist(db, b.company.id, row.area.version)).ready && decisionAvailable && row.area.version.template.publishedVersionId === row.versionId && row.area.version.template.visibility === "PUBLIC" && !publicationIssues(opportunityProfile(row.area.version.configuration), row.area.version.description, row.area.version.engagement).length, canWithdraw: form.withdrawalStates.includes(row.status as typeof form.withdrawalStates[number]) };
+      const common = { ...publicRecord(row), candidateName: row.candidate.displayName, answers: JSON.parse(row.answers), form: own ? { ...form, rejectionCategories: [] } : form, canEdit: (row.status === "DRAFT" || row.status === "ORIENTATION_INVITED") && (await programmeChecklist(db, b.company.id, row.area.version)).ready && decisionAvailable && row.area.version.template.publishedVersionId === row.versionId && row.area.version.template.visibility === "PUBLIC" && !publicationIssues(opportunityProfile(row.area.version.configuration), row.area.version.description, row.area.version.engagement).length, canWithdraw: form.withdrawalStates.includes(row.status as typeof form.withdrawalStates[number]) || row.status === "ORIENTATION_INVITED" && guidedLaunchApplication(row.area.version.template.code, parseConfig(row.area.version.configuration)) };
       if (own) return { ...common, management: null };
       const history = await db.niceJobsApplicationHistory.findMany({ where: { applicationId: row.id, ...(afterRevision !== undefined ? { revision: { lt: afterRevision } } : {}) }, orderBy: { revision: "desc" }, take: 26 });
       const events = await db.operationalEvent.findMany({ where: { id: { in: history.map(h => h.eventId) }, entityType: "NiceJobsApplication", entityId: row.id, organizationId: row.divisionId }, select: { id: true, actor: { select: { person: { select: { displayName: true } } } } }, take: 26 });

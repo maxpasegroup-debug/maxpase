@@ -20,7 +20,7 @@ function setup(status = "SUBMITTED", enrolled = false, active = false, denied = 
     return { reference, title: "Academic Advisor", company: "AIRA Skill City", division: "Skill Studio", status, nextStep: "Await human review" };
   });
   const enrollment = vi.fn(async () => { if (trainingUnavailable) throw new Error("UNAVAILABLE"); return enrolled ? { status: "OJT" } : null; });
-  const day = vi.fn(async () => { if (workReadFailure) throw new Error(workReadFailure); return { assignment: { trainingReference: active ? "owned-db-id" : "other-db-id" } }; });
+  const day = vi.fn(async () => { if (workReadFailure) throw new Error(workReadFailure); return { assignment: { id: "assignment-id", name: "Private test worker", title: "Academic Advisor", company: "AIRA Skill City", startDate: new Date("2026-10-01T00:00:00.000Z"), trainingReference: active ? "owned-db-id" : "other-db-id" } }; });
   const findUnique = vi.fn(async () => ({ id: "owned-db-id" }));
   const code = transpileModule(readFileSync("src/app/app/nicejobs/job-space.tsx", "utf8"), { compilerOptions: { module: ModuleKind.CommonJS, jsx: JsxEmit.ReactJSX, esModuleInterop: true } }).outputText;
   const target = { exports: {} as { JobSpace: (props: { userId: string; realm: "jobs"; base: string; query: Record<string, string>; worker: boolean }) => Promise<ReactNode> } };
@@ -65,6 +65,7 @@ describe("Nice Jobs job space", () => {
     expect(html).toContain("view=job-space&amp;reference=");
     expect(html).not.toContain("Existing work workflow");
     expect(html).not.toContain("tab=resources");
+    expect(html).not.toContain("tab=work-id");
     expect(fixture.day).not.toHaveBeenCalled();
   });
 
@@ -73,6 +74,7 @@ describe("Nice Jobs job space", () => {
     const html = await fixture.render({ tab: "training" });
     expect(html).toContain("Existing training workflow");
     expect(html).toContain('data-view="my-onboarding"');
+    expect(await fixture.render({tab:"today"})).toContain('data-view="my-day"');
     expect(html).not.toContain("tab=work");
   });
 
@@ -100,6 +102,8 @@ describe("Nice Jobs job space", () => {
     const own = setup("OFFER_ACCEPTED", true, true);
     expect(await own.render({ tab: "work" }, true)).toContain("Existing work workflow");
     expect(await own.render({ tab: "resources" }, true)).toContain("Existing resources workflow");
+    expect(await own.render({ tab: "work-id" }, true)).toContain("Private test worker");
+    expect(await own.render({ tab: "work-id" }, true)).toContain("assignment-id");
     expect(await own.render({ tab: "earnings" }, true)).toContain("Open Wallet");
     expect(await own.render({ tab: "earnings" }, true)).toContain("does not mean it was paid");
     expect(isParticipantDashboardView("job-space")).toBe(true);

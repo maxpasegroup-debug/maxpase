@@ -11,6 +11,7 @@ import { runInNewContext } from "node:vm";
 import { transpileModule, ModuleKind, JsxEmit } from "typescript";
 import type { ComponentType, ReactNode } from "react";
 import { curriculumIssues,curriculumSchedule,emptyCurriculum } from "@/server/nicejobs/curriculum";
+import { firstCycleProgress } from "@/server/nicejobs/first-cycle";
 import { isTimezone } from "@/lib/timezone";
 
 // Compile this one JSX surface; Next's preserve setting remains unchanged.
@@ -38,24 +39,26 @@ describe("Nice Jobs participant dashboard", () => {
   });
   it("renders Today priorities, honest media/report signals and historical snapshot labels",()=>{
     const {TrainingToday}=loadComponent<{TrainingToday:ComponentType<Record<string,unknown>>}>("src/app/app/nicejobs/training-today.tsx",{"./onboarding-form":{OnboardingCommand:(p:{label:string})=>createElement("button",null,p.label)}});
-    const detail={title:"Synthetic training",reference:"own-reference",status:"OJT",today:{date:"2026-10-13",timezone:"Asia/Kolkata",day:5,stage:"Practice",nonWorkingDay:false,beforeStart:false,scheduleEnded:false,counts:{completed:2,pending:1,awaitingReview:1,overdue:1,future:95},days:{unit:"days",completed:0,required:100},upcoming:[{day:10,title:"Synthetic milestone",stage:"Practice",date:"2026-10-18"}]},dailyReports:[],nextRequirement:{id:"next-activity",title:"Required evidence",status:"SUBMITTED"},progress:[{id:"next-activity"}]};
+    const detail={title:"Synthetic training",reference:"own-reference",status:"OJT",today:{date:"2026-10-13",timezone:"Asia/Kolkata",day:5,stage:"Practice",todayProgressId:"today-activity",nonWorkingDay:false,beforeStart:false,scheduleEnded:false,counts:{completed:2,pending:1,awaitingReview:1,overdue:1,future:95},days:{unit:"days",completed:0,required:100},upcoming:[{day:10,title:"Synthetic milestone",stage:"Practice",date:"2026-10-18"}]},dailyReports:[],nextRequirement:{id:"next-activity",title:"Required evidence",status:"SUBMITTED"},progress:[{id:"next-activity"},{id:"today-activity",title:"One small practice",status:"PENDING",text:"Record one authorized follow-up",learningText:"Read the approved guidance",expectedOutcome:"One next step",evidenceRequirements:"Work reference or simulation note"}]};
     const props={detail,realm:"jobs",href:()=>"/gateway?view=my-onboarding",command:()=>({}),own:true};
-    const html=renderToStaticMarkup(createElement(TrainingToday,props));expect(html).toContain("Submission alone is not completion");expect(html).toContain("Submit daily training report");expect(html).toContain("Overdue (including review waits)");expect(html).toContain('href="#training-next-activity"');expect(html).toContain("Synthetic milestone");
+    const html=renderToStaticMarkup(createElement(TrainingToday,props));expect(html).toContain("Submission alone is not completion");expect(html).toContain("Submit daily training report");expect(html).toContain("Overdue (including review waits)");expect(html).toContain('href="#training-next-activity"');expect(html).toContain("Synthetic milestone");expect(html).toContain("First 30-day training cycle");expect(html).toContain("One small practice");expect(html).toContain("Read the approved guidance");expect(html).toContain("Work reference or simulation note");expect(html).toContain('href="#training-today-activity"');
     const paused=renderToStaticMarkup(createElement(TrainingToday,{...props,detail:{...detail,control:{paused:true}}}));expect(paused).not.toContain("Submit daily training report");
     const recorded={date:"2026-10-13",submissions:[{id:"report-submission",attempt:1,submittedAt:new Date("2026-10-13T10:00:00Z"),notes:"<script>escaped report</script>",snapshot:{completed:0,awaitingReview:1,overdue:1,completedToday:[]}}]};
     const saved=renderToStaticMarkup(createElement(TrainingToday,{...props,detail:{...detail,dailyReports:[recorded]}}));expect(saved).toContain("Record report correction");expect(saved).toContain("Recorded, not training approval");expect(saved).toContain("At reporting:");expect(saved).toContain("&lt;script&gt;");expect(saved).not.toContain("<script>");
   });
   it("shows recorded candidate checkpoints without treating accepted offers as enrollment or activation",()=>{
-    type Props={status:string;eligibility:string;screening:string;orientation:boolean|null;policies:boolean|null;interviewRequired:boolean|null;interviewCompleted:boolean;offerIssued:boolean;offerAccepted:boolean;offerExpired:boolean;enrollment:string|null;programme:{durationDays:number;dayMode:string;timezone:string;jobVersion:number}|null};
+    type Props={status:string;eligibility:string;screening:string;orientation:boolean|null;policies:boolean|null;interviewRequired:boolean|null;interviewCompleted:boolean;offerIssued:boolean;offerAccepted:boolean;offerExpired:boolean;enrollment:string|null;programme:{durationDays:number;dayMode:string;timezone:string;jobVersion:number}|null;guided?:boolean};
     const {CandidateJourney}=loadComponent<{CandidateJourney:ComponentType<Props>}>("src/app/app/nicejobs/candidate-journey.tsx",{});
     const p={status:"OFFER_ACCEPTED",eligibility:"ELIGIBLE",screening:"PASSED",orientation:true,policies:true,interviewRequired:true,interviewCompleted:true,offerIssued:true,offerAccepted:true,offerExpired:false,enrollment:null,programme:{durationDays:100,dayMode:"WORKING",timezone:"Asia/Kolkata",jobVersion:3}};
     const html=renderToStaticMarkup(createElement(CandidateJourney,p));expect(html).toContain("Your confirmation required");expect(html).toContain("100 working days");expect(html).toContain("neither activates employment");expect(html).not.toContain("Enrolled");
     const enrolled=renderToStaticMarkup(createElement(CandidateJourney,{...p,enrollment:"NOT_STARTED"}));expect(enrolled).toContain("Enrolled");
     const missing=renderToStaticMarkup(createElement(CandidateJourney,{...p,orientation:null,policies:null,offerAccepted:false,offerExpired:true,enrollment:"CANCELLED"}));expect(missing).toContain("Not configured");expect(missing).toContain("Expired / Contact your manager");expect(missing).toContain("Cancelled");
+    const invited=renderToStaticMarkup(createElement(CandidateJourney,{...p,status:"ORIENTATION_INVITED",eligibility:"NOT_CONFIGURED",screening:"NOT_CONFIGURED",orientation:false,policies:false,offerIssued:false,offerAccepted:false,offerExpired:false,programme:null,guided:true}));
+    expect(invited).toContain("Short application");expect(invited).toContain("Orientation invitation");expect(invited).toContain("Recorded / not an offer");expect(invited).toContain("Detailed application");expect(invited).not.toContain("Issued / Review and respond");
   });
   it("renders ten editable day slots per stage and honest incomplete/review labels without exposing a giant form",()=>{
     type Props={value:ReturnType<typeof emptyCurriculum>;update:(v:ReturnType<typeof emptyCurriculum>)=>void;resources:{id:string;name:string;type:string}[];reviewer:string;renderQuiz:()=>ReactNode};
-    const {CurriculumBuilder}=loadComponent<{CurriculumBuilder:ComponentType<Props>}>("src/app/app/nicejobs/curriculum-builder.tsx",{"@/server/nicejobs/curriculum":{curriculumIssues,curriculumSchedule},"@/lib/timezone":{isTimezone}});
+    const {CurriculumBuilder}=loadComponent<{CurriculumBuilder:ComponentType<Props>}>("src/app/app/nicejobs/curriculum-builder.tsx",{"@/server/nicejobs/curriculum":{curriculumIssues,curriculumSchedule},"@/server/nicejobs/first-cycle":{firstCycleProgress},"@/lib/timezone":{isTimezone}});
     const value=emptyCurriculum();value.stages[0].activities[0].learningText="<script>escaped learning</script>";value.stages[0].activities[9].milestone=false;
     const html=renderToStaticMarkup(createElement(CurriculumBuilder,{value,update:()=>{},resources:[],reviewer:"Not nominated",renderQuiz:()=>null}));
     expect(html).toContain("Incomplete draft");expect(html).toContain("Calendar days");expect(html).toContain("Working days");expect(html).toContain("No deadline shifting");expect(html).toContain("&lt;script&gt;");
@@ -155,6 +158,9 @@ describe("Nice Jobs participant dashboard", () => {
     const landingOpportunities = vi.fn(async () => ({ records: [], nextCursor: null }));
     const { default: PortalLanding } = loadComponent<{ default: (props: { params: Promise<{ site: string }> }) => Promise<ReactNode> }>("src/app/sites/[site]/page.tsx", {
       "@/server/portals/request": { requestPortal }, "@/server/portals/sites": { portalSites: [] },
+      "@/components/aira/AiraLanding": { AiraLanding: () => { throw new Error("Skill City landing must not render for Nice Jobs"); } },
+      "@/components/aira/ventures": { venturesFor: () => [] },
+      "next/font/google": { Syne: () => ({ variable: "display" }), Manrope: () => ({ variable: "text" }) },
       "../labs-ui/landing": { LabsLanding: () => { throw new Error("Labs landing must not render for Nice Jobs"); } },
       "../startup-ui/landing": { StartupLanding: () => { throw new Error("Startup landing must not render for Nice Jobs"); } },
       "../jobs-ui/landing": { JobsLanding: ({ paths: landingPaths }: { paths: typeof paths }) => createElement("a", { href: landingPaths.opportunities }, "Explore Opportunities") },

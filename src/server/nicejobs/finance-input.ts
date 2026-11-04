@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { currency, minorInput, decimalInput, compareDecimal } from "./money";
 import { NiceJobsError } from "./input";
+import { marginalRule } from "./marginal-milestone";
 const id = z.string().min(1).max(100), text = z.string().trim().min(1).max(2000), instant = z.string().datetime();
 export const incentiveRule = z.discriminatedUnion("type", [
   z.object({ type: z.literal("FIXED_AMOUNT"), amountMinor: minorInput }).strict(),
@@ -8,9 +9,10 @@ export const incentiveRule = z.discriminatedUnion("type", [
   z.object({ type: z.literal("PERCENTAGE"), baseMinor: minorInput, basisPoints: z.string().regex(/^(0|[1-9]\d{0,4})$/).refine(v => BigInt(v) <= 10000n) }).strict(),
   z.object({ type: z.literal("THRESHOLD"), minimumActual: decimalInput, amountMinor: minorInput }).strict(),
   z.object({ type: z.literal("TIERED"), tiers: z.array(z.object({ minimumActual: decimalInput, amountMinor: minorInput }).strict()).min(1).max(20).refine(t => t.every((r, i) => !i || compareDecimal(t[i - 1].minimumActual, r.minimumActual) < 0), "Tiers must increase") }).strict(),
-  z.object({ type: z.literal("CUSTOM_POLICY"), reference: text }).strict()
+  z.object({ type: z.literal("CUSTOM_POLICY"), reference: text }).strict(),
+  marginalRule,
 ]);
-export const incentivePolicy = z.object({ name: z.string().trim().min(1).max(200), divisionId: id, jobVersionId: id, frameworkVersionId: id, currency, effectiveAt: instant, expiresAt: instant.optional(), metricKey: z.string().regex(/^[A-Z][A-Z0-9_]{0,49}$/), eligibility: z.object({ requireActive: z.boolean(), minimumActual: decimalInput, allowedStatuses: z.array(z.enum(["ON_TRACK", "ATTENTION", "BELOW_EXPECTATION"])).min(1).max(3), excludedPipStatuses: z.array(z.enum(["DRAFT", "ACTIVE", "UNDER_REVIEW", "COMPLETED", "CANCELLED"])).max(5) }).strict(), rule: incentiveRule, rounding: z.enum(["FLOOR", "CEILING", "HALF_UP"]), approvalControlPointId: id, settlementControlPointId: id, adjustmentControlPointId: id.optional(), settlement: z.object({ minimumMinor: minorInput, allowAdjustments: z.boolean() }).strict() }).strict().refine(p => !p.expiresAt || p.effectiveAt < p.expiresAt, "Invalid effective period").refine(p => !p.settlement.allowAdjustments || !!p.adjustmentControlPointId, "Adjustments require an independent human control");
+export const incentivePolicy = z.object({ name: z.string().trim().min(1).max(200), sourceVersionId: id.optional(), divisionId: id, jobVersionId: id, frameworkVersionId: id, currency, effectiveAt: instant, expiresAt: instant.optional(), metricKey: z.string().regex(/^[A-Z][A-Z0-9_]{0,49}$/), eligibility: z.object({ requireActive: z.boolean(), minimumActual: decimalInput, allowedStatuses: z.array(z.enum(["ON_TRACK", "ATTENTION", "BELOW_EXPECTATION"])).min(1).max(3), excludedPipStatuses: z.array(z.enum(["DRAFT", "ACTIVE", "UNDER_REVIEW", "COMPLETED", "CANCELLED"])).max(5) }).strict(), rule: incentiveRule, rounding: z.enum(["FLOOR", "CEILING", "HALF_UP"]), approvalControlPointId: id, settlementControlPointId: id, adjustmentControlPointId: id.optional(), settlement: z.object({ minimumMinor: minorInput, allowAdjustments: z.boolean() }).strict() }).strict().refine(p => !p.expiresAt || p.effectiveAt < p.expiresAt, "Invalid effective period").refine(p => !p.settlement.allowAdjustments || !!p.adjustmentControlPointId, "Adjustments require an independent human control");
 const base = { confirmed: z.literal(true), idempotencyKey: z.uuid() }, revision = z.number().int().nonnegative();
 export const financeCommand = z.discriminatedUnion("operation", [
   z.object({ ...base, operation: z.literal("POLICY_CREATE"), payload: incentivePolicy }).strict(),
@@ -34,6 +36,7 @@ export const financeQuery = z.object({ management: z.boolean().default(false), l
 export type IncentivePolicy = z.infer<typeof incentivePolicy>;
 export function calculateAmount(p: IncentivePolicy, actual: string): { amountMinor: string | null; reason: string } {
   if (p.rule.type === "CUSTOM_POLICY") return { amountMinor: null, reason: "CUSTOM_POLICY is not implemented; no payable result" };
+  if (p.rule.type === "MARGINAL_MILESTONE") return { amountMinor: null, reason: "Verified, individually attributed admissions are required; performance counts cannot credit a marginal plan" };
   const rule = p.rule; let amount: bigint;
   if (rule.type === "FIXED_AMOUNT") amount = BigInt(rule.amountMinor);
   else if (rule.type === "PER_UNIT") { if (!/^(0|[1-9]\d*)$/.test(actual)) return { amountMinor: null, reason: "PER_UNIT requires a canonical integer count, not a rounded percentage" }; amount = BigInt(rule.rateMinor) * BigInt(actual); }

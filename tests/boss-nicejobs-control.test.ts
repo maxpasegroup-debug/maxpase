@@ -18,6 +18,27 @@ function load<T>(path: string, mocks: Record<string, unknown>): T {
 }
 
 describe("Nice Jobs control inside MAXPASE Boss", () => {
+  it("shows only the two launch roles, their recorded blockers and the correct draft editor", async () => {
+    const { BossJobSetup } = load<{ BossJobSetup: (props: { userId: string; base: string; realm: string }) => Promise<ReactNode> }>("src/app/app/nicejobs/boss-job-setup.tsx", {
+      "next/link": Link,
+      "@/server/nicejobs/service": { niceJobsService: {
+        options: async () => ({ companyId: "company", canSeedLaunch: true }),
+        launchSetup: async () => [
+          { code: "JOB-001", version: { id: "version-1", title: "Academic Advisor", number: 1, status: "DRAFT", publishedAt: null }, setup: { ready: false, issues: ["Confirm compensation terms."] } },
+          { code: "JOB-DCM", version: null, setup: null }
+        ]
+      } },
+      "./job-form": { JobForm: ({ label }: { label: string }) => createElement("button", null, label) }
+    });
+    const html = renderToStaticMarkup(await BossJobSetup({ userId: "verified-boss", base: "/app/boss/nicejobs", realm: "corporate" }));
+    expect(html).toContain("Academic Advisor");
+    expect(html).toContain("Defence Career Mentor");
+    expect(html).not.toContain("Business Automation Manager");
+    expect(html).toContain("Confirm compensation terms.");
+    expect(html).toContain("Create the unpublished job draft.");
+    expect(html).toContain("view=templates&amp;versionId=version-1&amp;companyId=company");
+    expect(html).not.toContain(">Open<");
+  });
   it("requires the authenticated Boss authority before rendering Nice Jobs controls", async () => {
     const authority = vi.fn(async (userId: string) => { if (userId !== "verified-boss") throw new AccessError("Denied"); });
     const workspace = vi.fn(({ base, query }: { base: string; query: { view: string } }) => createElement("p", null, `${base} / ${query.view}`));

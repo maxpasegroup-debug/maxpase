@@ -47,6 +47,19 @@ beforeEach(async () => {
 afterAll(() => postgres.dispose(), 30000);
 
 describe("Job and programme setup", () => {
+  it("creates only the two approved launch-role drafts and keeps missing approvals visible", async () => {
+    await db.niceJobsVersionArea.deleteMany(); await db.niceJobsVersion.deleteMany(); await db.niceJobsTemplate.deleteMany();
+    const drafts = await service.seedInitialOpportunities(admin, true);
+    expect(drafts).toHaveLength(2);
+    expect((await db.niceJobsTemplate.findMany({ orderBy: { code: "asc" }, select: { code: true } })).map(row => row.code)).toEqual(["JOB-001", "JOB-DCM"]);
+    expect(drafts.every(draft => draft.status === "DRAFT" && !draft.publishedAt)).toBe(true);
+    const again = await service.seedInitialOpportunities(admin, true);
+    expect(again.map(row => row.id)).toEqual(drafts.map(row => row.id));
+    const setup = await service.launchSetup(admin);
+    expect(setup.map(row => row.code)).toEqual(["JOB-001", "JOB-DCM"]);
+    expect(setup.every(row => row.setup && !row.setup.ready && row.setup.issues.length > 0)).toBe(true);
+    await expect(service.changeJob(admin, { id: drafts[0].id, revision: drafts[0].revision, to: "PUBLISHED", reason: "Unapproved" })).rejects.toThrow();
+  });
   it("keeps incomplete 100-day schedules in draft and blocks duration-only or missing-day readiness", async()=>{
     const raw=await data();raw.configuration.ojt.stages[9].activities.pop();
     await service.edit(admin,version.id,0,raw);

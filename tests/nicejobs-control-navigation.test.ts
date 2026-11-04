@@ -10,6 +10,8 @@ describe("Nice Jobs focused management navigation", () => {
     expect(niceJobsControlGroup("worker-detail")).toBe("workforce");
     expect(niceJobsControlGroup("finance-incentive-detail")).toBe("earnings");
     expect(niceJobsControlGroup("automation-detail")).toBe("system");
+    expect(niceJobsControlGroup("job-setup")).toBe("opportunities");
+    expect(niceJobsControlGroups.find(group => group.key === "opportunities")?.entries[0][0]).toBe("job-setup");
     for (const participant of ["my-day", "my-work", "worker-reports", "worker-wallet", "worker-resources", "worker-help", "my-onboarding", "my-applications"]) expect(niceJobsControlGroup(participant)).toBeNull();
     expect(isNiceJobsControlView("lead-detail", {})).toBe(false);
     expect(isNiceJobsControlView("lead-detail", { control: "boss" })).toBe(true);

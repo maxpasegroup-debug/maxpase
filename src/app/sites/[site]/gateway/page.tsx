@@ -31,6 +31,7 @@ import { LabsWorkspace } from "../../labs-ui/workspace";
 import { DeveloperWorkspace } from "../../skillcity-ui/developer-workspace";
 import { skillCityDeveloperDesk } from "@/server/skillcity/developer-desk";
 import { accountPortalRealm } from "@/server/auth/account-realm";
+import { jobsPinNextPath } from "@/lib/jobs-pin-navigation";
 import { StartupStudentWorkspace } from "../../startup-ui/student-workspace";
 import { StartupApplicantWorkspace, StartupReviewWorkspace } from "../../startup-ui/applicant-workspace";
 import { StartupFounderWorkspace, StartupFounderManagerWorkspace } from "../../startup-ui/founder-workspace";
@@ -45,7 +46,10 @@ const views = ["overview", "programs", "projects", "tasks", "goals"];
 export default async function Gateway({ params, searchParams }: { params: Promise<{ site: string }>; searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const { site, paths } = await requestPortal((await params).site), query = await searchParams;
   const session = await getPortalSession(site, site.id === "jobs"); if (!session) redirect(paths.login);
-  if (site.id === "jobs" && session.needsJobsPinActivation) redirect(paths.login.replace(/\/login$/, "/activate-pin"));
+  if (site.id === "jobs" && session.needsJobsPinActivation) {
+    const candidate = await prisma.user.findUnique({ where: { id: session.userId }, select: { jobsPhone: true } });
+    redirect(jobsPinNextPath(paths.login, candidate?.jobsPhone ?? null));
+  }
   if(site.id==="labs"&&session.needsPinChange)redirect(paths.gateway.replace(/\/gateway$/,"")+"/pin");
   await consumeSecurityBudget(securityKey("authenticated", session.userId), 300, 60);
   const view = typeof query.view === "string" ? query.view : "overview";

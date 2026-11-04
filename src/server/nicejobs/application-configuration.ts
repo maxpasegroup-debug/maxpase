@@ -1,20 +1,21 @@
 import { z } from "zod";
 
-export const applicationStates = ["DRAFT", "SUBMITTED", "ELIGIBILITY_REVIEW", "SCREENING", "SHORTLISTED", "INTERVIEW", "MANAGEMENT_REVIEW", "APPROVED", "OFFER", "OFFER_ACCEPTED", "OFFER_DECLINED", "REJECTED", "WITHDRAWN", "CLOSED"] as const;
+export const applicationStates = ["DRAFT", "ORIENTATION_INVITED", "SUBMITTED", "ELIGIBILITY_REVIEW", "SCREENING", "SHORTLISTED", "INTERVIEW", "MANAGEMENT_REVIEW", "APPROVED", "OFFER", "OFFER_ACCEPTED", "OFFER_DECLINED", "REJECTED", "WITHDRAWN", "CLOSED"] as const;
 export const fieldTypes = ["TEXT", "TEXTAREA", "NUMBER", "DATE", "SELECT", "MULTI_SELECT", "BOOLEAN", "PHONE", "EMAIL", "DOCUMENT_REFERENCE"] as const;
 const scalar = z.union([z.string().max(4000), z.number().finite(), z.boolean()]);
 const key = z.string().regex(/^[a-z][a-z0-9_]{0,49}$/).refine(v => !["constructor", "prototype", "__proto__"].includes(v));
 export const condition = z.object({ field: key, operator: z.enum(["EQ", "INCLUDES", "GTE", "LTE"]), value: scalar }).strict();
 export const applicationConfiguration = z.object({
-  fields: z.array(z.object({ key, label: z.string().trim().min(1).max(120), type: z.enum(fieldTypes), required: z.boolean().default(false), when: condition.optional(), options: z.array(z.string().min(1).max(120)).max(40).optional() }).strict()).max(40),
+  fields: z.array(z.object({ key, label: z.string().trim().min(1).max(120), type: z.enum(fieldTypes), phase: z.enum(["SHORT", "DETAILED"]).default("DETAILED"), required: z.boolean().default(false), when: condition.optional(), options: z.array(z.string().min(1).max(120)).max(40).optional() }).strict()).max(40),
   duplicatePolicy: z.enum(["ACTIVE_PER_VERSION", "ONE_PER_VERSION"]).default("ACTIVE_PER_VERSION"),
-  withdrawalStates: z.array(z.enum(["DRAFT", "SUBMITTED", "ELIGIBILITY_REVIEW", "SCREENING"])).max(4).default(["DRAFT", "SUBMITTED", "ELIGIBILITY_REVIEW", "SCREENING"]),
+  withdrawalStates: z.array(z.enum(["DRAFT", "ORIENTATION_INVITED", "SUBMITTED", "ELIGIBILITY_REVIEW", "SCREENING"])).max(5).default(["DRAFT", "ORIENTATION_INVITED", "SUBMITTED", "ELIGIBILITY_REVIEW", "SCREENING"]),
   rejectionCategories: z.array(z.string().trim().min(1).max(120)).max(20).default([]),
 }).strict().superRefine((c, ctx) => {
   const keys = new Set(c.fields.map(f => f.key));
   if (keys.size !== c.fields.length) ctx.addIssue({ code: "custom", message: "Field keys must be unique" });
   for (const f of c.fields) {
     if (f.when && (!keys.has(f.when.field) || f.when.field === f.key)) ctx.addIssue({ code: "custom", message: "Invalid conditional field" });
+    if (f.phase === "SHORT" && f.when && c.fields.find(field => field.key === f.when?.field)?.phase === "DETAILED") ctx.addIssue({ code: "custom", message: "Short application fields cannot depend on detailed answers" });
     if (["SELECT", "MULTI_SELECT"].includes(f.type) && (!f.options?.length || new Set(f.options).size !== f.options.length)) ctx.addIssue({ code: "custom", message: "Selection fields need distinct options" });
     const visited = new Set([f.key]);
     let dependency = f.when?.field;
@@ -28,6 +29,9 @@ export const eligibilityConfiguration = z.object({ rules: z.array(condition.exte
 export const screeningConfiguration = z.object({ questions: z.array(condition.extend({ weight: z.number().int().min(1).max(100), required: z.boolean().default(false), review: z.boolean().default(false) })).min(1).max(40), passMark: z.number().min(0).max(100) }).strict();
 export type FormConfiguration = z.infer<typeof applicationConfiguration>;
 export type Answers = Record<string, string | number | boolean | string[]>;
+export function guidedLaunchApplication(code: string, configuration: unknown) {
+  return ["JOB-001", "JOB-DCM"].includes(code) && !!configuration && typeof configuration === "object" && "preOfferRequired" in configuration && configuration.preOfferRequired === true;
+}
 export function matches(c: z.infer<typeof condition>, answers: Answers) {
   const value = answers[c.field];
   switch (c.operator) {
@@ -42,7 +46,7 @@ export function formConfiguration(config: unknown): FormConfiguration {
   const result = applicationConfiguration.safeParse(raw);
   return result.success ? result.data : applicationConfiguration.parse({ fields: [] });
 }
-export function validateAnswers(config: FormConfiguration, raw: unknown, submit: boolean): Answers {
+export function validateAnswers(config: FormConfiguration, raw: unknown, submit: boolean, phase: "ALL" | "SHORT" | "DETAILED" = "ALL"): Answers {
   const answers = z.record(z.string(), z.union([scalar, z.array(z.string().max(120)).max(40)])).parse(raw);
   if (new TextEncoder().encode(JSON.stringify(answers)).byteLength > 64000 || Object.keys(answers).some(k => !config.fields.some(f => f.key === k))) throw new Error("Unexpected application fields");
   const normalized: Answers = {};
@@ -67,7 +71,7 @@ export function validateAnswers(config: FormConfiguration, raw: unknown, submit:
   for (const f of config.fields) {
     const visible = !f.when || matches(f.when, normalized);
     if (!visible && normalized[f.key] !== undefined) throw new Error("Inactive conditional field: " + f.label);
-    if (submit && visible && f.required && (normalized[f.key] === undefined || normalized[f.key] === "")) throw new Error("Required: " + f.label);
+    if (submit && (phase === "ALL" || f.phase === phase) && visible && f.required && (normalized[f.key] === undefined || normalized[f.key] === "")) throw new Error("Required: " + f.label);
   }
   return normalized;
 }
