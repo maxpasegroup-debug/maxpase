@@ -31,9 +31,9 @@ export function createJobsEmailAuth(client: PrismaClient = prisma, options: { no
     await consume(securityKey("nicejobs:otp:hour", email), 3, 3600);
     await consume(securityKey("nicejobs:otp:day", email), 10, 86400);
   }
-  async function dispatch(user: { id: string; email: string; passwordHash: string | null; jobsPinHash?: string | null }, purpose: "LOGIN" | "RESET" | "REGISTER" | "RESET_PIN") {
+  async function dispatch(user: { id: string; email: string; passwordHash: string | null; jobsPinHash?: string | null; jobsPhone?: string | null }, purpose: "LOGIN" | "RESET" | "REGISTER" | "RESET_PIN") {
     const settings = ready(), id = randomUUID(), code = String(randomInt(0, 1000000)).padStart(6, "0");
-    const credentialHash = purpose === "LOGIN" || purpose === "RESET" ? user.passwordHash : user.jobsPinHash;
+    const credentialHash = purpose === "LOGIN" || purpose === "RESET" ? user.passwordHash : purpose === "REGISTER" && !user.jobsPinHash ? user.jobsPhone : user.jobsPinHash;
     if (!credentialHash) throw new AccessError("Account unavailable");
     await client.$transaction(async db => {
       if (await db.emailAuthChallenge.findFirst({ where: { userId: user.id, email: user.email, createdAt: { gt: new Date(now().getTime() - 60000) } }, select: { id: true } })) throw new RateLimitError();
@@ -107,24 +107,46 @@ export function createJobsEmailAuth(client: PrismaClient = prisma, options: { no
   }
   async function beginRegistration(userId: string) {
     ready();
-    const user = await client.user.findUniqueOrThrow({ where: { id: userId } });
-    if (!user.jobsPinHash || user.emailVerifiedAt) throw new AccessError("Account unavailable");
+    const user = await client.user.findUnique({ where: { id: userId }, include: { person: { select: { metadata: true, status: true } } } });
+    if (!user || !user.jobsPhone || user.jobsPinHash && user.emailVerifiedAt || user.status !== "ACTIVE" || user.person?.status !== "ACTIVE" || accountPortalRealm(user.person.metadata) !== "jobs" || JSON.parse(user.person.metadata ?? "{}").identitySource !== "SELF_REGISTRATION") throw new AccessError("Account unavailable");
+    await requirePortalAccess(client, user.id, "jobs");
     await requestBudget(user.email);
     return dispatch(user, "REGISTER");
   }
   async function resendRegistration(raw: unknown) {
     ready();
-    const input = z.object({ country: z.string(), nationalNumber: z.string(), pin: jobsPinInput }).strict().parse(raw);
+    const input = z.object({ country: z.string(), nationalNumber: z.string(), email: emailInput.optional(), pin: jobsPinInput.optional() }).strict().parse(raw);
     const phone = jobsPhoneInput.parse({ country: input.country, nationalNumber: input.nationalNumber });
     await consume("nicejobs:registration-resend:global", 30, 60);
     await consume(securityKey("nicejobs:registration-resend:phone", phone), 3, 3600);
     const user = await client.user.findUnique({ where: { jobsPhone: phone }, include: { person: { select: { metadata: true, status: true } } } });
-    if (!user || !user.jobsPinHash || user.emailVerifiedAt || user.status !== "ACTIVE" || user.person?.status !== "ACTIVE" || accountPortalRealm(user.person?.metadata) !== "jobs" || !await verifyJobsPin(input.pin, user.jobsPinHash)) return { challengeId: randomUUID() };
+    if (!user || user.jobsPinHash && user.emailVerifiedAt || user.status !== "ACTIVE" || user.person?.status !== "ACTIVE" || accountPortalRealm(user.person?.metadata) !== "jobs" || (user.jobsPinHash ? !input.pin || !await verifyJobsPin(input.pin, user.jobsPinHash) : !input.email || input.email !== user.email)) return { challengeId: randomUUID() };
     try { return await beginRegistration(user.id); }
     catch (error) { if (error instanceof EmailAuthUnavailable) return { challengeId: randomUUID() }; throw error; }
   }
   async function changeRegistrationEmail(raw: unknown) {
     ready();
+    const pending = z.object({ challengeId: z.uuid(), email: emailInput }).strict().safeParse(raw);
+    if (pending.success) {
+      await consume("nicejobs:registration-email:global", 30, 60);
+      await consume(securityKey("nicejobs:registration-email:challenge", pending.data.challengeId), 3, 3600);
+      await requestBudget(pending.data.email);
+      const changed = await client.$transaction(async db => {
+        const challenge = await db.emailAuthChallenge.findUnique({ where: { id: pending.data.challengeId } });
+        if (!challenge || challenge.purpose !== "REGISTER" || !["SENT", "FAILED"].includes(challenge.status) || challenge.expiresAt <= now()) throw new AccessError("Email change unavailable");
+        const user = await db.user.findUnique({ where: { id: challenge.userId }, include: { person: { select: { id: true, metadata: true, status: true } } } });
+        if (!user?.person || !user.jobsPhone || user.jobsPinHash || user.emailVerifiedAt || user.email !== challenge.email || challenge.credentialHash !== user.jobsPhone || user.email === pending.data.email || user.status !== "ACTIVE" || user.person.status !== "ACTIVE" || accountPortalRealm(user.person.metadata) !== "jobs" || JSON.parse(user.person.metadata ?? "{}").identitySource !== "SELF_REGISTRATION") throw new AccessError("Email change unavailable");
+        const scope = await requirePortalAccess(db, user.id, "jobs");
+        if (await db.user.findUnique({ where: { email: pending.data.email } }) || await db.person.findUnique({ where: { email: pending.data.email } })) throw new AccessError("Email change unavailable");
+        const updated = await db.user.update({ where: { id: user.id }, data: { email: pending.data.email }, select: { id: true, email: true, passwordHash: true, jobsPinHash: true, jobsPhone: true } });
+        await db.person.update({ where: { id: user.person.id }, data: { email: pending.data.email } });
+        await db.emailAuthChallenge.updateMany({ where: { userId: user.id, status: { in: ["PENDING", "SENT"] } }, data: { status: "CANCELLED" } });
+        await db.auditEvent.create({ data: buildAuditEventData({ actorUserId: user.id, actorPersonId: user.person.id, organizationId: scope.divisionId, action: "auth.registration_email_changed", entityType: "User", entityId: user.id, result: "SUCCESS", metadata: { portal: "jobs", emailVerified: false } }) });
+        return updated;
+      });
+      try { return await dispatch(changed, "REGISTER"); }
+      catch (error) { if (error instanceof EmailAuthUnavailable) return { deliveryPending: true as const }; throw error; }
+    }
     const input = z.object({ country: z.string(), nationalNumber: z.string(), pin: jobsPinInput, email: emailInput }).strict().parse(raw);
     const phone = jobsPhoneInput.parse({ country: input.country, nationalNumber: input.nationalNumber });
     await consume("nicejobs:registration-email:global", 30, 60);

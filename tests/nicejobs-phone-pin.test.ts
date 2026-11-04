@@ -8,7 +8,7 @@ import { createAuthenticationService } from "@/server/auth/service";
 import { createJobsEmailAuth } from "@/server/auth/jobs-email-auth";
 import { jobsPhoneInput } from "@/server/auth/jobs-phone";
 import { hashJobsPin, verifyJobsPin } from "@/server/auth/jobs-pin";
-import { createJobsPinActivation } from "@/server/auth/jobs-pin-activation";
+import { createJobsPinActivation, createJobsRegistrationPin } from "@/server/auth/jobs-pin-activation";
 import { claimJobsOtp } from "@/server/auth/jobs-otp-proof";
 import { hashPassword } from "@/server/auth/password";
 import type { OtpDelivery } from "@/server/auth/resend-otp";
@@ -34,6 +34,42 @@ beforeEach(async () => { now = new Date("2026-10-20T09:00:00Z"); messages.length
 afterAll(() => postgres.dispose(), 30000);
 
 describe("Nice Jobs phone and PIN candidate authentication", () => {
+  it("verifies email before PIN setup and blocks login until setup finishes", async () => {
+    await db.user.update({ where: { id: userId }, data: { jobsPinHash: null } });
+    expect(await auth.loginJobsPin({ country: "IN", nationalNumber: raw.nationalNumber, pin: raw.pin }, secret)).toBeNull();
+    const proof = await service.beginRegistration(userId);
+    const session = await service.completeRegistration({ ...proof, code: messages.at(-1)!.code }, secret);
+    expect(await auth.validate(session.token, secret, "jobs")).toMatchObject({ userId, needsJobsPinActivation: true });
+    expect(await auth.loginJobsPin({ country: "IN", nationalNumber: raw.nationalNumber, pin: raw.pin }, secret)).toBeNull();
+    await expect(createJobsRegistrationPin(db, () => now)(userId, session.session.id, { pin: "123456", confirmPin: "654321" })).rejects.toThrow();
+    await createJobsRegistrationPin(db, () => now)(userId, session.session.id, { pin: "123456", confirmPin: "123456" });
+    expect(await auth.validate(session.token, secret, "jobs")).toBeNull();
+    expect(await auth.loginJobsPin({ country: "IN", nationalNumber: raw.nationalNumber, pin: raw.pin }, secret)).not.toBeNull();
+    await expect(createJobsRegistrationPin(db, () => now)(userId, session.session.id, { pin: "654321", confirmPin: "654321" })).rejects.toThrow();
+  });
+  it("lets an email-verified candidate resume PIN setup with a fresh code", async () => {
+    await db.user.update({ where: { id: userId }, data: { jobsPinHash: null } });
+    const initial = await service.beginRegistration(userId);
+    const session = await service.completeRegistration({ ...initial, code: messages.at(-1)!.code }, secret);
+    now = new Date(now.getTime() + 11 * 60000);
+    await expect(createJobsRegistrationPin(db, () => now)(userId, session.session.id, { pin: raw.pin, confirmPin: raw.pin })).rejects.toThrow();
+    const resumed = await service.resendRegistration({ country: "IN", nationalNumber: raw.nationalNumber, email: raw.email });
+    const next = await service.completeRegistration({ ...resumed, code: messages.at(-1)!.code }, secret);
+    await createJobsRegistrationPin(db, () => now)(userId, next.session.id, { pin: raw.pin, confirmPin: raw.pin });
+    expect(await auth.validate(next.token, secret, "jobs")).toBeNull();
+    expect(await auth.loginJobsPin({ country: "IN", nationalNumber: raw.nationalNumber, pin: raw.pin }, secret)).not.toBeNull();
+  });
+  it("rolls back PIN setup when its audit record cannot be written", async () => {
+    await db.user.update({ where: { id: userId }, data: { jobsPinHash: null } });
+    const proof = await service.beginRegistration(userId);
+    const session = await service.completeRegistration({ ...proof, code: messages.at(-1)!.code }, secret);
+    const restore = await postgres.rejectInsert("AuditEvent", "auth.jobs_registration_pin_set");
+    try {
+      await expect(createJobsRegistrationPin(db, () => now)(userId, session.session.id, { pin: raw.pin, confirmPin: raw.pin })).rejects.toThrow();
+      expect((await db.user.findUniqueOrThrow({ where: { id: userId } })).jobsPinHash).toBeNull();
+      expect(await auth.validate(session.token, secret, "jobs")).toMatchObject({ needsJobsPinActivation: true });
+    } finally { await restore(); }
+  });
   it("normalizes international numbers and rejects invalid or duplicate phones", async () => {
     expect(jobsPhoneInput.parse({ country: "IN", nationalNumber: "98765 43210" })).toBe("+919876543210");
     expect(jobsPhoneInput.parse({ country: "US", nationalNumber: "202-555-0123" })).toBe("+12025550123");

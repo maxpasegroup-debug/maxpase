@@ -15,22 +15,33 @@ import { labsPin } from "@/server/labs/pin";
 import { jobsPhoneInput } from "@/server/auth/jobs-phone";
 import { getPortalSession } from "@/server/portals/session";
 import { prisma } from "@/server/db";
-import { jobsPinActivation } from "@/server/auth/jobs-pin-activation";
+import { jobsPinActivation, jobsRegistrationPin } from "@/server/auth/jobs-pin-activation";
+import { assertJobsPinReady } from "@/server/auth/jobs-pin";
+import { parsePhoneNumberFromString } from "libphonenumber-js";
+import { clearJobsRegistrationProof, hasJobsRegistrationProof, setJobsRegistrationProof } from "@/server/auth/jobs-registration-proof";
 
 export type PortalLoginState = { error?: string; challengeId?: string; message?: string; complete?: boolean; pendingVerification?: boolean; deliveryPending?: boolean };
 export async function jobsPhoneSignupAction(_state: PortalLoginState, form: FormData): Promise<PortalLoginState> {
   await requestPortal("jobs", true);
-  let accountCreated = false;
+  let registeredUserId: string | undefined;
   try {
     jobsEmailAuth.ready();
-    const registered = await applicantAccess.register({ displayName: form.get("displayName"), country: form.get("country"), nationalNumber: form.get("nationalNumber"), email: form.get("email"), pin: form.get("pin"), confirmPin: form.get("confirmPin"), acknowledge: form.get("acknowledge") === "on" });
-    accountCreated = true;
+    assertJobsPinReady();
+    const registered = await applicantAccess.register({ displayName: form.get("displayName"), country: form.get("country"), nationalNumber: form.get("nationalNumber"), email: form.get("email"), acknowledge: form.get("acknowledge") === "on" });
+    registeredUserId = registered.userId;
     const result = await jobsEmailAuth.beginRegistration(registered.userId);
+    await setJobsRegistrationProof(result.challengeId);
     return { ...result, pendingVerification: true, message: "Check your email for a six-digit verification code. It expires in 10 minutes." };
   } catch (error) {
-    if (accountCreated) return { pendingVerification: true, error: "Account created, but a verification code could not be sent. Request a new code after email delivery is available." };
+    if (registeredUserId) {
+      let challengeId: string | undefined;
+      try { challengeId = (await prisma.emailAuthChallenge.findFirst({ where: { userId: registeredUserId, purpose: "REGISTER" }, orderBy: { createdAt: "desc" }, select: { id: true } }))?.id; }
+      catch { safeDiagnostic("operation_failed"); }
+      if (challengeId) await setJobsRegistrationProof(challengeId);
+      return { pendingVerification: true, challengeId, error: "Account created, but a verification code could not be sent. Request a new code after email delivery is available." };
+    }
     if (error instanceof RateLimitError || error instanceof NiceJobsError) return { error: error.message };
-    if (error instanceof ZodError) return { error: "Check your name, country, phone, email and matching six-digit PINs." };
+    if (error instanceof ZodError) return { error: "Check your name, country, phone and email." };
     if (error instanceof EmailAuthUnavailable) return { error: "Email verification is not configured or available. No account was created. Please try again later." };
     if (error instanceof NiceJobsUnavailable) return { error: "Registration is temporarily unavailable. No account was created." };
     safeDiagnostic("operation_failed");
@@ -40,8 +51,10 @@ export async function jobsPhoneSignupAction(_state: PortalLoginState, form: Form
 export async function jobsChangeRecoveryEmailAction(_state: PortalLoginState, form: FormData): Promise<PortalLoginState> {
   await requestPortal("jobs", true);
   try {
-    const result = await jobsEmailAuth.changeRegistrationEmail({ country: form.get("country"), nationalNumber: form.get("nationalNumber"), pin: form.get("pin"), email: form.get("email") });
+    if (!await hasJobsRegistrationProof(String(form.get("challengeId") ?? ""))) return { error: "Email change is unavailable. Start a new verification request or contact support." };
+    const result = await jobsEmailAuth.changeRegistrationEmail({ challengeId: form.get("challengeId"), email: form.get("email") });
     if ("deliveryPending" in result) return { deliveryPending: true, error: "Recovery email updated, but a code could not be sent. Request a new code when delivery is available." };
+    await setJobsRegistrationProof(result.challengeId);
     return { ...result, message: "If these details match an unverified account, a code will arrive at the updated email." };
   } catch (error) {
     if (error instanceof RateLimitError) return { error: error.message };
@@ -67,22 +80,46 @@ export async function jobsVerifyEmailAction(_state: PortalLoginState, form: Form
   try {
     const result = await jobsEmailAuth.completeRegistration({ challengeId: form.get("challengeId"), code: form.get("code") }, config.AUTH_SECRET);
     await setPortalCookie(site, result.token, result.session.expiresAt);
+    await clearJobsRegistrationProof();
   } catch (error) {
     if (!(error instanceof RateLimitError || error instanceof ZodError)) safeDiagnostic("authentication_failed");
     return { challengeId: String(form.get("challengeId") ?? ""), error: error instanceof RateLimitError ? error.message : "Invalid or expired code. Request a new code if needed." };
   }
-  redirect(paths.gateway);
+  redirect(`${paths.signup}/setup-pin`);
 }
 export async function jobsResendVerificationAction(_state: PortalLoginState, form: FormData): Promise<PortalLoginState> {
   await requestPortal("jobs", true);
   try {
-    const result = await jobsEmailAuth.resendRegistration({ country: form.get("country"), nationalNumber: form.get("nationalNumber"), pin: form.get("pin") });
+    const result = await jobsEmailAuth.resendRegistration({ country: form.get("country"), nationalNumber: form.get("nationalNumber"), email: form.get("email") || undefined, pin: form.get("pin") || undefined });
     return { ...result, message: "If this account still needs verification, a code will arrive at its registered email." };
   } catch (error) {
     if (error instanceof RateLimitError) return { error: error.message };
     if (!(error instanceof ZodError)) safeDiagnostic("operation_failed");
     return { error: "Could not request a code. Check your details or try again later." };
   }
+}
+export async function jobsFinishSignupAction(_state: PortalLoginState, form: FormData): Promise<PortalLoginState> {
+  const { site, paths } = await requestPortal("jobs", true);
+  const session = await getPortalSession(site, true);
+  if (!session?.needsJobsPinActivation) return { error: "Verify your email again to finish setting up your account." };
+  let phone: string;
+  try {
+    phone = await jobsRegistrationPin(session.userId, session.sessionId, { pin: form.get("pin"), confirmPin: form.get("confirmPin") });
+  } catch (error) {
+    if (!(error instanceof ZodError)) safeDiagnostic("operation_failed");
+    return { error: "Could not set your PIN. Check both entries or verify your email again." };
+  }
+  const parsed = parsePhoneNumberFromString(phone);
+  if (!parsed?.country) redirect(paths.login);
+  let signedIn = false;
+  try {
+    const result = await authenticationService.loginJobsPin({ country: parsed.country, nationalNumber: parsed.nationalNumber, pin: form.get("pin") }, config.AUTH_SECRET);
+    if (result) { await setPortalCookie(site, result.token, result.session.expiresAt); signedIn = true; }
+  } catch (error) {
+    if (!(error instanceof RateLimitError)) safeDiagnostic("authentication_failed");
+  }
+  if (!signedIn) redirect(paths.login);
+  redirect(paths.gateway);
 }
 export async function jobsActivatePinAction(_state: PortalLoginState, form: FormData): Promise<PortalLoginState> {
   const { site, paths } = await requestPortal("jobs", true);

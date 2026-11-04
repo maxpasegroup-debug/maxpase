@@ -16,3 +16,4 @@ function jobsPinPepper() {
   if (!value || value.length < 32 || /replace-with|changeme|dev-only/i.test(value)) throw new Error("Nice Jobs PIN authentication is not configured");
   return Buffer.from(value);
 }
+export function assertJobsPinReady() { jobsPinPepper(); }

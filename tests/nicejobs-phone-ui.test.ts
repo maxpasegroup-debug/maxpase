@@ -26,7 +26,8 @@ function surfaces(state: Record<string, unknown> = {}, pending = false) {
   const components = { "../jobs-ui/auth-shell": { JobsAuthShell }, "../jobs-ui/phone-field": phone, "../jobs-ui/pin-field": pin };
   const auth = load<{ JobsPhoneAuthForm: ComponentType<Record<string, unknown>> }>("src/app/sites/[site]/phone-auth-form.tsx", { ...common, ...components, "./actions": { jobsPhoneLoginAction: () => {}, jobsPinResetAction: () => {} } });
   const signup = load<{ ApplicantPhoneSignupForm: ComponentType<Record<string, unknown>> }>("src/app/sites/[site]/signup/phone-form.tsx", { ...common, "../../jobs-ui/auth-shell": { JobsAuthShell }, "../../jobs-ui/phone-field": phone, "../../jobs-ui/pin-field": pin, "../actions": { jobsPhoneSignupAction: () => {}, jobsVerifyEmailAction: () => {} } });
-  return { auth, signup };
+  const setup = load<{ SetupPinForm: ComponentType<Record<string, unknown>> }>("src/app/sites/[site]/signup/setup-pin/setup-pin-form.tsx", { ...common, "../../../jobs-ui/auth.module.css": css, "../../../jobs-ui/auth-shell": { JobsAuthShell }, "../../../jobs-ui/pin-field": pin, "../../actions": { jobsFinishSignupAction: () => {} } });
+  return { auth, signup, setup };
 }
 describe("Nice Jobs candidate phone screens", () => {
   it("shows phone/PIN login and no email/password credential fields", () => {
@@ -34,15 +35,16 @@ describe("Nice Jobs candidate phone screens", () => {
     expect(html).toContain('name="country"'); expect(html).toContain('name="nationalNumber"'); expect(html).toContain('name="pin"');
     expect(html).toContain("Forgot PIN?"); expect(html).toContain("Create an account"); expect(html).not.toContain('name="email"');
   });
-  it("shows mandatory recovery email, consent and two PIN fields at signup", () => {
+  it("collects name, mobile and email before asking for a PIN", () => {
     const html = renderToStaticMarkup(createElement(surfaces().signup.ApplicantPhoneSignupForm, { paths }));
-    expect(html).toContain('name="displayName"'); expect(html).toContain('name="email"'); expect(html).toContain('name="confirmPin"');
+    expect(html).toContain('name="displayName"'); expect(html).toContain('name="email"'); expect(html).not.toContain('name="confirmPin"');
     expect(html).toContain('name="acknowledge"'); expect(html).toContain("Phone ownership is not verified");
     expect(/<select[^>]*name="country"[\s\S]*?<\/select><input[^>]*name="nationalNumber"/.test(html)).toBe(true);
     expect(/<select[^>]*name="country"[^>]*><option value="IN"[^>]*>India \(\+91\)<\/option>/.test(html)).toBe(true);
     expect(html).not.toContain('type="search"');
     expect(html).not.toContain('aria-label="Selected calling code"');
-    expect(html).toContain('name="pin"');
+    expect(html).not.toContain('name="pin"');
+    expect(html).toContain("Verify email");
   });
   it("opens an OTP dialog after account creation with resend and edit-email choices", () => {
     const sent = renderToStaticMarkup(createElement(surfaces({ pendingVerification: true, challengeId: "fixture-challenge" }).signup.ApplicantPhoneSignupForm, { paths }));
@@ -55,6 +57,14 @@ describe("Nice Jobs candidate phone screens", () => {
     expect(failed).toContain("Your account is saved");
     expect(failed).toContain("Delivery unavailable");
     expect(failed).toContain("Send a new code");
+  });
+  it("asks for PIN and confirmation only after email verification", () => {
+    const html = renderToStaticMarkup(createElement(surfaces().setup.SetupPinForm, { paths }));
+    expect(html).toContain("EMAIL VERIFIED");
+    expect(html).toContain('name="pin"');
+    expect(html).toContain('name="confirmPin"');
+    expect(html).toContain("Open My Workspace");
+    expect(html).not.toContain('name="email"');
   });
   it("shows recovery request, challenge and success as distinct states", () => {
     const initial = renderToStaticMarkup(createElement(surfaces().auth.JobsPhoneAuthForm, { paths, reset: true }));

@@ -14,8 +14,8 @@ export const applicantRegistrationInput = z.object({
   email: z.string().trim().email().max(254).transform(value => value.toLowerCase()),
   country: z.string().length(2),
   nationalNumber: z.string().trim().min(4).max(24),
-  pin: jobsPinInput,
-  confirmPin: jobsPinInput,
+  pin: jobsPinInput.optional(),
+  confirmPin: jobsPinInput.optional(),
   acknowledge: z.literal(true)
 }).strict().refine(value => value.pin === value.confirmPin, "PINs must match");
 
@@ -28,7 +28,7 @@ export function createApplicantAccess(client: PrismaClient = prisma) {
     if (["boss@nicejobs.online", "boss@maxpase.com"].includes(data.email)) throw new NiceJobsError("Use sign in or contact the platform administrator for this account.");
     const phone = jobsPhoneInput.parse({ country: data.country, nationalNumber: data.nationalNumber });
     await consume(securityKey("nicejobs:registration:phone", phone), 3, 3600);
-    const jobsPinHash = await hashJobsPin(data.pin);
+    const jobsPinHash = data.pin ? await hashJobsPin(data.pin) : null;
     try {
       return await client.$transaction(async db => {
         const company = await db.organization.findUnique({ where: { slug: "aira-skill-city" }, select: { id: true, type: true, status: true, company: { select: { status: true } } } });

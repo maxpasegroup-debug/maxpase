@@ -128,7 +128,7 @@ export function createAuthenticationService(client: PrismaClient = prisma, now =
     const accountRealm = accountPortalRealm(session?.user.person?.metadata);
     if (portal === "startup" && accountRealm === "startup" && (!session?.user.emailVerifiedAt || payload.verifiedEmail !== session.user.email || payload.verifiedAt !== session.user.emailVerifiedAt.toISOString())) return null;
     if (accountRealm && portal !== accountRealm) return null;
-    return session ? { userId: session.userId, sessionId: session.id, email: session.user.email, personId: session.user.personId, needsPinChange: portal === "labs" && JSON.parse(session.user.person?.metadata ?? "{}").labsPinChangeRequired === true, needsJobsPinActivation: portal === "jobs" && JSON.parse(session.user.person?.metadata ?? "{}").identitySource === "SELF_REGISTRATION" && !session.user.jobsPinHash } : null;
+    return session ? { userId: session.userId, sessionId: session.id, email: session.user.email, personId: session.user.personId, needsPinChange: portal === "labs" && JSON.parse(session.user.person?.metadata ?? "{}").labsPinChangeRequired === true, needsJobsPinActivation: portal === "jobs" && !session.user.jobsPinHash } : null;
   }
   async function revoke(token: string, secret: string, portal?: PortalId) {
     const payload = await payloadFor(token, secret, portal);
