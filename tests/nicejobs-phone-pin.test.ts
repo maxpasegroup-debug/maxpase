@@ -51,7 +51,8 @@ describe("Nice Jobs phone and PIN candidate authentication", () => {
     await db.user.update({ where: { id: userId }, data: { jobsPinHash: null } });
     const initial = await service.beginRegistration(userId);
     const session = await service.completeRegistration({ ...initial, code: messages.at(-1)!.code }, secret);
-    now = new Date(session.session.createdAt.getTime() + 11 * 60000);
+    await db.session.update({ where: { id: session.session.id }, data: { createdAt: now } });
+    now = new Date(now.getTime() + 11 * 60000);
     await expect(createJobsRegistrationPin(db, () => now)(userId, session.session.id, { pin: raw.pin, confirmPin: raw.pin })).rejects.toThrow();
     const resumed = await service.resendRegistration({ country: "IN", nationalNumber: raw.nationalNumber, email: raw.email });
     const next = await service.completeRegistration({ ...resumed, code: messages.at(-1)!.code }, secret);
