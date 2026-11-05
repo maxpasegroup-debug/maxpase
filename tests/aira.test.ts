@@ -17,7 +17,7 @@ const unique = () => "aira-test-" + ++sequence;
 const keys = [...new Set([...workforcePermissions.map(p => p.key), ...["company", "organization", "membership", "product", "brand", "project", "goal"].flatMap(d => [d + ".read", d + ".manage"])])];
 async function actor(organizationId: string, permissions = keys, descendants = false) {
   const person = await db.person.create({ data: { displayName: unique() } });
-  const user = await db.user.create({ data: { personId: person.id, email: unique() + "@test.invalid" } });
+  const user = await db.user.create({ data: { personId: person.id, email: unique() + "@test.invalid", emailVerifiedAt: new Date() } });
   const role = await db.role.create({ data: { organizationId, key: unique(), name: "Founder", permissions: { create: permissions.map(key => ({ permission: { connect: { key } } })) } } });
   await db.membership.create({ data: { personId: person.id, organizationId, scope: descendants ? "DESCENDANTS" : "ORGANIZATION", roles: { create: { roleId: role.id } } } });
   return user.id;
@@ -130,6 +130,9 @@ describe("Phase 06 AIRA company OS", () => {
   });
   it("reuses responsibilities for ownership, academics, managers, trainers and teams", async () => {
     const p = await program(), personId = (await db.user.findUniqueOrThrow({ where: { id: admin } })).personId!;
+    const reviewerId = await actor(school);
+    const reviewerPersonId = (await db.user.findUniqueOrThrow({ where: { id: reviewerId } })).personId!;
+    await workforce.save(admin, "reporting", { organizationId: school, personId, managerPersonId: reviewerPersonId });
     const team = await service.saveShared(admin, "teams", { parentId: school, type: "TEAM", name: unique(), slug: unique() });
     const r = await service.saveShared(admin, "responsibilities", { organizationId: school, personId, programId: p.id, teamId: team.id, kind: "ACADEMIC", title: "Academic responsibility" });
     expect(await db.responsibility.findUnique({ where: { id: r.id } })).toMatchObject({ programId: p.id, personId, teamId: team.id, kind: "ACADEMIC" });

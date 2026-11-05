@@ -193,8 +193,10 @@ describe("Nice Jobs applications and screening", () => {
       for (const [index, to] of ["PENDING_VERIFICATION", "APPROVED", "PUBLISHED"].entries()) await jobs.changeJob(manager, { id: v.id, revision: configured.revision + index, to, reason: "Human review and publication in isolated test" });
       const publicJob = (await applications.opportunities(candidate, { versionId: v.id })).records[0];
       const a = await applications.create(candidate, { versionId: v.id, divisionId: publicJob.areas[0].divisionId });
-      const submitted = await applications.mutate(candidate, { reference: a.reference, revision: 0, action: "SUBMIT", answers: {} });
-      expect(submitted.eligibilityStatus).toBe("NOT_CONFIGURED"); expect(submitted.screeningStatus).toBe("NOT_CONFIGURED");
+      const guided = ["JOB-001", "JOB-DCM"].includes(detail.version.template.code);
+      const progressed = await applications.mutate(candidate, { reference: a.reference, revision: 0, action: guided ? "START" : "SUBMIT", answers: {} });
+      expect(progressed.status).toBe(guided ? "ORIENTATION_INVITED" : "SUBMITTED");
+      expect(progressed.eligibilityStatus).toBe("NOT_CONFIGURED"); expect(progressed.screeningStatus).toBe("NOT_CONFIGURED");
       await expect(jobs.visibility(manager, { id: v.id, revision: detail.version.template.revision + 1, to: "INTERNAL", reason: "Published audience change" })).rejects.toThrow();
     }
     expect(known).toHaveLength(2);

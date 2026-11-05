@@ -170,7 +170,7 @@ describe("private group directives", () => {
     expect((await command.read(bossId, "aira-skill-city", "aira-skill-city")).label).toBe("AIRA Skill City");
     const unconfigured = await command.read(bossId, "aira-skill-city", "aira-skill-studio");
     expect(unconfigured.label).toBe("AIRA Skill Studio");
-    expect(unconfigured.brand).toBeNull();
+    expect(unconfigured.brand?.name).toBe("AIRA SKILL STUDIO");
     await expect(command.read(directorId, "aira-skill-city", "aira-labs")).rejects.toThrow();
     await expect(command.read(bossId, "aira-skill-city", "not-a-brand")).rejects.toThrow();
     await expect(command.read(bossId, "pearn", "aira-labs")).rejects.toThrow();

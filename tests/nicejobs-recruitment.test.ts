@@ -29,14 +29,18 @@ const offerConfig = { title: "Isolated test offer", content: { terms: "Isolated 
 const preOfferFixture = { videoTitle: "Synthetic role orientation", videoUrl: "https://media.test.invalid/role.mp4", videoVersion: "test-v1", comprehension: { maxAttempts: 3, form: { fields: [{ key: "understood", label: "Synthetic comprehension question", type: "BOOLEAN", required: true }] }, assessment: { passMark: 100, questions: [{ field: "understood", operator: "EQ", value: true, weight: 1, required: true }] } }, policies: [{ key: "terms", title: "Synthetic terms", version: "test-v1", text: "Isolated test policy text, not actual legal terms. <script>not executable</script>" }] };
 async function human(name: string, org: string, keys: string[], descendants = false) {
   const person = await db.person.create({ data: { displayName: name } });
-  const user = await db.user.create({ data: { email: name + "@phase03.invalid", personId: person.id, timezone: "Asia/Kolkata" } });
+  const user = await db.user.create({ data: { email: name + "@phase03.invalid", personId: person.id, timezone: "Asia/Kolkata", emailVerifiedAt: new Date() } });
   const role = await db.role.create({ data: { key: person.id, name: "Explicit test capabilities", organizationId: org, permissions: { create: [...new Set(keys)].map(key => ({ permission: { connect: { key } } })) } } });
   await db.membership.create({ data: { personId: person.id, organizationId: org, scope: descendants ? "DESCENDANTS" : "ORGANIZATION", roles: { create: { roleId: role.id } } } });
   return user.id;
 }
 async function publish(extra = {}, code = "TEST-03") {
-  const v = await jobs.create(manager, { code, title: "Recruitment test job", description: "Synthetic recruitment opportunity", visibility: "PUBLIC", divisionIds: [labs], configuration: { ...formConfig, opportunity: await fixtureOpportunity(db, manager), interview: interviewConfig, management: { policies: [{ divisionId: labs, controlPointId: controlId }] }, offer: offerConfig, ...extra } });
-  await jobs.changeJob(manager, { id: v.id, revision: 0, to: "PUBLISHED", reason: "Isolated test publication" }); return v.id;
+  const guided = Object.prototype.hasOwnProperty.call(extra, "preOfferRequired") && (extra as { preOfferRequired?: boolean }).preOfferRequired === true;
+  const v = await jobs.create(manager, { code, title: "Recruitment test job", description: "Synthetic recruitment opportunity", visibility: "PUBLIC", divisionIds: [labs], configuration: { ...formConfig, opportunity: await fixtureOpportunity(db, manager), ...(guided ? fixtureProgramme(manager) : {}), interview: interviewConfig, management: { policies: [{ divisionId: labs, controlPointId: controlId }] }, offer: offerConfig, ...extra } });
+  if (guided) for (const [revision, to] of ["PENDING_VERIFICATION", "APPROVED", "PUBLISHED"].entries())
+    await jobs.changeJob(manager, { id: v.id, revision, to, reason: "Isolated test review and publication" });
+  else await jobs.changeJob(manager, { id: v.id, revision: 0, to: "PUBLISHED", reason: "Isolated test publication" });
+  return v.id;
 }
 async function shortlisted(userId = candidate) {
   let a = await applications.create(userId, { versionId, divisionId: labs });

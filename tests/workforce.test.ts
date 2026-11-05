@@ -21,7 +21,7 @@ const seed = () => postgres.runSeed();
 async function account(organizationId: string, permissions: string[], descendants = false, projectId?: string) {
   const key = "test-" + ++sequence;
   const person = await db.person.create({ data: { displayName: key } });
-  const user = await db.user.create({ data: { email: key + "@test.invalid", personId: person.id } });
+  const user = await db.user.create({ data: { email: key + "@test.invalid", personId: person.id, emailVerifiedAt: new Date() } });
   const role = await db.role.create({ data: { organizationId, key, name: "Test designation", permissions: { create: permissions.map(key => ({ permission: { connect: { key } } })) } } });
   const membership = await db.membership.create({ data: { organizationId, personId: person.id, scope: descendants ? "DESCENDANTS" : "ORGANIZATION", projectId, scopeKey: projectId ? "project:" + projectId : "organization", roles: { create: { roleId: role.id } } } });
   return { userId: user.id, personId: person.id, membershipId: membership.id, roleId: role.id };
@@ -32,6 +32,7 @@ beforeAll(async () => {
   seed();
   expect(await db.user.count()).toBe(1); expect(await db.person.count()).toBe(1);
   adminId = (await db.user.findUniqueOrThrow({ where: { email: "admin@maxpase.local" } })).id;
+  await db.user.update({ where: { id: adminId }, data: { emailVerifiedAt: new Date() } });
   groupId = (await db.organization.findUniqueOrThrow({ where: { slug: "maxpase-group" } })).id;
   aId = (await db.organization.findUniqueOrThrow({ where: { slug: "aira-skill-city" } })).id;
   bId = (await db.organization.create({ data: { type: "COMPANY", name: "Test Company B", slug: "test-company-b", parentId: groupId, company: { create: { displayName: "Test Company B", groupId: (await db.groupProfile.findUniqueOrThrow({ where: { organizationId: groupId } })).id } } } })).id;
@@ -168,8 +169,8 @@ describe("scoped authorization and privilege escalation", () => {
     const recipient = await account(aId, []);
     const founder = await db.role.findUniqueOrThrow({ where: { organizationId_key: { organizationId: aId, key: "aira-01" } } });
     await workforce.setRole(adminId, recipient.membershipId, founder.id, true);
-    await workforce.save(adminId, "responsibilities", { organizationId: aId, personId: recipient.personId, title: "Test accountable person" });
     await workforce.save(adminId, "reporting", { organizationId: aId, personId: recipient.personId, managerPersonId: manager.personId });
+    await workforce.save(adminId, "responsibilities", { organizationId: aId, personId: recipient.personId, title: "Test accountable person" });
     expect(await getPermissionGrantsForUser(recipient.userId, db)).toEqual([]);
   });
   it("blocks expansion of an exact-only grant through role and capability delegation", async () => {
@@ -248,6 +249,7 @@ describe("reporting, responsibility, SIA and audit", () => {
   });
   it("assigns typed responsibility without changing ownership or permissions and rejects cross-company targets", async () => {
     const person = await account(aId, []);
+    await workforce.save(adminId, "reporting", { organizationId: aId, personId: person.personId, managerPersonId: manager.personId });
     const product = await db.product.create({ data: { organizationId: aId, name: "Test responsibility product", slug: "test-responsibility-product" } });
     const goal = await db.goal.create({ data: { organizationId: aId, title: "Test responsibility goal" } });
     for (const target of [{}, { projectId: projectA }, { productId: product.id }, { goalId: goal.id }]) await workforce.save(adminId, "responsibilities", { organizationId: aId, personId: person.personId, title: "Test responsibility", ...target });

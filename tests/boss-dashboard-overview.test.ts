@@ -18,13 +18,14 @@ const mocks: Record<string, unknown> = {
   "@/components/ui/user-time": { UserTime: () => createElement("span", null, "Not recorded") },
   "@/server/group/boss-reliability": { bossHref: (view: string) => `/app/boss?view=${view}` },
   "@/server/group/boss-overview": { overviewHref: () => "/app/boss?view=overview&queue=decisions", overviewKey: (row: { id: string }) => row.id },
+  "@/lib/boss-departments": { bossDepartments: { marketing: { label: "Marketing" }, hr: { label: "HR" }, sales: { label: "Sales" }, finance: { label: "Finance" }, operations: { label: "Operations" } }, departmentHref: (key: string) => `/app/boss/departments/${key}` },
 };
 runInNewContext(code, { module: target, exports: target.exports, require: (name: string) => name in mocks ? mocks[name] : require(name) });
 const { BossDashboardOverview } = target.exports as { BossDashboardOverview: ComponentType<{ data: unknown; query: object }> };
 
 function render(overrides: Record<string, unknown> = {}) {
   const data = {
-    selectedCompanyId: undefined, companies: [{ organizationId: "company" }],
+    selectedCompanyId: undefined, companies: [{ organizationId: "company" }], brands: [], readable: { brand: true },
     cards: [{ organizationId: "company", legalName: "AIRA SKILL CITY PRIVATE LIMITED", displayName: "AIRA", status: "ACTIVE", health: "NO_RECORDED_WORK", divisions: [], projects: [], }],
     members: [], headline: { activeProjects: 0, activePeople: 0 }, oversight: { openBlockers: 0, overdueTasks: 0, pendingRecordedDecisions: 0 },
     overview: { queues: { decisions: [], approvals: [] }, coverage: { decisions: true, approvals: true }, urgent: [], canAct: () => false, nextAction: () => "Review" },
@@ -36,11 +37,10 @@ function render(overrides: Record<string, unknown> = {}) {
 describe("Boss dashboard overview", () => {
   it("shows actual zeroes, qualified preview labels, and no invented progress or NEXA analysis", () => {
     const html = render();
-    expect(html).toContain("AIRA SKILL CITY PRIVATE LIMITED");
+    expect(html).toContain("Group dashboard");
     expect(html).toContain("0</strong>");
-    expect(html).toContain("projects in preview");
-    expect(html).toContain("No urgent items in the current authorized preview");
-    expect(html).toContain("NEXA is not initialized");
+    expect(html).toContain("No urgent items in the accessible preview");
+    expect(html).toContain("Departments");
     expect(html).not.toContain("78%");
   });
   it("keeps restricted metrics unavailable and links an authorized decision", () => {
@@ -49,6 +49,6 @@ describe("Boss dashboard overview", () => {
     expect(html).toContain("Unavailable");
     expect(html).toContain("Review assignment");
     expect(html).toContain("/app/boss?view=overview&amp;queue=decisions");
-    expect(html).toContain("Decisions needed");
+    expect(html).toContain("Pending decisions");
   });
 });

@@ -44,7 +44,7 @@ describe("Boss primary surface", () => {
     const html = renderToStaticMarkup(createElement(BossPrimary, { view: "companies", data, query: {} }));
     expect(html).toContain("MAXPASE GROUP");
     expect(html).toContain("PEARN PRIVATE LIMITED");
-    expect(html).toContain("AIRA Labs");
+    expect(html).toContain("BGOS");
     expect(html).toContain("HappiNotes");
     expect(html).not.toContain("TEARN PRIVATE LIMITED");
   });

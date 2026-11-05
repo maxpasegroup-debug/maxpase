@@ -19,7 +19,7 @@ const Icon = () => createElement("span", null);
 runInNewContext(compiled, { module: moduleTarget, exports: moduleTarget.exports, require: (name: string) => ({
   "next/link": { __esModule: true, default: ({ href, children }: { href: string; children: ReactNode }) => createElement("a", { href }, children) },
   "next/image": { __esModule: true, default: ({ src, alt }: { src: string; alt: string }) => createElement("img", { src, alt }) },
-  "next/font/google": { Instrument_Sans: () => ({ className: "test-font" }) },
+  "next/font/google": { Instrument_Sans: () => ({ className: "test-font" }), Anton: () => ({ variable: "test-display" }) },
   "lenis/dist/lenis.css": {},
   "./startup.css": {},
   "lucide-react": { ArrowDown: Icon, ArrowRight: Icon, ArrowUpRight: Icon },

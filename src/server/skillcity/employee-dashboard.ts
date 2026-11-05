@@ -3,16 +3,20 @@ import { prisma } from "@/server/db";
 import { AccessError } from "@/server/authorization/engine";
 import { requirePortalAccess } from "@/server/portals/policy";
 import { leadPayload } from "@/server/labs/input";
-import { staffOnboardingService } from "./staff-onboarding";
-import { advisorCrm } from "./crm";
-import { staffInvite } from "./staff-invite";
+import { createStaffOnboardingService } from "./staff-onboarding";
+import { createAdvisorCrm } from "./crm";
+import { createStaffInvite } from "./staff-invite";
 import { createSkillCityDeveloperDesk } from "./developer-desk";
-import { skillCityLabsService } from "@/server/labs/service";
+import { createLabsService } from "@/server/labs/service";
 
 export const employeeViews = ["advisor", "director", "manager", "administrative-officer", "developer", "business-development"] as const;
 export type EmployeeView = typeof employeeViews[number];
 
 export function createSkillCityEmployeeDashboard(client: PrismaClient = prisma) {
+  const staffOnboardingService = createStaffOnboardingService(client);
+  const advisorCrm = createAdvisorCrm(client);
+  const staffInvite = createStaffInvite(client);
+  const skillCityLabsService = createLabsService(client, () => new Date(), "skillcity");
   async function dashboard(userId: string, requested?: string) {
     const access = await requirePortalAccess(client, userId, "skillcity");
     const { ctx, companyId } = access;
