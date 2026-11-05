@@ -16,8 +16,8 @@ function load<T>(path: string, mocks: Record<string, unknown>): T {
   runInNewContext(code, { module: target, exports: target.exports, require: (name: string) => name in mocks ? mocks[name] : nativeRequire(name), Intl });
   return target.exports as T;
 }
-function surfaces(state: Record<string, unknown> = {}, pending = false) {
-  const react = { ...React, useActionState: () => [state, () => {}, pending] };
+function surfaces(state: Record<string, unknown> = {}, pending = false, signupDetails?: { displayName: string; country: string; nationalNumber: string }) {
+  const react = { ...React, useActionState: () => [state, () => {}, pending], useState: (initial: unknown) => [initial === null && signupDetails ? signupDetails : initial, () => {}] };
   const icons = { ArrowRight: () => null, ArrowLeft: () => null, BriefcaseBusiness: () => null, Eye: () => null, EyeOff: () => null, X: () => null };
   const common = { react, "next/link": Link, "lucide-react": icons, "./auth.module.css": css, "../jobs-ui/auth.module.css": css, "../../jobs-ui/auth.module.css": css };
   const { JobsAuthShell } = load<{ JobsAuthShell: ComponentType<Record<string, unknown>> }>("src/app/sites/jobs-ui/auth-shell.tsx", { ...common, "next/image": () => null });
@@ -35,16 +35,21 @@ describe("Nice Jobs candidate phone screens", () => {
     expect(html).toContain('name="country"'); expect(html).toContain('name="nationalNumber"'); expect(html).toContain('name="pin"');
     expect(html).toContain("Forgot PIN?"); expect(html).toContain("Create an account"); expect(html).not.toContain('name="email"');
   });
-  it("collects name, mobile and email before asking for a PIN", () => {
+  it("collects name and mobile first, then email and consent before asking for a PIN", () => {
     const html = renderToStaticMarkup(createElement(surfaces().signup.ApplicantPhoneSignupForm, { paths }));
-    expect(html).toContain('name="displayName"'); expect(html).toContain('name="email"'); expect(html).not.toContain('name="confirmPin"');
-    expect(html).toContain('name="acknowledge"'); expect(html).toContain("Phone ownership is not verified");
+    expect(html).toContain('name="displayName"'); expect(html).toContain('name="nationalNumber"'); expect(html).not.toContain('name="email"');
     expect(/<select[^>]*name="country"[\s\S]*?<\/select><input[^>]*name="nationalNumber"/.test(html)).toBe(true);
     expect(/<select[^>]*name="country"[^>]*><option value="IN"[^>]*>India \(\+91\)<\/option>/.test(html)).toBe(true);
     expect(html).not.toContain('type="search"');
     expect(html).not.toContain('aria-label="Selected calling code"');
     expect(html).not.toContain('name="pin"');
-    expect(html).toContain("Verify email");
+    expect(html).toContain("Continue");
+    const emailStep = renderToStaticMarkup(createElement(surfaces({}, false, { displayName: "Candidate", country: "IN", nationalNumber: "9876543210" }).signup.ApplicantPhoneSignupForm, { paths }));
+    expect(emailStep).toContain('name="email"'); expect(emailStep).toContain('name="acknowledge"');
+    expect(emailStep).toContain('name="displayName" value="Candidate"');
+    expect(emailStep).toContain('name="nationalNumber" value="9876543210"');
+    expect(emailStep).toContain("Phone ownership is not yet verified");
+    expect(emailStep).toContain("Send email code"); expect(emailStep).not.toContain('name="pin"');
   });
   it("opens an OTP dialog after account creation with resend and edit-email choices", () => {
     const sent = renderToStaticMarkup(createElement(surfaces({ pendingVerification: true, challengeId: "fixture-challenge" }).signup.ApplicantPhoneSignupForm, { paths }));

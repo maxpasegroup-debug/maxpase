@@ -7,7 +7,8 @@ export const migrationManifest = [
   ["20261031000000_hr_employment_assignments", "46bb12a2d689236974021827a0c85c777e678f47355bc032ab62e236d1cfbb4a"],
   ["20261101000000_hr_documents", "0d2c7925cc24e8b68dd90b938e97922be879984988a5b015b8ab59ad7ad9a83d"],
   ["20261101010000_hr_document_employee_visibility", "6f5064d359a25c3d3a05db24045cc789b6d34fdd136a805589367b2a37b21f63"],
-  ["20261101020000_hr_company_configuration", "9f7b1cf98ab1cdb4f2d46180fa02c86698c8ce6b9f9a05e9728073b47683aa8a"]
+  ["20261101020000_hr_company_configuration", "9f7b1cf98ab1cdb4f2d46180fa02c86698c8ce6b9f9a05e9728073b47683aa8a"],
+  ["20261104000000_nicejobs_tara_transcript", "f9a92220dbc068f3044c586f69411064ead1b50a8f3fbe355e5102df19c76a2c"]
 ] as const;
 
 export async function verifyDatabaseReadiness(db: Prisma.TransactionClient) {
@@ -15,7 +16,7 @@ export async function verifyDatabaseReadiness(db: Prisma.TransactionClient) {
   if (rows.length !== migrationManifest.length || rows.some(r => !r.finished_at) || migrationManifest.some(([name, checksum]) => rows.filter(r => r.migration_name === name && r.checksum === checksum).length !== 1)) throw new Error("Schema unavailable");
   const required: Record<string, string[]> = {
     Brand: ["parentBrandId"], Employment: ["personId", "companyId", "status", "employmentType"], HrAssignment: ["employmentId", "brandId", "status"], HrDocument: ["employmentId", "companyId", "brandId", "assetId", "status", "employeeVisible"], HrDocumentCategory: ["companyId", "key"], HrCompanyOnboardingConfig: ["companyId", "proposedPortalHost", "proposedSenderEmail"], Session: ["id"], User: ["timezone", "emailVerifiedAt", "jobsPhone", "jobsPinHash", "jobsPhoneVerifiedAt"],
-    EmailAuthChallenge: ["otpHash", "credentialHash", "attempts", "consumedAt"], NiceJobsContentFile: ["digest", "bytes", "organizationId"],
+    EmailAuthChallenge: ["otpHash", "credentialHash", "attempts", "consumedAt"], SiaRun: ["conversationPrompt", "conversationResponse", "conversationContext"], NiceJobsContentFile: ["digest", "bytes", "organizationId"],
     LabsCustomerGrant: ["customerUserId", "leadId", "status"], NexaIdentity: ["id", "status"], NexaDirective: ["directorUserId", "organizationId", "status"],
     NiceJobsKnowledgeVersion: ["captions", "transcript", "number", "status", "current"], NiceJobsKnowledgeReceipt: ["acknowledgedAt"],
     NiceJobsAssignment: ["versionId", "lifecycle", "onboardingId", "readinessReviewId"],

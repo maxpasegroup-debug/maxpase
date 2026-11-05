@@ -40,16 +40,21 @@ function VerifyEmail({ challengeId, deliveryError, paths }: { challengeId?: stri
 
 export function ApplicantPhoneSignupForm({ paths }: { paths: JobsAuthPaths }) {
   const [state, action, pending] = useActionState(jobsPhoneSignupAction, {} as PortalLoginState);
+  const [details, setDetails] = useState<{ displayName: string; country: string; nationalNumber: string } | null>(null);
   if (state.pendingVerification) return <VerifyEmail challengeId={state.challengeId} deliveryError={state.error} paths={paths} />;
-  return <JobsAuthShell paths={paths} mode="signup" eyebrow="CREATE YOUR ACCOUNT" title="Your next step starts here." description="Create an account to explore opportunities and track your applications.">
-    <form action={action} className={styles.form} aria-busy={pending}><fieldset disabled={pending}>
+  return <JobsAuthShell paths={paths} mode="signup" eyebrow={`CREATE YOUR ACCOUNT · STEP ${details ? "2" : "1"} OF 3`} title={details ? "Verify your contact." : "Your next step starts here."} description={details ? "Add an email you can open now. We will send a six-digit code." : "Tell us who you are. It takes just a moment."}>
+    <ol className={styles.steps} aria-label="Account setup progress"><li aria-current={!details ? "step" : undefined}>Your details</li><li aria-current={details ? "step" : undefined}>Email</li><li>Secure PIN</li></ol>
+    {!details ? <form className={styles.form} onSubmit={event => { event.preventDefault(); const data = new FormData(event.currentTarget); setDetails({ displayName: String(data.get("displayName") ?? ""), country: String(data.get("country") ?? ""), nationalNumber: String(data.get("nationalNumber") ?? "") }); }}>
       <div className={styles.field}><label htmlFor="jobs-name">Full name</label><input id="jobs-name" name="displayName" autoComplete="name" minLength={2} maxLength={120} required /></div>
       <PhoneField prefix="signup" />
-      <div className={styles.field}><label htmlFor="jobs-email">Recovery email</label><input id="jobs-email" name="email" type="email" autoComplete="email" maxLength={254} required /><p className={styles.hint}>Verify this email to recover your PIN later.</p></div>
-      <p className={styles.notice}>We use your contact details and answers to process applications. An account does not guarantee employment or an offer. Phone ownership is not verified until a supported verification service is configured.</p>
+      <button className={styles.button}>Continue<ArrowRight size={18} /></button>
+    </form> : <form action={action} className={styles.form} aria-busy={pending}><fieldset disabled={pending}>
+      <input type="hidden" name="displayName" value={details.displayName} /><input type="hidden" name="country" value={details.country} /><input type="hidden" name="nationalNumber" value={details.nationalNumber} />
+      <div className={styles.field}><label htmlFor="jobs-email">Email address</label><input id="jobs-email" name="email" type="email" autoComplete="email" maxLength={254} required autoFocus /><p className={styles.hint}>We’ll send a code here. This email can also help you reset your PIN.</p></div>
+      <p className={styles.notice}>We use your details to process applications. An account does not guarantee employment. Phone ownership is not yet verified.</p>
       <label className={styles.acknowledge}><input name="acknowledge" type="checkbox" required /><span>I understand how my applicant account will be used.</span></label>
-      <button className={styles.button} disabled={pending}>{pending ? "Sending code..." : "Verify email"}<ArrowRight size={18} /></button>
-    </fieldset>{state.error && <p role="alert" className={styles.alert}>{state.error}</p>}</form>
+      <div className={styles.stepActions}><button type="button" className={styles.backButton} onClick={() => setDetails(null)}>Back</button><button className={styles.button} disabled={pending}>{pending ? "Sending code..." : "Send email code"}<ArrowRight size={18} /></button></div>
+    </fieldset>{state.error && <p role="alert" className={styles.alert}>{state.error}</p>}</form>}
     <p className={styles.switch}>Already have an account? <Link href={paths.login}>Sign in</Link> <Link href={paths.login.replace(/\/login$/, "/verify-email")}>Verify email</Link></p>
   </JobsAuthShell>;
 }

@@ -138,6 +138,15 @@
 .verificationDialog .status, .verificationDialog .alert { margin-top: 12px; }
 .verificationDialog :where(button, input, select):focus-visible { outline: 3px solid var(--aira-gold); outline-offset: 2px; }
 
+.signupPage .formContent { position: relative; overflow: hidden; border-radius: 18px; }
+.signupPage .formContent::before { content: ""; display: block; width: 42px; height: 42px; margin-bottom: 12px; border: 2px solid var(--aira-gold); border-radius: 50%; background: radial-gradient(circle at 35% 30%, #fff, var(--aira-gold) 12%, var(--aira-burgundy) 48%, #171014 76%); box-shadow: 0 0 25px rgba(212,175,98,.45), inset -6px -5px 10px rgba(0,0,0,.5); }
+.steps { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 5px; margin: 0 0 20px; padding: 0; list-style: none; }
+.steps li { padding: 7px 2px; border-top: 2px solid #60464c; color: #cdbfc3; font-size: 11px; font-weight: 700; text-align: center; }
+.steps li[aria-current] { border-top-color: var(--aira-gold); color: var(--aira-ivory); }
+.stepActions { display: grid; grid-template-columns: 84px minmax(0,1fr); gap: 10px; }
+.backButton { min-height: 44px; border: 1px solid var(--aira-gold); border-radius: 5px; color: var(--aira-ivory); background: transparent; font: inherit; font-weight: 700; cursor: pointer; }
+.backButton:hover { background: #30272a; }
+
 @media (max-width: 760px) {
   .story { display: flex; min-height: 210px; }
   .storyContent { padding: 28px 24px; }

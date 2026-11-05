@@ -42,7 +42,7 @@ export async function jobsPhoneSignupAction(_state: PortalLoginState, form: Form
     }
     if (error instanceof RateLimitError || error instanceof NiceJobsError) return { error: error.message };
     if (error instanceof ZodError) return { error: "Check your name, country, phone and email." };
-    if (error instanceof EmailAuthUnavailable) return { error: "Email verification is not configured or available. No account was created. Please try again later." };
+    if (error instanceof EmailAuthUnavailable) return { error: "We can’t send email codes right now. No account was created. Please try again later." };
     if (error instanceof NiceJobsUnavailable) return { error: "Registration is temporarily unavailable. No account was created." };
     safeDiagnostic("operation_failed");
     return { error: "Could not finish registration. Please try again later." };
