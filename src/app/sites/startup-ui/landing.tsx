@@ -3,7 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { useLayoutEffect, useRef, useState, type CSSProperties } from "react";
-import { Anton, Instrument_Sans } from "next/font/google";
+import localFont from "next/font/local";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import Lenis from "lenis";
@@ -11,12 +11,11 @@ import "lenis/dist/lenis.css";
 import "./startup.css";
 import { StartupSiaAssistant } from "./sia-assistant";
 
-const sans = Instrument_Sans({
-  subsets: ["latin"],
-  style: ["normal", "italic"],
-  weight: ["400", "500", "600", "700"]
-});
-const display = Anton({ subsets: ["latin"], weight: "400", variable: "--aira-condensed" });
+const sans = localFont({ src: [
+  { path: "../fonts/instrument-sans-latin.woff2", weight: "400 700", style: "normal" },
+  { path: "../fonts/instrument-sans-italic-latin.woff2", weight: "400 700", style: "italic" }
+], display: "swap" });
+const display = localFont({ src: "../fonts/anton-latin.woff2", weight: "400", variable: "--aira-condensed", display: "swap" });
 
 const nav = [
   ["Discover", "discover"],

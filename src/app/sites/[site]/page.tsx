@@ -2,14 +2,14 @@ import type { Metadata } from "next";
 import { requestPortal } from "@/server/portals/request";
 import { AiraLanding } from "@/components/aira/AiraLanding";
 import { venturesFor } from "@/components/aira/ventures";
-import { Manrope, Syne } from "next/font/google";
+import localFont from "next/font/local";
 import { LabsLanding } from "../labs-ui/landing";
 import { JobsLanding } from "../jobs-ui/landing";
 import { StartupLanding } from "../startup-ui/landing";
 import { applicationService } from "@/server/nicejobs/applications";
 import { NiceJobsUnavailable } from "@/server/nicejobs/input";
-const display = Syne({ subsets: ["latin"], weight: ["700", "800"], variable: "--aira-display" });
-const text = Manrope({ subsets: ["latin"], weight: ["400", "500", "600"], variable: "--aira-text" });
+const display = localFont({ src: "../fonts/syne-latin.woff2", weight: "700 800", variable: "--aira-display", display: "swap" });
+const text = localFont({ src: "../fonts/manrope-latin.woff2", weight: "400 600", variable: "--aira-text", display: "swap" });
 const startupFaqs = [
   ["What is AIRA Startup Skool?", "It is the startup project inside AIRA Skill City: a place for curious minds and ambitious founders to learn, experiment and take a practical next step."],
   ["What does the work focus on?", "Entrepreneurship, practical learning and founder projects. The school helps you turn an idea into focused work. It does not promise a company, funding or revenue."],

@@ -160,7 +160,7 @@ describe("Nice Jobs participant dashboard", () => {
       "@/server/portals/request": { requestPortal }, "@/server/portals/sites": { portalSites: [] },
       "@/components/aira/AiraLanding": { AiraLanding: () => { throw new Error("Skill City landing must not render for Nice Jobs"); } },
       "@/components/aira/ventures": { venturesFor: () => [] },
-      "next/font/google": { Syne: () => ({ variable: "display" }), Manrope: () => ({ variable: "text" }) },
+      "next/font/local": { __esModule: true, default: () => ({ variable: "display" }) },
       "../labs-ui/landing": { LabsLanding: () => { throw new Error("Labs landing must not render for Nice Jobs"); } },
       "../startup-ui/landing": { StartupLanding: () => { throw new Error("Startup landing must not render for Nice Jobs"); } },
       "../jobs-ui/landing": { JobsLanding: ({ paths: landingPaths }: { paths: typeof paths }) => createElement("a", { href: landingPaths.opportunities }, "Explore Opportunities") },
