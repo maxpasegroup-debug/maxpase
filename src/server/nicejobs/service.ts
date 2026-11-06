@@ -5,6 +5,8 @@ import { activeMembershipWhere, ancestry } from "@/server/authorization/business
 import { operationalEvent } from "@/server/domain/operational-events";
 import * as input from "./input";
 import { opportunityProfile, publicationIssues, type OpportunityConfiguration } from "./opportunity-configuration";
+import { partnerProgrammeIssues } from "./partner-programme";
+import { parseCommercialTerms, termsMatchProgram } from "@/server/group/startup-commercial-terms";
 import { initialOpportunities } from "./initial-opportunities";
 import { programmeChecklist, storedConfiguration } from "./programme-checklist";
 
@@ -76,6 +78,10 @@ export function createNiceJobsService(client: PrismaClient = prisma) {
       const brand = await db.brand.findFirst({ where: { id: profile.brandId, organizationId: b.company.id, status: "ACTIVE" }, select: { name: true } });
       if (!brand || profile.brandLabel !== brand.name) throw new input.NiceJobsError("Brand must belong to the employer company and use its recorded name");
     }
+    if (profile.programme) {
+      const program = await db.program.findFirst({ where: { id: profile.programme.id, companyOrganizationId: b.company.id }, select: { id: true } });
+      if (!program) throw new input.NiceJobsError("Programme must belong to this company");
+    }
     if (profile.reportingManager.personId) for (const divisionId of divisionIds) await person(db, b, profile.reportingManager.personId, divisionId);
   }
   async function create(userId: string, raw: unknown) {
@@ -145,10 +151,14 @@ export function createNiceJobsService(client: PrismaClient = prisma) {
           if (configured.programmeSetup?.publicationReviewerUserId !== userId) throw new AccessError("Approval is assigned to a different authorized publication reviewer");
         }
       }
+      if (v.engagement === "INDEPENDENT_PARTNER" && !v.publishedAt && c.to === "PUBLISHED") {
+        if (v.status !== "APPROVED" || !await db.operationalEvent.findFirst({ where: { entityType: "NiceJobsVersion", entityId: v.id, eventType: "nicejobs.job.approved", status: "SUCCEEDED", organizationId: b.company.id, audit: { result: "SUCCESS", actorUserId: { not: userId } } }, select: { id: true } })) throw new input.NiceJobsError("A separate authorized human must approve the partner agreement before publication");
+      }
       if (["APPROVED", "PUBLISHED"].includes(c.to) && (t.visibility === "PUBLIC" || opportunityProfile(v.configuration))) {
         const configured = v.configuration ? JSON.parse(v.configuration) : null;
         if (configured?.preOfferRequired && !configured.preOffer) throw new input.NiceJobsError("Configure role video, comprehension check and versioned policies before publication");
         const profile = opportunityProfile(v.configuration), issues = publicationIssues(profile, v.description, v.engagement);
+        if (v.engagement === "INDEPENDENT_PARTNER") issues.push(...await partnerProgrammeIssues(db, b.company.id, profile));
         if (issues.length) throw new input.NiceJobsError(issues.join(" "));
         await opportunityReferences(db, b, profile, v.areas.map(area => area.divisionId));
       }
@@ -198,9 +208,10 @@ export function createNiceJobsService(client: PrismaClient = prisma) {
       const v = await db.niceJobsVersion.findFirst({ where: { id: data.versionId, status: "PUBLISHED", publishedAt: { not: null }, template: { companyId: b.company.id, productId: b.product.id, status: "PUBLISHED", publishedVersionId: data.versionId }, areas: { some: { divisionId: data.divisionId } } } });
       if (!v) throw new input.NiceJobsError("Assignment requires the current published job in this business area");
       await person(db, b, data.personId, data.divisionId);
+      await db.$queryRaw`SELECT id FROM "Person" WHERE id = ${data.personId} FOR UPDATE`;
       if (data.managerId) { if (data.managerId === data.personId) throw new input.NiceJobsError("A worker cannot supervise themselves"); await person(db, b, data.managerId, data.divisionId); }
       const profile = await db.niceJobsWorkerProfile.upsert({ where: { companyId_personId: { companyId: b.company.id, personId: data.personId } }, update: {}, create: { companyId: b.company.id, personId: data.personId } });
-      if (await db.niceJobsAssignment.findFirst({ where: { profileId: profile.id, status: { not: "ENDED" } }, select: { id: true } })) throw new input.NiceJobsError("This person already has an open assignment; multiple-assignment policy is not configured");
+      if (await db.niceJobsAssignment.findFirst({ where: { profile: { personId: data.personId }, status: { not: "ENDED" } }, select: { id: true } })) throw new input.NiceJobsError("This person already has an open assignment; multiple-assignment policy is not configured");
       const row = await db.niceJobsAssignment.create({ data: { profileId: profile.id, versionId: v.id, divisionId: data.divisionId, managerId: data.managerId } });
       await audit(db, b, "assignment.created", "NiceJobsAssignment", row.id, data.divisionId, { versionId: v.id, status: row.status, lifecycle: row.lifecycle });
       return row;
@@ -215,6 +226,10 @@ export function createNiceJobsService(client: PrismaClient = prisma) {
       await areas(db, b, [row.divisionId], "nicejobs.worker.transition");
       const profile = await db.niceJobsWorkerProfile.findUniqueOrThrow({ where: { id: row.profileId }, select: { personId: true } });
       await person(db, b, profile.personId, row.divisionId);
+      if (c.to === "ACTIVE") {
+        await db.$queryRaw`SELECT id FROM "Person" WHERE id = ${profile.personId} FOR UPDATE`;
+        if (await db.niceJobsAssignment.findFirst({ where: { id: { not: row.id }, profile: { personId: profile.personId }, status: { not: "ENDED" } }, select: { id: true } })) throw new input.NiceJobsError("Another open assignment conflicts with activation");
+      }
       const allowed: Record<string, string[]> = { APPLICANT: ["APPROVED"], APPROVED: ["OFFERED"], OFFERED: ["OFFER_ACCEPTED"], OFFER_ACCEPTED: ["ORIENTATION"], ORIENTATION: ["OJT"], OJT: ["ACTIVE"], ACTIVE: ["SUSPENDED"], SUSPENDED: ["ACTIVE"] };
       if (!allowed[row.lifecycle]?.includes(c.to)) throw new input.NiceJobsError("Invalid or deferred worker transition");
       const status = c.to === "ACTIVE" ? "ACTIVE" : c.to === "SUSPENDED" ? "SUSPENDED" : row.status;
@@ -351,6 +366,8 @@ export function createNiceJobsService(client: PrismaClient = prisma) {
       const readable = divisionIds.every(id => b.ctx.organizationIds("person.read").includes(id));
       const paths = divisionIds.map(id => ancestry(b.ctx.nodes, id).map(node => node.id));
       const profile = opportunityProfile(version.configuration);
+      const programmes = profile?.brandId ? await db.program.findMany({ where: { companyOrganizationId: b.company.id, brandId: profile.brandId }, select: { id: true, name: true, status: true, organizationId: true, updatedAt: true, metadata: true, priceMinor: true, currency: true }, orderBy: { name: "asc" }, take: 100 }) : [];
+      const terms = programmes.length ? await db.executiveRecord.findMany({ where: { kind: "STARTUP_COMMERCIAL_TERMS", status: "APPROVED", organizationId: { in: [...new Set(programmes.map(program => program.organizationId))] } }, select: { id: true, title: true, payload: true }, take: 100 }) : [];
       const managerWhere: Prisma.PersonWhereInput = { status: "ACTIVE", AND: divisionIds.map((id, index) => ({ memberships: { some: { ...activeMembershipWhere(), projectId: null, OR: [{ organizationId: id }, { organizationId: { in: paths[index] }, scope: "DESCENDANTS" }] } } })) };
       const managers = readable ? await db.person.findMany({ where: { ...managerWhere, displayName: { contains: q.search } }, select: { id: true, displayName: true }, take: 25, orderBy: { displayName: "asc" } }) : [];
       if (readable && profile?.reportingManager.personId && !managers.some(person => person.id === profile.reportingManager.personId)) {
@@ -364,7 +381,7 @@ export function createNiceJobsService(client: PrismaClient = prisma) {
         const account = await db.user.findFirst({ where: { id, status: "ACTIVE", person: managerWhere }, select: { id: true, person: { select: { displayName: true } } } });
         if (account) accounts.push(account);
       }
-      return { companyId: b.company.id, legalName: company.legalName, brands, managers, accounts: accounts.map(account => ({ id: account.id, displayName: account.person!.displayName })) };
+      return { companyId: b.company.id, legalName: company.legalName, brands, managers, programmes, terms: terms.flatMap(record => { try { const payload = parseCommercialTerms(record.payload); const program = programmes.find(program => program.id === payload.programId); return payload.issuerCompanyId === b.company.id && payload.brandId === profile?.brandId && program && termsMatchProgram(program, payload) && payload.paymentConditions && payload.refundRules ? [{ id: record.id, name: record.title, programId: payload.programId, feeMinor: payload.feeMinor, currency: payload.currency, taxBasisPoints: payload.taxBasisPoints, paymentConditions: payload.paymentConditions, refundRules: payload.refundRules }] : []; } catch { return []; } }), accounts: accounts.map(account => ({ id: account.id, displayName: account.person!.displayName })) };
     });
   }
   async function visibility(userId: string, raw: unknown) {

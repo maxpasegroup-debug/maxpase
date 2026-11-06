@@ -8,7 +8,10 @@ export const migrationManifest = [
   ["20261101000000_hr_documents", "0d2c7925cc24e8b68dd90b938e97922be879984988a5b015b8ab59ad7ad9a83d"],
   ["20261101010000_hr_document_employee_visibility", "6f5064d359a25c3d3a05db24045cc789b6d34fdd136a805589367b2a37b21f63"],
   ["20261101020000_hr_company_configuration", "9f7b1cf98ab1cdb4f2d46180fa02c86698c8ce6b9f9a05e9728073b47683aa8a"],
-  ["20261104000000_nicejobs_tara_transcript", "f9a92220dbc068f3044c586f69411064ead1b50a8f3fbe355e5102df19c76a2c"]
+  ["20261104000000_nicejobs_tara_transcript", "f9a92220dbc068f3044c586f69411064ead1b50a8f3fbe355e5102df19c76a2c"],
+    ["20261105000000_nicejobs_participant_identity", "f72d0f0cbe590e57cf046eba82f760e0abbef1c455a701a4a39b0777936f323c"],
+    ["20261106000000_nicejobs_source_events", "c184c280d9e488beb24c753dae17d361ba0fe26829bcd178fd645fe4014a3c7d"],
+    ["20261106010000_nicejobs_admission_incentives", "aec3955c3ead6ec54428790324f57021b2fd4c5414cc560e59df949e823cd5c4"]
 ] as const;
 
 export async function verifyDatabaseReadiness(db: Prisma.TransactionClient) {
@@ -19,12 +22,12 @@ export async function verifyDatabaseReadiness(db: Prisma.TransactionClient) {
     EmailAuthChallenge: ["otpHash", "credentialHash", "attempts", "consumedAt"], SiaRun: ["conversationPrompt", "conversationResponse", "conversationContext"], NiceJobsContentFile: ["digest", "bytes", "organizationId"],
     LabsCustomerGrant: ["customerUserId", "leadId", "status"], NexaIdentity: ["id", "status"], NexaDirective: ["directorUserId", "organizationId", "status"],
     NiceJobsKnowledgeVersion: ["captions", "transcript", "number", "status", "current"], NiceJobsKnowledgeReceipt: ["acknowledgedAt"],
-    NiceJobsAssignment: ["versionId", "lifecycle", "onboardingId", "readinessReviewId"],
+    NiceJobsAssignment: ["versionId", "lifecycle", "onboardingId", "readinessReviewId"], Person: ["niceJobsId"], NiceJobsReferralLink: ["assignmentId", "versionId", "companyId", "token"], NiceJobsAdmission: ["referralId", "companyId", "externalAdmissionId", "eventReference", "status"],
     NiceJobsApplication: ["applicationId", "versionId", "revision", "reviewRequestId"], NiceJobsInterview: ["reference"], NiceJobsOffer: ["snapshot"],
     NiceJobsOnboarding: ["planId", "readinessStatus"], NiceJobsTrainingPlan: ["fingerprint"],
     NiceJobsDailyReport: ["assignmentId", "reportDate", "operationalSnapshot"], NiceJobsLead: ["policyId", "currentWorkerAssignmentId"],
     NiceJobsLeadFollowup: ["scheduledAt", "assignmentHistoryId"], NiceJobsPerformanceSnapshot: ["frameworkVersionId", "results"], NiceJobsPip: ["released", "revision"],
-    NiceJobsWalletLedger: ["amountMinor", "reference"], NiceJobsPayoutIntent: ["amountMinor", "status"], NiceJobsWalletReversalProposal: ["adjustmentId", "ledgerId"],
+    NiceJobsWalletLedger: ["amountMinor", "reference"], NiceJobsIncentiveEarning: ["snapshotId", "admissionId", "policyVersionId"], NiceJobsSourceEvent: ["externalEventId", "externalTransactionId", "status"], NiceJobsPayoutIntent: ["amountMinor", "status"], NiceJobsWalletReversalProposal: ["adjustmentId", "ledgerId"],
     Task: ["niceJobsAssignmentId", "evidenceRequired"], ScheduledJob: ["scanCursor", "scanStartedAt", "scanRuleVersion"],
     AutomationRule: ["lifecycle", "divisionId"], AutomationRun: ["workflowVersionId", "sourceEventId", "attempts", "nextRetryAt", "failureClass"],
     NiceJobsAutomationVersion: ["ruleId", "status", "definition", "publishedAt"], NiceJobsOperationalException: ["companyId", "divisionId", "sourceKey", "status", "revision"]

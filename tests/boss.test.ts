@@ -37,8 +37,8 @@ describe("MAXPASE group and Boss controls", () => {
     const panel = createNiceJobsControlPanel(db);
     const navigation = await panel.navigation(userId, { companyId: airaId });
     expect(navigation.companyId).toBe(airaId);
-    expect(navigation.groups.map(group => group.label)).toEqual(["Overview", "Opportunities", "Applicants", "Workforce", "Earnings", "System"]);
-    expect(navigation.groups.find(group => group.key === "overview")?.entries[0].view).toBe("workforce-command");
+    expect(navigation.groups.map(group => group.label)).toEqual(["Companies", "Products & Programmes", "Resources", "Opportunities", "Incentives", "Participants", "Admissions", "Reports"]);
+    expect(navigation.groups.find(group => group.key === "reports")?.entries[0].view).toBe("workforce-command");
     await expect(panel.navigation(userId, { companyId: pearnId })).rejects.toThrow();
   });
   it("validates filters, includes the entire UTC end day, and preserves company/view/filter navigation", () => {

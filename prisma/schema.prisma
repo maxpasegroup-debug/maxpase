@@ -51,8 +51,10 @@ model NiceJobsIncentiveEarning {
   policy NiceJobsIncentivePolicy @relation(fields: [policyId], references: [id], onDelete: Restrict)
   policyVersionId String
   policyVersion NiceJobsIncentiveVersion @relation(fields: [policyVersionId], references: [id], onDelete: Restrict)
-  snapshotId String
-  snapshot NiceJobsPerformanceSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Restrict)
+  snapshotId String?
+  snapshot NiceJobsPerformanceSnapshot? @relation(fields: [snapshotId], references: [id], onDelete: Restrict)
+  admissionId String? @unique
+  admission NiceJobsAdmission? @relation(fields: [admissionId], references: [id], onDelete: Restrict)
   periodStart DateTime
   periodEnd DateTime
   currency String
@@ -67,7 +69,7 @@ model NiceJobsIncentiveEarning {
   creator User @relation(fields: [creatorUserId], references: [id], onDelete: Restrict)
   createdAt DateTime @default(now())
   ledger NiceJobsWalletLedger?
-  @@unique([assignmentId, policyId, periodStart, periodEnd])
+  @@index([assignmentId, policyId, periodStart, periodEnd], map: "nicejobs_earning_period_idx")
   @@index([assignmentId, status, currency, id])
   @@index([policyVersionId, status, id])
 }
@@ -541,6 +543,7 @@ model NiceJobsTemplate {
 }
 
 model NiceJobsVersion {
+  referralLinks NiceJobsReferralLink[]
   incentivePolicies NiceJobsIncentivePolicy[]
   performanceFrameworks NiceJobsPerformanceFramework[]
   knowledgeVersions NiceJobsKnowledgeVersion[]
@@ -593,6 +596,7 @@ model NiceJobsWorkerProfile {
 }
 
 model NiceJobsAssignment {
+  referralLink NiceJobsReferralLink?
   incentiveEarnings NiceJobsIncentiveEarning[]
   wallets NiceJobsWallet[]
   performanceSnapshots NiceJobsPerformanceSnapshot[]
@@ -1437,6 +1441,12 @@ enum GoalStatus {
 }
 
 model User {
+  niceJobsAdmissionsRecorded NiceJobsAdmission[] @relation("NiceJobsAdmissionRecorder")
+  niceJobsAdmissionsVerified NiceJobsAdmission[] @relation("NiceJobsAdmissionVerifier")
+  niceJobsSourceEventsReviewed NiceJobsSourceEvent[] @relation("NiceJobsSourceEventReviewer")
+  niceJobsSourceEventsSubmitted NiceJobsSourceEvent[] @relation("NiceJobsSourceEventSubmitter")
+  niceJobsSourceConnectionsCreated NiceJobsSourceConnection[] @relation("NiceJobsSourceConnectionCreator")
+  niceJobsSourceConnectionsApproved NiceJobsSourceConnection[] @relation("NiceJobsSourceConnectionApprover")
   hrDocumentUploads HrDocument[] @relation("HrDocumentUploader")
   bossNexaDirectives NexaDirective[] @relation("NexaBoss")
   assignedNexaDirectives NexaDirective[] @relation("NexaDirector")
@@ -1541,6 +1551,7 @@ model Session {
 }
 
 model Person {
+  niceJobsId             String? @unique
   employments            Employment[]
   managedHrAssignments   HrAssignment[] @relation("HrAssignmentManager")
   managedPips NiceJobsPip[]
@@ -1585,7 +1596,109 @@ model Person {
   updatedAt              DateTime                @updatedAt
 }
 
+model NiceJobsReferralLink {
+  id String @id @default(cuid())
+  assignmentId String @unique
+  assignment NiceJobsAssignment @relation(fields: [assignmentId], references: [id], onDelete: Restrict)
+  versionId String
+  version NiceJobsVersion @relation(fields: [versionId], references: [id], onDelete: Restrict)
+  companyId String
+  company Organization @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  token String @unique
+  destination String
+  status String @default("ACTIVE")
+  admissions NiceJobsAdmission[]
+  sourceEvents NiceJobsSourceEvent[]
+  createdAt DateTime @default(now())
+  revokedAt DateTime?
+  @@index([companyId, status, id])
+}
+
+model NiceJobsAdmission {
+  id String @id @default(cuid())
+  referralId String
+  referral NiceJobsReferralLink @relation(fields: [referralId], references: [id], onDelete: Restrict)
+  companyId String
+  company Organization @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  externalApplicationId String?
+  externalAdmissionId String
+  eventReference String @unique
+  status String @default("PENDING_VERIFICATION")
+  evidenceReference String
+  verificationEvidenceReference String?
+  recordedByUserId String
+  recordedBy User @relation("NiceJobsAdmissionRecorder", fields: [recordedByUserId], references: [id], onDelete: Restrict)
+  verifiedByUserId String?
+  verifiedBy User? @relation("NiceJobsAdmissionVerifier", fields: [verifiedByUserId], references: [id], onDelete: Restrict)
+  recordedAt DateTime @default(now())
+  verifiedAt DateTime?
+  sourceEvents NiceJobsSourceEvent[]
+  incentiveEarning NiceJobsIncentiveEarning?
+  @@unique([companyId, externalAdmissionId])
+  @@index([referralId, status, id])
+  @@index([referralId, status, verifiedAt, id], map: "nicejobs_admission_sequence_idx")
+  @@index([companyId, status, id])
+}
+
+model NiceJobsSourceEvent {
+  id String @id @default(cuid())
+  connectionId String
+  connection NiceJobsSourceConnection @relation(fields: [connectionId], references: [id], onDelete: Restrict)
+  companyId String
+  company Organization @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  referralId String?
+  referral NiceJobsReferralLink? @relation(fields: [referralId], references: [id], onDelete: Restrict)
+  admissionId String?
+  admission NiceJobsAdmission? @relation(fields: [admissionId], references: [id], onDelete: Restrict)
+  externalEventId String
+  eventType String
+  externalApplicationId String?
+  externalAdmissionId String?
+  externalTransactionId String?
+  amountMinor BigInt?
+  currency String?
+  fingerprint String
+  payload String
+  status String @default("PENDING_REVIEW")
+  failureCode String?
+  attempts Int @default(1)
+  occurredAt DateTime
+  receivedAt DateTime @default(now())
+  reviewedByUserId String?
+  reviewedBy User? @relation("NiceJobsSourceEventReviewer", fields: [reviewedByUserId], references: [id], onDelete: Restrict)
+  submittedByUserId String?
+  submittedBy User? @relation("NiceJobsSourceEventSubmitter", fields: [submittedByUserId], references: [id], onDelete: Restrict)
+  reviewedAt DateTime?
+  reviewEvidence String?
+  @@unique([connectionId, externalEventId])
+  @@index([companyId, eventType, status, id])
+  @@index([referralId, eventType, status, id])
+  @@index([companyId, externalTransactionId])
+}
+
+model NiceJobsSourceConnection {
+  id String @id @default(cuid())
+  companyId String
+  company Organization @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  name String
+  credentialReference String
+  status String @default("DRAFT")
+  approvalReference String?
+  creatorUserId String
+  creator User @relation("NiceJobsSourceConnectionCreator", fields: [creatorUserId], references: [id], onDelete: Restrict)
+  approvedByUserId String?
+  approvedBy User? @relation("NiceJobsSourceConnectionApprover", fields: [approvedByUserId], references: [id], onDelete: Restrict)
+  createdAt DateTime @default(now())
+  activatedAt DateTime?
+  events NiceJobsSourceEvent[]
+  @@index([companyId, status, id])
+}
+
 model Organization {
+  niceJobsReferralLinks NiceJobsReferralLink[]
+  niceJobsAdmissions NiceJobsAdmission[]
+  niceJobsSourceEvents NiceJobsSourceEvent[]
+  niceJobsSourceConnections NiceJobsSourceConnection[]
   hrOnboardingConfig HrCompanyOnboardingConfig?
   hrDocumentCategories HrDocumentCategory[]
   hrDocuments HrDocument[]

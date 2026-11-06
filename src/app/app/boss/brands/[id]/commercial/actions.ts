@@ -26,7 +26,7 @@ export async function commercialAction(_state: CommercialState, form: FormData):
       const tax = field(form, "taxBasisPoints");
       if (!/^(0|[1-9][0-9]{0,4})$/.test(tax) || Number(tax) > 10000) throw new AccessError("Choose a valid proposed tax rate from a reviewed policy");
       const [whole, fraction = ""] = money.split(".");
-      await startupCommercial.prepare(userId, brandId, mode, { programId: field(form, "programId"), termsReference: field(form, "termsReference"), feeMinor: Number(whole) * 100 + Number(fraction.padEnd(2, "0")), currency: field(form, "currency"), taxBasisPoints: Number(tax) });
+      await startupCommercial.prepare(userId, brandId, mode, { programId: field(form, "programId"), termsReference: field(form, "termsReference"), feeMinor: Number(whole) * 100 + Number(fraction.padEnd(2, "0")), currency: field(form, "currency"), taxBasisPoints: Number(tax), ...(field(form, "paymentConditions") ? { paymentConditions: field(form, "paymentConditions") } : {}), ...(field(form, "refundRules") ? { refundRules: field(form, "refundRules") } : {}) });
     } else if (["SUBMIT", "APPROVE", "REJECT"].includes(operation)) {
       await startupCommercial.change(userId, brandId, mode, field(form, "recordId"), Number(field(form, "version")), operation as "SUBMIT" | "APPROVE" | "REJECT", operation === "SUBMIT" ? undefined : { decision: operation === "APPROVE" ? "APPROVED" : "REJECTED", reason: field(form, "reason"), evidenceReference: field(form, "evidenceReference") });
     } else throw new AccessError("Commercial action unavailable");

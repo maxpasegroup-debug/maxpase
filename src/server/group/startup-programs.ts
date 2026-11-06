@@ -6,6 +6,8 @@ import { operationalEvent } from "@/server/domain/operational-events";
 import { createAiraService } from "@/server/domain/aira-service";
 import { createBossRegistry } from "./boss-registry";
 import { createBossService } from "./boss-service";
+import { lifecycleStatuses, allowedStartupChange } from "./startup-program-lifecycle";
+export { lifecycleStatuses, allowedStartupChange } from "./startup-program-lifecycle";
 
 const publicationKind = "STARTUP_PROGRAM_PUBLICATION_REQUEST";
 const publicationPayload = z.object({ programId: z.string().min(1), programUpdatedAt: z.iso.datetime({ offset: true }), brandId: z.string().min(1), commercialApproval: z.literal(false), writtenTermsReference: z.string().min(1) }).strict();
@@ -26,10 +28,6 @@ const draftFields = z.object({
 export type StartupProgramDraft = z.infer<typeof draftFields>;
 export function readStartupDraft(raw: string | null): StartupProgramDraft | null {
   try { return draftFields.parse(JSON.parse(raw ?? "null")?.startupProgramDraft); } catch { return null; }
-}
-export const lifecycleStatuses = ["DRAFT", "ACTIVE", "PAUSED", "RETIRED", "ARCHIVED"] as const;
-export function allowedStartupChange(current: string, next: string): boolean {
-  return current === "ACTIVE" && next === "PAUSED" || current !== "ARCHIVED" && next === "ARCHIVED";
 }
 export function startupProgramWhere(companyId: string, divisionId: string, brandId: string, search = "", status?: string): Prisma.ProgramWhereInput {
   const term = search.trim().slice(0, 100);
@@ -62,13 +60,13 @@ export function createStartupPrograms(client: PrismaClient = prisma) {
     const context = await brand(userId, brandId, true);
     const data = z.object({ name: z.string().trim().min(1).max(200), slug: z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/).max(120), description: z.string().max(4000).nullable(), durationDays: z.number().int().positive().nullable(), capacity: z.number().int().positive().nullable(), priceMinor: z.number().int().min(0).nullable(), currency: z.string().regex(/^[A-Z]{3}$/).nullable(), draft: draftFields }).strict().parse(raw);
     const previous = programId ? await scopedProgram(userId, brandId, programId, true) : null;
-    if (previous && !["DRAFT", "PAUSED"].includes(previous.row.status)) throw new AccessError("Only draft or paused programmes can be edited here");
+    if (previous && !["DRAFT", "PLANNED", "PAUSED"].includes(previous.row.status)) throw new AccessError("Only draft, planned or paused programmes can be edited here");
     let metadata: Record<string, unknown> = {};
     if (previous?.row.metadata) { try { metadata = JSON.parse(previous.row.metadata) as Record<string, unknown>; } catch { throw new AccessError("Existing programme configuration is unavailable"); } }
     const { draft, ...fields } = data;
     return aira.save(userId, "programs", { organizationId: context.startupDivision!, brandId: previous ? previous.row.brandId : brandId, productId: previous?.row.productId ?? null, kind: previous?.row.kind ?? "PROGRAM", status: previous?.row.status ?? "DRAFT", ...fields, metadata: { ...metadata, startupProgramDraft: draft } }, programId);
   }
-  async function changeStatus(userId: string, brandId: string, programId: string, next: "PAUSED" | "ARCHIVED") {
+  async function changeStatus(userId: string, brandId: string, programId: string, next: "DRAFT" | "PLANNED" | "PAUSED" | "CLOSED" | "ARCHIVED") {
     const { row } = await scopedProgram(userId, brandId, programId, true);
     if (!allowedStartupChange(row.status, next)) throw new AccessError("Programme transition unavailable");
     return aira.save(userId, "programs", { organizationId: row.organizationId, name: row.name, slug: row.slug, description: row.description, kind: row.kind, status: next, durationDays: row.durationDays, capacity: row.capacity, priceMinor: row.priceMinor, currency: row.currency, brandId: row.brandId, productId: row.productId, metadata: row.metadata ? JSON.parse(row.metadata) : null }, row.id);
@@ -76,7 +74,7 @@ export function createStartupPrograms(client: PrismaClient = prisma) {
   async function requestPublication(userId: string, brandId: string, programId: string) {
     const { context, row } = await scopedProgram(userId, brandId, programId, true);
     if (context.row.status !== "ACTIVE" || context.row.organization.status !== "ACTIVE" || !context.startupDivisionActive) throw new AccessError("Startup Skool scope is inactive");
-    if (row.status !== "DRAFT" && row.status !== "PAUSED") throw new AccessError("Only draft or paused programmes can request publication");
+    if (!["DRAFT", "PLANNED", "PAUSED"].includes(row.status)) throw new AccessError("Only draft, planned or paused programmes can request publication");
     const termsReference = readStartupDraft(row.metadata)?.writtenTermsReference;
     if (!row.name || !row.description || !row.durationDays || !termsReference) throw new AccessError("Complete the programme description, duration and proposed terms reference first");
     const sourceKey = `startup:program-publication:${row.id}:${row.updatedAt.toISOString()}`;
@@ -109,7 +107,7 @@ export function createStartupPrograms(client: PrismaClient = prisma) {
       let payload: z.infer<typeof publicationPayload>;
       try { payload = publicationPayload.parse(JSON.parse(request.payload)); } catch { throw new AccessError("Publication evidence unavailable"); }
       if (payload.programId !== program.id || payload.brandId !== brandId || request.sourceKey !== `startup:program-publication:${program.id}:${payload.programUpdatedAt}` ||
-        program.updatedAt.toISOString() !== payload.programUpdatedAt || !["DRAFT", "PAUSED"].includes(program.status) ||
+        program.updatedAt.toISOString() !== payload.programUpdatedAt || !["DRAFT", "PLANNED", "PAUSED"].includes(program.status) ||
         readStartupDraft(program.metadata)?.writtenTermsReference !== payload.writtenTermsReference) throw new AccessError("Programme changed; request a new review");
       if (input.decision === "APPROVED" && (await db.program.updateMany({ where: { id: program.id, status: program.status, updatedAt: program.updatedAt }, data: { status: "ACTIVE" } })).count !== 1) throw new AccessError("Programme changed; request a new review");
       if ((await db.executiveRecord.updateMany({ where: { id: request.id, status: "PENDING", version: input.version }, data: { status: input.decision, version: { increment: 1 } } })).count !== 1) throw new AccessError("Publication decision already recorded");

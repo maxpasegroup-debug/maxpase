@@ -46,7 +46,9 @@ export async function startupSubmitAction(_state: StartupActionState, form: Form
   const { site, paths } = await requestPortal("startup", true);
   const session = await getPortalSession(site);
   if (!session) return { error: "Sign in again to send your application." };
-  try { await startupApplications.submit(session.userId, { tier: form.get("tier"), idea: form.get("idea"), goal: form.get("goal"), experience: form.get("experience"), location: form.get("location"), timeCommitment: form.get("timeCommitment"), consent: form.get("consent") === "on" }); }
+  const { cookies } = await import("next/headers");
+  const referralToken = (await cookies()).get("nicejobs_startup_ref")?.value;
+  try { await startupApplications.submit(session.userId, { tier: form.get("tier"), idea: form.get("idea"), goal: form.get("goal"), experience: form.get("experience"), location: form.get("location"), timeCommitment: form.get("timeCommitment"), consent: form.get("consent") === "on", ...(referralToken ? { referralToken } : {}) }); }
   catch (error) {
     if (error instanceof z.ZodError) return { error: "Complete each answer and acknowledge how your application will be reviewed." };
     if (!(error instanceof AccessError)) safeDiagnostic("operation_failed");

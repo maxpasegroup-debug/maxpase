@@ -52,7 +52,7 @@ describe("Nice Jobs candidate home", () => {
     const list = vi.fn(async () => ({ records: [], nextCursor: null }));
     const learning = vi.fn(async () => ({ records: [], nextCursor: null }));
     const opportunities = vi.fn(), day = vi.fn();
-    const dashboard = createParticipantDashboard({ account: {} as never, applications: { list, opportunities } as never, onboarding: { list: learning } as never, employee: { day } as never, knowledge: {} as never, operations: {} as never });
+    const dashboard = createParticipantDashboard({ account: {} as never, applications: { list, opportunities } as never, onboarding: { list: learning } as never, employee: { day } as never, knowledge: {} as never, operations: {} as never, identity: async () => "NJ-2026-TEST" });
     const result = await dashboard.candidateSpace("own-user");
     expect(result.applications.status).toBe("AVAILABLE");
     expect(result.learning.status).toBe("AVAILABLE");

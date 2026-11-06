@@ -24,7 +24,7 @@ export async function programAction(_previous: ProgramActionState, form: FormDat
     else if (operation === "decide" && programId) await startupPrograms.decidePublication(session.userId, brandId, programId, {
       requestId: text(form, "requestId"), version: Number(form.get("version")), decision: text(form, "decision"), reason: text(form, "reason"), evidenceReference: text(form, "evidenceReference")
     });
-    else if ((operation === "pause" || operation === "archive") && programId) await startupPrograms.changeStatus(session.userId, brandId, programId, operation === "pause" ? "PAUSED" : "ARCHIVED");
+    else if (["plan", "draft", "pause", "close", "archive"].includes(operation) && programId) await startupPrograms.changeStatus(session.userId, brandId, programId, ({ plan: "PLANNED", draft: "DRAFT", pause: "PAUSED", close: "CLOSED", archive: "ARCHIVED" } as const)[operation as "plan" | "draft" | "pause" | "close" | "archive"]);
     else throw new AccessError("Unknown programme action");
     revalidatePath(`/app/boss/brands/${encodeURIComponent(brandId)}/programs`);
     revalidatePath(`/app/boss/brands/${encodeURIComponent(brandId)}`);

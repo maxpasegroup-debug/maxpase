@@ -9,7 +9,7 @@ import { createBossService } from "@/server/group/boss-service";
 import { assertStartupPilotEnrollmentReady } from "./startup-pilot-register";
 
 const tiers = ["STARTER", "PRO", "EXTRAORDINARY"] as const;
-export const startupApplicationInput = z.object({ tier: z.enum(tiers), idea: z.string().trim().min(20).max(1500), goal: z.string().trim().min(20).max(1500), experience: z.string().trim().min(10).max(1000), location: z.string().trim().min(2).max(120), timeCommitment: z.string().trim().min(5).max(250), consent: z.literal(true) }).strict();
+export const startupApplicationInput = z.object({ tier: z.enum(tiers), idea: z.string().trim().min(20).max(1500), goal: z.string().trim().min(20).max(1500), experience: z.string().trim().min(10).max(1000), location: z.string().trim().min(2).max(120), timeCommitment: z.string().trim().min(5).max(250), consent: z.literal(true), referralToken: z.string().regex(/^[A-Za-z0-9_-]{32,100}$/).optional() }).strict();
 const reviewInput = z.object({ id: z.string().min(1).max(200), version: z.number().int().min(0), decision: z.enum(["IN_REVIEW", "APPROVED", "REJECTED"]), reason: z.string().trim().min(5).max(1000) }).strict();
 const kind = "STARTUP_APPLICATION";
 const statuses = new Set(["SUBMITTED", "IN_REVIEW", "APPROVED", "REJECTED"]);
@@ -24,7 +24,7 @@ export function canConfirmStartupAdmission(application: { status: string; versio
 export function startupPbaProgramWhere(programId: string, companyId: string, divisionId: string, brandId: string): Prisma.ProgramWhereInput {
   return { id: programId, companyOrganizationId: companyId, organizationId: divisionId, status: { in: ["DRAFT", "ACTIVE", "PAUSED"] }, OR: [{ brandId }, { brandId: null }], product: { organizationId: companyId, slug: "pba", divisionId } };
 }
-const storedApplicationInput = startupApplicationInput.extend({ noticeVersion: z.literal(1), programId: z.string().min(1).max(200).optional() });
+const storedApplicationInput = startupApplicationInput.omit({ referralToken: true }).extend({ noticeVersion: z.literal(1), programId: z.string().min(1).max(200).optional(), referral: z.object({ token: z.string(), participantId: z.string(), companyId: z.string(), opportunityId: z.string(), referralId: z.string(), capturedAt: z.string().datetime() }).strict().optional() });
 export type StartupApplicationPayload = z.infer<typeof storedApplicationInput>;
 export function parseStartupApplicationPayload(raw: string): StartupApplicationPayload {
   let value: unknown;
@@ -67,12 +67,23 @@ export function createStartupApplications(client: PrismaClient = prisma) {
       await requirePortalAccess(db, userId, "startup");
       const user = await db.user.findUniqueOrThrow({ where: { id: userId }, select: { emailVerifiedAt: true, personId: true, person: { select: { metadata: true } } } });
       if (!user.emailVerifiedAt || user.personId !== personId || JSON.parse(user.person?.metadata ?? "{}").authenticationRealm !== "startup") throw new AccessError("Applicant identity changed");
-      const prior = await db.executiveRecord.findUnique({ where: { sourceKey }, select: { id: true, organizationId: true, ownerPersonId: true } });
+      const link = input.referralToken ? await db.niceJobsReferralLink.findUnique({ where: { token: input.referralToken }, include: { assignment: { select: { status: true, profile: { select: { person: { select: { niceJobsId: true } } } } } }, version: { select: { engagement: true } } } }) : null;
+      if (input.referralToken && (!link || link.status !== "ACTIVE" || link.companyId !== access.companyId || link.assignment.status !== "ACTIVE" || link.version.engagement !== "INDEPENDENT_PARTNER" || !link.assignment.profile.person.niceJobsId)) throw new AccessError("Referral cannot be attached to this application");
+      const referral = link ? { token: link.token, participantId: link.assignment.profile.person.niceJobsId!, companyId: link.companyId, opportunityId: link.versionId, referralId: link.id, capturedAt: new Date().toISOString() } : undefined;
+      const prior = await db.executiveRecord.findUnique({ where: { sourceKey }, select: { id: true, organizationId: true, ownerPersonId: true, payload: true, version: true, status: true } });
       if (prior) {
         if (prior.organizationId !== access.divisionId || prior.ownerPersonId !== personId) throw new AccessError("Application unavailable");
+        const previous = parseStartupApplicationPayload(prior.payload);
+        if (referral && previous.referral?.referralId !== referral.referralId) {
+          if (previous.referral) throw new AccessError("A different referral is already recorded");
+          if ((await db.executiveRecord.updateMany({ where: { id: prior.id, version: prior.version, organizationId: access.divisionId }, data: { payload: JSON.stringify({ ...previous, referral }), version: { increment: 1 } } })).count !== 1) throw new AccessError("Application changed; refresh before linking referral");
+          await db.executiveHistory.create({ data: { recordId: prior.id, actorUserId: userId, fromStatus: prior.status, toStatus: prior.status, reason: "Applicant linked an existing application to an approved Nice Jobs referral" } });
+          await operationalEvent(db, { actorUserId: userId, actorPersonId: personId, organizationId: access.divisionId, action: "startup.application.referral_attached", entityType: "ExecutiveRecord", entityId: prior.id, result: "SUCCESS", metadata: { referralId: referral.referralId, opportunityId: referral.opportunityId } });
+        }
         return { id: prior.id, duplicate: true };
       }
-      const row = await db.executiveRecord.create({ data: { kind, organizationId: access.divisionId, ownerPersonId: personId, title: "PBA entrepreneur journey application", status: "SUBMITTED", sourceKey, payload: JSON.stringify({ ...input, noticeVersion: 1 }) } });
+      const { referralToken: _referralToken, ...answers } = input;
+      const row = await db.executiveRecord.create({ data: { kind, organizationId: access.divisionId, ownerPersonId: personId, title: "PBA entrepreneur journey application", status: "SUBMITTED", sourceKey, payload: JSON.stringify({ ...answers, noticeVersion: 1, ...(referral ? { referral } : {}) }) } });
       await db.executiveHistory.create({ data: { recordId: row.id, actorUserId: userId, toStatus: "SUBMITTED", reason: "Applicant submitted the journey application" } });
       await operationalEvent(db, { actorUserId: userId, actorPersonId: personId, organizationId: access.divisionId, action: "startup.application.submitted", entityType: "ExecutiveRecord", entityId: row.id, result: "SUCCESS", metadata: { tierPreference: input.tier, noticeVersion: 1 } });
       return { id: row.id, duplicate: false };

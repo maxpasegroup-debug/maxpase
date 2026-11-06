@@ -6,6 +6,7 @@ import { jobsPhoneInput, jobsPinInput } from "@/server/auth/jobs-phone";
 import { createSecurityLimiter, securityKey } from "@/server/security/rate-limit";
 import { operationalEvent } from "@/server/domain/operational-events";
 import { NiceJobsError, NiceJobsUnavailable } from "./input";
+import { newNiceJobsId } from "./participant-id";
 
 export const applicantPermissionKeys = ["organization.read", "nicejobs.application.self", "notification.read", "sia.access.read"] as const;
 export const applicantRoleKey = "nicejobs-public-applicant";
@@ -42,7 +43,7 @@ export function createApplicantAccess(client: PrismaClient = prisma) {
         let role = await db.role.findUnique({ where: { organizationId_key: { organizationId: career.id, key: applicantRoleKey } }, include: { permissions: { include: { permission: { select: { key: true } } }, take: 5 } } });
         if (!role) role = await db.role.create({ data: { organizationId: career.id, key: applicantRoleKey, name: "Nice Jobs applicant", category: "APPLICANT", system: true, description: "Self-service application access in Career Hub only. No worker or management authority.", permissions: { create: permissions.map(permission => ({ permissionId: permission.id })) } }, include: { permissions: { include: { permission: { select: { key: true } } }, take: 5 } } });
         if (role.status !== "ACTIVE" || role.principalType !== "HUMAN" || role.canonical || role.permissions.length !== applicantPermissionKeys.length || role.permissions.some(grant => !applicantPermissionKeys.some(key => key === grant.permission.key))) throw new NiceJobsUnavailable("Applicant access is not configured");
-        const person = await db.person.create({ data: { displayName: data.displayName, email: data.email, phone, metadata: JSON.stringify({ authenticationRealm: "jobs", identitySource: "SELF_REGISTRATION", contactStatus: "UNVERIFIED", registrationNoticeVersion: 1 }) } });
+        const person = await db.person.create({ data: { displayName: data.displayName, email: data.email, phone, niceJobsId: newNiceJobsId(), metadata: JSON.stringify({ authenticationRealm: "jobs", identitySource: "SELF_REGISTRATION", contactStatus: "UNVERIFIED", registrationNoticeVersion: 1 }) } });
         const user = await db.user.create({ data: { email: data.email, personId: person.id, jobsPhone: phone, jobsPinHash } });
         const membership = await db.membership.create({ data: { personId: person.id, organizationId: career.id, title: "Applicant", scope: "ORGANIZATION", metadata: JSON.stringify({ source: "NICE_JOBS_SELF_REGISTRATION" }), roles: { create: { roleId: role.id } } } });
         await operationalEvent(db, { actorUserId: user.id, actorPersonId: person.id, organizationId: career.id, action: "nicejobs.applicant.registered", entityType: "User", entityId: user.id, result: "SUCCESS", metadata: { membershipId: membership.id, noticeVersion: 1, contactStatus: "UNVERIFIED" } });

@@ -114,8 +114,9 @@ export function createEmployeeService(client: PrismaClient = prisma, now: () => 
     if (existing) { if (existing.managerId !== (c.managerId ?? null) || existing.startDate?.getTime() !== c.startDate.getTime()) throw new NiceJobsError("Activation replay mismatch"); return existing; }
     if (c.revision !== e.revision) throw new NiceJobsError("Readiness changed; refresh before activation");
     if (c.startDate > now()) throw new NiceJobsError("Activation cannot start in the future");
+    await db.$queryRaw`SELECT id FROM "Person" WHERE id = ${e.application.candidateId} FOR UPDATE`;
     const profile = await db.niceJobsWorkerProfile.upsert({ where: { companyId_personId: { companyId: b.company.id, personId: e.application.candidateId } }, update: {}, create: { companyId: b.company.id, personId: e.application.candidateId } });
-    if (await db.niceJobsAssignment.findFirst({ where: { profileId: profile.id, status: { not: "ENDED" } }, select: { id: true } })) throw new NiceJobsError("An open assignment conflicts with activation; explicit reconciliation required");
+    if (await db.niceJobsAssignment.findFirst({ where: { profile: { personId: e.application.candidateId }, status: { not: "ENDED" } }, select: { id: true } })) throw new NiceJobsError("An open assignment conflicts with activation; explicit reconciliation required");
     return db.niceJobsAssignment.create({ data: { profileId: profile.id, versionId: e.plan.versionId, divisionId: scope.organizationId, managerId: c.managerId, status: "ACTIVE", lifecycle: "ACTIVE", startDate: c.startDate, onboardingId: e.id, readinessReviewId: proof.id, activatedAt: now(), activatedByUserId: b.userId }, include: assignmentInclude });
   }
   async function snapshot(db: DB, b: Boundary, a: Assignment, reportDate: string) {

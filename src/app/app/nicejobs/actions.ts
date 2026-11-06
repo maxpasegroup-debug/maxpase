@@ -13,6 +13,8 @@ import { safeDiagnostic } from "@/server/security/diagnostics";
 import { AccessError } from "@/server/authorization/engine";
 import { NiceJobsError } from "@/server/nicejobs/input";
 import { niceJobsService as service } from "@/server/nicejobs/service";
+import { referralService } from "@/server/nicejobs/referrals";
+import { niceJobsSourceService } from "@/server/nicejobs/source-events";
 export type JobActionState = { success?: string; error?: string };
 export async function niceJobsAction(_state: JobActionState, form: FormData): Promise<JobActionState> {
   let userId: string;
@@ -45,6 +47,14 @@ export async function niceJobsAction(_state: JobActionState, form: FormData): Pr
       case "seed-launch": await service.seedInitialOpportunities(userId, true); break;
       case "assign": await service.assign(userId, { personId: form.get("personId"), versionId: form.get("versionId"), divisionId: form.get("divisionId"), managerId: String(form.get("managerId") ?? "") || null }); break;
       case "lifecycle": await service.transition(userId, { id, revision, to: form.get("to"), reason: form.get("reason") }); break;
+      case "referral-link": await referralService.create(userId); break;
+      case "admission-record": await referralService.record(userId, { token: form.get("token"), externalApplicationId: String(form.get("externalApplicationId") ?? "") || undefined, externalAdmissionId: form.get("externalAdmissionId"), eventReference: form.get("eventReference"), evidenceReference: form.get("evidenceReference") }); break;
+      case "admission-decide": await referralService.decide(userId, { id, decision: form.get("decision"), evidenceReference: form.get("evidenceReference") }); break;
+      case "source-create": await niceJobsSourceService.create(userId, { companyId: form.get("companyId"), name: form.get("name"), credentialReference: form.get("credentialReference") }); break;
+      case "source-activate": await niceJobsSourceService.activate(userId, { id, approvalReference: form.get("approvalReference") }); break;
+      case "source-review": await niceJobsSourceService.review(userId, { id, decision: form.get("decision"), evidenceReference: form.get("evidenceReference") }); break;
+      case "source-reconcile": await niceJobsSourceService.reconcile(userId, { id, referralToken: form.get("referralToken"), evidenceReference: form.get("evidenceReference") }); break;
+      case "source-manual": await niceJobsSourceService.submitManual(userId, { connectionId: form.get("connectionId"), evidenceReference: form.get("evidenceReference"), event: { eventId: form.get("eventId"), companyId: form.get("companyId"), opportunityId: form.get("opportunityId"), referralToken: form.get("referralToken"), type: form.get("eventType"), occurredAt: form.get("occurredAt"), externalApplicationId: String(form.get("externalApplicationId") ?? "") || undefined, externalAdmissionId: String(form.get("externalAdmissionId") ?? "") || undefined, externalTransactionId: String(form.get("externalTransactionId") ?? "") || undefined, amountMinor: String(form.get("amountMinor") ?? "") || undefined, currency: String(form.get("currency") ?? "") || undefined } }); break;
       default: throw new NiceJobsError("Unknown operation");
     }
     revalidatePath("/app/nicejobs"); revalidatePath("/sites/jobs/gateway");

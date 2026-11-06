@@ -10,6 +10,8 @@ import { OnboardingWorkspace } from "./onboarding-workspace";
 import { EmployeeWorkspace } from "./employee-workspace";
 import { KnowledgeWorkspace } from "./knowledge-workspace";
 import { applicationStage } from "@/lib/nicejobs-application-stage";
+import { referralService, linkUrl } from "@/server/nicejobs/referrals";
+import { JobForm } from "./job-form";
 import styles from "./job-space.module.css";
 
 type Props = { userId: string; realm: "corporate" | "jobs"; base: string; query: Record<string, string | string[] | undefined>; worker: boolean };
@@ -33,7 +35,7 @@ export async function JobSpace({ userId, realm, base, query, worker }: Props) {
       if (activeAssignment) workIdentity = day.data.assignment;
     }
   }
-  const tabs = ["overview", "application", ...(enrollment?.data ? ["today", "training"] : []), ...(activeAssignment ? ["work-id", "work", "resources", "earnings"] : [])];
+  const tabs = ["overview", "application", ...(enrollment?.data ? ["today", "training"] : []), ...(activeAssignment ? ["work-id", "work", "resources", "referrals", "earnings"] : [])];
   const requested = typeof query.tab === "string" ? query.tab : "overview";
   const tab = tabs.includes(requested) ? requested : "overview";
   const href = (next: string) => `${base}?view=job-space&reference=${encodeURIComponent(reference)}&tab=${next}`;
@@ -51,6 +53,14 @@ export async function JobSpace({ userId, realm, base, query, worker }: Props) {
     {tab === "work-id" && workIdentity && <section className={styles.overview}><div><h2>Work ID</h2><p>This private work identity is linked to your active, approved assignment. It is not a government ID or proof of payment.</p><dl><dt>Name</dt><dd>{workIdentity.name}</dd><dt>Role</dt><dd>{workIdentity.title}</dd><dt>Company</dt><dd>{workIdentity.company}</dd><dt>Assignment reference</dt><dd>{workIdentity.id}</dd><dt>Start date</dt><dd>{workIdentity.startDate ? workIdentity.startDate.toISOString().slice(0, 10) + " UTC" : "Not recorded"}</dd></dl></div></section>}
     {tab === "work" && activeAssignment && <EmployeeWorkspace {...shared} query={{ ...shared.query, view: "my-day" }} />}
     {tab === "resources" && activeAssignment && <KnowledgeWorkspace {...shared} query={{ ...shared.query, view: "worker-resources" }} />}
+    {tab === "referrals" && activeAssignment && <ReferralSpace userId={userId} realm={realm} assignmentId={workIdentity!.id} />}
     {tab === "earnings" && activeAssignment && <section className={styles.overview}><h2>Wallet</h2><p>Your wallet may include other authorized work. Verified earnings, pending amounts and payout status are separate; a recorded amount does not mean it was paid.</p><Link href={`${base}?view=worker-wallet`}>Open Wallet <ArrowRight size={17} aria-hidden="true" /></Link></section>}
   </div>;
+}
+
+async function ReferralSpace({ userId, realm, assignmentId }: { userId: string; realm: string; assignmentId: string }) {
+  const result = await dashboardRead(() => referralService.own(userId));
+  if (!result.data || result.data.assignment.id !== assignmentId) return <section className={styles.overview}><h2>My referral link</h2><p role="status">Referral access is unavailable for this account.</p></section>;
+  const outcomes = result.data.outcomes;
+  return <section className={styles.overview}><div><h2>My referral link</h2><p>Share only with interested people who consent to being contacted. A click or application does not create verified earnings.</p>{!result.data.available ? <p role="status">The admission platform or link needs manager review. Do not share an unapproved link.</p> : result.data.link ? <p><a href={linkUrl(result.data.link.destination, result.data.link.token)} rel="noopener noreferrer" target="_blank">Open approved referral link</a></p> : <JobForm realm={realm} operation="referral-link" label="Create my link" />}</div><div><h3>Admission outcomes</h3><p>These are company records, not wallet credits or payment confirmation.</p><dl><dt>Awaiting verification</dt><dd>{outcomes.PENDING_VERIFICATION ?? 0}</dd><dt>Verified by an independent reviewer</dt><dd>{outcomes.VERIFIED ?? 0}</dd><dt>Rejected</dt><dd>{outcomes.REJECTED ?? 0}</dd><dt>Reversed</dt><dd>{outcomes.REVERSED ?? 0}</dd></dl></div></section>;
 }

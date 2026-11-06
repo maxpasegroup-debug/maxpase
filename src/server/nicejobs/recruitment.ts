@@ -200,6 +200,9 @@ export function createRecruitmentService(client: PrismaClient = prisma, now: () 
         if (!own) { await permission(b, a, "nicejobs.offer.read"); await permission(b, a, ["PREPARE_OFFER", "REVISE_OFFER", "READY_OFFER"].includes(op) ? "nicejobs.offer.prepare" : op === "ISSUE_OFFER" ? "nicejobs.offer.issue" : "nicejobs.offer.withdraw"); }
         if (!["APPROVED", "OFFER"].includes(a.status)) throw new NiceJobsError("Approved application required");
         const c = offerConfig(a);
+        const partnerMission = a.area.version.engagement === "INDEPENDENT_PARTNER";
+        const agreement = opportunityProfile(a.area.version.configuration)?.partnerAgreement;
+        if (partnerMission && (c.documentKind !== "PARTNER_AGREEMENT" || agreement?.status !== "CONFIRMED" || !agreement.version || !agreement.evidence || !agreement.text) || !partnerMission && c.documentKind !== "EMPLOYMENT_OFFER") throw new NiceJobsError("The reviewed document type and partner agreement must match this engagement");
         if (["PREPARE_OFFER", "REVISE_OFFER"].includes(op)) {
           await approvalValid(db, a);
           const active = await db.niceJobsOffer.findFirst({ where: { applicationId: a.id, activeKey: a.id } });
@@ -212,7 +215,8 @@ export function createRecruitmentService(client: PrismaClient = prisma, now: () 
           } else if (active) throw new NiceJobsError("An active offer already exists");
           const last = await db.niceJobsOffer.findFirst({ where: { applicationId: a.id }, select: { number: true }, orderBy: { number: "desc" } });
           const profile = opportunityProfile(a.area.version.configuration);
-          const snapshot = { title: c.title, reference: c.reference ?? null, company: profile?.legalEmployer.legalName ?? a.company.name, division: profile?.divisionLabel ?? a.area.division.name, jobTitle: a.area.version.title, jobVersion: a.area.version.number, engagement: a.area.version.engagement, ...c.content, compensation: c.content.compensation ?? profile?.compensation.text ?? null, incentives: c.content.incentives ?? profile?.incentives.text ?? null, ...(prior ? JSON.parse(prior.snapshot) : {}), ...(data.content ?? {}), validityDays: c.validityDays, declineReasonRequired: c.declineReasonRequired };
+          const snapshot = { title: c.title, reference: c.reference ?? null, documentKind: c.documentKind, partnerAgreement: partnerMission ? agreement : null, company: profile?.legalEmployer.legalName ?? a.company.name, division: profile?.divisionLabel ?? a.area.division.name, jobTitle: a.area.version.title, jobVersion: a.area.version.number, engagement: a.area.version.engagement, ...c.content, compensation: c.content.compensation ?? profile?.compensation.text ?? null, incentives: c.content.incentives ?? profile?.incentives.text ?? null, ...(prior ? JSON.parse(prior.snapshot) : {}), ...(data.content ?? {}), validityDays: c.validityDays, declineReasonRequired: c.declineReasonRequired };
+          if (partnerMission) snapshot.terms = agreement!.text!;
           const offer = await db.niceJobsOffer.create({ data: { applicationId: a.id, number: (last?.number ?? 0) + 1, snapshot: JSON.stringify(snapshot), activeKey: a.id, createdByUserId: userId } });
           updated = await advance(db, b, a, op, "APPROVED", data.reason, { offerReference: offer.reference, number: offer.number, ...(prior ? { previousOfferReference: prior.reference, previousStatus: "WITHDRAWN" } : {}) });
         } else {
@@ -220,6 +224,7 @@ export function createRecruitmentService(client: PrismaClient = prisma, now: () 
           if (o.activeKey !== a.id || data.recordRevision !== o.revision) throw new NiceJobsError("Offer changed or is no longer active");
           const snapshot = JSON.parse(o.snapshot);
           const profile = opportunityProfile(a.area.version.configuration);
+          if (snapshot.documentKind !== c.documentKind || partnerMission && (snapshot.documentKind !== "PARTNER_AGREEMENT" || JSON.stringify(snapshot.partnerAgreement) !== JSON.stringify(agreement))) throw new NiceJobsError("The reviewed partner terms have changed; prepare a new document");
           if (profile && ["READY_OFFER", "ISSUE_OFFER", "ACCEPT_OFFER"].includes(op) && (publicationIssues(profile, a.area.version.description, a.area.version.engagement).length || snapshot.company !== profile.legalEmployer.legalName || snapshot.engagement !== a.area.version.engagement || typeof snapshot.compensation !== "string" || !snapshot.compensation.trim())) throw new NiceJobsError("Confirmed legal employer, engagement and disclosed compensation are required before this offer action");
           const patch: Prisma.NiceJobsOfferUpdateManyMutationInput = { revision: { increment: 1 } };
           let stage = a.status;

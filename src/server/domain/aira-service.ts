@@ -94,7 +94,7 @@ export function createAiraService(client: PrismaClient = prisma) {
           if (type === "product" && data.brandId && "brandId" in linked && linked.brandId !== data.brandId) throw new AccessError("Program brand conflicts with product");
         }
         if (old && data.capacity && await db.batch.count({ where: { programId: old.id, capacity: { gt: data.capacity }, status: { notIn: ["CANCELLED", "ARCHIVED", "COMPLETED"] } } })) throw new AccessError("Program capacity is below an open batch capacity");
-        if (old && ["RETIRED", "ARCHIVED"].includes(data.status) && await db.batch.count({ where: { programId: old.id, status: { in: ["OPEN", "ACTIVE"] } } })) throw new AccessError("Close open batches before retiring the program");
+        if (old && ["CLOSED", "RETIRED", "ARCHIVED"].includes(data.status) && await db.batch.count({ where: { programId: old.id, status: { in: ["OPEN", "ACTIVE"] } } })) throw new AccessError("Close open batches before retiring the program");
         row = old ? await db.program.update({ where: { id: old.id }, data }) : await db.program.create({ data: { ...data, companyOrganizationId: c.company.id } });
       } else if (kind === "locations") {
         const data = input.locationInput.parse(raw); organizationId = data.organizationId;
@@ -108,7 +108,7 @@ export function createAiraService(client: PrismaClient = prisma) {
         await scope(db, c, organizationId, "batch.manage");
         const old = recordId ? await db.batch.findUnique({ where: { id: recordId } }) : null;
         if (recordId && (!old || old.programId !== p.id)) throw new AccessError("Batch program cannot be changed");
-        if (["RETIRED", "ARCHIVED"].includes(p.status)) throw new AccessError("Program is closed");
+        if (["CLOSED", "RETIRED", "ARCHIVED"].includes(p.status)) throw new AccessError("Program is closed");
         if (["OPEN", "ACTIVE"].includes(data.status) && p.status !== "ACTIVE") throw new AccessError("Open delivery requires an active program");
         if (data.status === "ACTIVE" && (!data.startDate || data.startDate > new Date())) throw new AccessError("Active batch requires an actual start date");
         if (data.status === "COMPLETED" && (!data.endDate || data.endDate > new Date())) throw new AccessError("Completed batch requires an actual end date");

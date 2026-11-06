@@ -42,3 +42,12 @@ export function marginalPreview(raw: MarginalRule, previousEligible: number, new
   }
   return { rows, totalMinor: total.toString(), nextTier: Math.floor((position - 1) / rule.milestoneSize) + 1, nextMilestone: Math.ceil(position / rule.milestoneSize) * rule.milestoneSize };
 }
+
+export function admissionAmount(rule: MarginalRule | { type: "ADMISSION_BONUS"; perAdmissionMinor: string; milestoneEvery: number; milestoneBonusMinor: string }, sequence: number, rounding: "FLOOR" | "CEILING" | "HALF_UP" = "HALF_UP") {
+  if (!Number.isSafeInteger(sequence) || sequence < 1 || sequence > 1_000_000) throw new Error("Invalid admission sequence");
+  if (rule.type === "MARGINAL_MILESTONE") return marginalRate(rule, Math.floor((sequence - 1) / rule.milestoneSize) + 1, rounding);
+  const configured = z.object({ type: z.literal("ADMISSION_BONUS"), perAdmissionMinor: minor, milestoneEvery: positiveInteger, milestoneBonusMinor: minor }).strict().parse(rule);
+  const amount = BigInt(configured.perAdmissionMinor) + (sequence % configured.milestoneEvery === 0 ? BigInt(configured.milestoneBonusMinor) : 0n);
+  if (amount > MAX_MINOR) throw new Error("Admission amount exceeds the technical money bound");
+  return amount.toString();
+}

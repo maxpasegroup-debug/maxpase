@@ -9,6 +9,7 @@ export async function middleware(request: NextRequest) {
   requestHeaders.delete("x-maxpase-portal");
   requestHeaders.delete("x-maxpase-portal-context");
   requestHeaders.set("x-forwarded-host", request.headers.get("host") ?? "");
+  if (/^\/api\/nicejobs\/events\/[a-zA-Z0-9_-]{1,100}$/.test(request.nextUrl.pathname)) return NextResponse.next({ request: { headers: requestHeaders } });
   const direct = siteByHost(request.headers.get("host"));
   const internalHost = ["localhost", "127.0.0.1", "[::1]", "0.0.0.0"].includes(hostName(request.headers.get("host")) ?? "");
   const forwarded = !direct && internalHost ? await verifyPortalContext(request.headers.get("x-maxpase-portal-context"), process.env.AUTH_SECRET ?? "") : null;
@@ -31,9 +32,16 @@ export async function middleware(request: NextRequest) {
     const internalPath = !!forwarded && ([prefix, prefix + "/login", prefix + "/gateway", ...(site.id === "startup" ? [prefix + "/signup"] : []), ...(site.id === "jobs" ? [prefix + "/opportunities", prefix + "/signup", prefix + "/reset-password", prefix + "/verify-email", prefix + "/activate-pin", prefix + "/legacy-recovery"] : []), ...(site.id === "labs" ? [prefix + "/pin", prefix + "/activate"] : []), ...(site.id === "skillcity" ? [prefix + "/activate"] : [])].includes(request.nextUrl.pathname) || internalOfferPath || internalContentPath || internalLabsDocumentPath || internalEmployeeDocumentPath);
     const path = internalPath ? request.nextUrl.pathname.slice(prefix.length) || "/" : request.nextUrl.pathname;
     if (["/", "/login", "/gateway", ...(site.id === "startup" ? ["/signup"] : []), ...(site.id === "jobs" ? ["/opportunities", "/signup", "/reset-password", "/verify-email", "/activate-pin", "/legacy-recovery"] : []), ...(site.id === "labs" ? ["/pin", "/activate"] : []), ...(site.id === "skillcity" ? ["/activate"] : [])].includes(path) || site.id === "jobs" && (offerPath || contentPath || internalPath && (internalOfferPath || internalContentPath)) || site.id === "labs" && (labsDocumentPath || internalPath && internalLabsDocumentPath) || employeeDocumentPath || internalPath && internalEmployeeDocumentPath) {
-      if (path === "/gateway" && !request.cookies.get(site.cookie)?.value) return NextResponse.redirect(new URL(portalPaths(site).login, "https://" + host));
+      if (path === "/gateway" && !request.cookies.get(site.cookie)?.value) {
+        const redirect = NextResponse.redirect(new URL(portalPaths(site).login, "https://" + host));
+        const token = site.id === "startup" ? request.nextUrl.searchParams.get("ref") : null;
+        if (token && /^[A-Za-z0-9_-]{32,100}$/.test(token)) redirect.cookies.set("nicejobs_startup_ref", token, { httpOnly: true, secure: !internalHost, sameSite: "lax", path: "/", maxAge: 30 * 86400 });
+        return redirect;
+      }
       const target = request.nextUrl.clone(); target.pathname = `/sites/${site.id}${path === "/" ? "" : path}`;
       const response = internalPath ? NextResponse.next({ request: { headers: requestHeaders } }) : NextResponse.rewrite(target, { request: { headers: requestHeaders } }); response.headers.set("Vary", "Host");
+      const token = site.id === "startup" ? request.nextUrl.searchParams.get("ref") : null;
+      if (token && /^[A-Za-z0-9_-]{32,100}$/.test(token)) response.cookies.set("nicejobs_startup_ref", token, { httpOnly: true, secure: !internalHost, sameSite: "lax", path: "/", maxAge: 30 * 86400 });
       if (path !== "/") response.headers.set("Cache-Control", "private, no-store, max-age=0");
       return response;
     }

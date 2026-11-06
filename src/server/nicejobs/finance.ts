@@ -12,11 +12,14 @@ import { boundedMoney, compareDecimal } from "./money";
 import { financialRead, financialResource, type FinancialResource } from "./finance-access";
 import { metricResult, sourceAuthorized, authorizedEvidence } from "./performance-evidence";
 import { workerEarningState } from "./earnings-state";
+import { admissionAmount } from "./marginal-milestone";
+import { opportunityProfile } from "./opportunity-configuration";
+import { partnerProgrammeIssues } from "./partner-programme";
 
 type DB = Prisma.TransactionClient;
 const versionInclude = { policy: true } satisfies Prisma.NiceJobsIncentiveVersionInclude;
 type Version = Prisma.NiceJobsIncentiveVersionGetPayload<{ include: typeof versionInclude }>;
-export type FinanceRecord = { id: string; name: string; status: string; revision: number; currency?: string; amountMinor?: string | null; assignmentId?: string; walletId?: string; versionId?: string; snapshotId?: string; requestId?: string | null; periodStart?: Date; periodEnd?: Date; definition?: IncentivePolicy; detail?: string; privateNote?: string | null; approvals?: { id: string; status: string; name: string; comment: string | null; canDecide: boolean }[]; capabilities: string[] };
+export type FinanceRecord = { id: string; name: string; status: string; revision: number; currency?: string; amountMinor?: string | null; assignmentId?: string; walletId?: string; versionId?: string; snapshotId?: string; admissionId?: string; requestId?: string | null; periodStart?: Date; periodEnd?: Date; definition?: IncentivePolicy; detail?: string; privateNote?: string | null; approvals?: { id: string; status: string; name: string; comment: string | null; canDecide: boolean }[]; capabilities: string[] };
 const hash = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
 function fail(message: string): never { throw new NiceJobsError(message); }
 
@@ -45,7 +48,14 @@ export function createFinanceService(client: PrismaClient = prisma, now: () => D
     if (!f || !await db.niceJobsVersion.findFirst({ where: { id: p.jobVersionId, publishedAt: { not: null }, template: { companyId: b.company.id, productId: b.product.id }, areas: { some: { divisionId: p.divisionId } } } })) throw new AccessError("Published scoped job and performance framework required");
     const metrics = z.object({ metrics: z.array(metricResult.shape.metric) }).passthrough().parse(JSON.parse(f.definition)).metrics;
     const m = metrics.find(m => m.key === p.metricKey && m.active);
-    if (!m || (p.rule.type === "PER_UNIT" || p.rule.type === "MARGINAL_MILESTONE") && m.method !== "COUNT") fail("An active compatible canonical metric is required");
+    if (!m || (p.rule.type === "PER_UNIT" || p.rule.type === "MARGINAL_MILESTONE" || p.rule.type === "ADMISSION_BONUS") && m.method !== "COUNT") fail("An active compatible canonical metric is required");
+    if ((p.rule.type === "MARGINAL_MILESTONE" || p.rule.type === "ADMISSION_BONUS") && compareDecimal(p.eligibility.minimumActual, "1") > 0) fail("Admission plans require an eligibility minimum of at most one qualifying admission");
+    if (p.rule.type === "MARGINAL_MILESTONE" || p.rule.type === "ADMISSION_BONUS") {
+      if (!p.eligibility.requireActive) fail("Admission incentives require an active readiness-backed assignment");
+      const job = await db.niceJobsVersion.findUniqueOrThrow({ where: { id: p.jobVersionId }, select: { engagement: true, configuration: true } });
+      const profile = opportunityProfile(job.configuration);
+      if (job.engagement !== "INDEPENDENT_PARTNER" || !profile?.capacity || profile.capacity.currency !== p.currency || (await partnerProgrammeIssues(db, b.company.id, profile)).length) fail("A published, approved partner programme and qualifying payment rule are required");
+    }
     for (const [id, permission] of [[p.approvalControlPointId, "nicejobs.finance.incentive.approve"], [p.settlementControlPointId, "nicejobs.finance.settlement.approve"], ...(p.adjustmentControlPointId ? [[p.adjustmentControlPointId, "nicejobs.finance.adjustment.approve"]] : [])]) {
       const point = await db.controlPoint.findFirst({ where: { id, organizationId: p.divisionId, projectId: null, status: "ACTIVE", allowSelfApproval: false, kind: { in: ["APPROVAL", "HUMAN_DECISION"] }, requiredPermission: permission }, include: { rules: true } });
       if (!point?.rules.length || point.rules.some(r => r.requiredPermission !== permission)) fail("Configure an independent scoped financial approval chain");
@@ -79,6 +89,19 @@ export function createFinanceService(client: PrismaClient = prisma, now: () => D
     const visible = await authorizedEvidence(db, b.ctx, s.assignment, b.company.id, result.evidence, now());
     if (visible.length !== result.evidence.length) throw new AccessError("Financial supporting evidence unavailable");
     return { s, result };
+  }
+  async function admissionProof(db: DB, b: Boundary, admissionId: string, p: IncentivePolicy) {
+    const a = await db.niceJobsAdmission.findUnique({ where: { id: admissionId }, include: { referral: { include: { assignment: { include: employee.assignmentInclude }, version: true } } } });
+    if (!a || a.companyId !== b.company.id || a.referral.companyId !== b.company.id || a.referral.assignment.versionId !== p.jobVersionId || a.referral.assignment.divisionId !== p.divisionId || a.referral.versionId !== p.jobVersionId || a.status !== "VERIFIED" || !a.verifiedAt) throw new AccessError("Independently verified scoped admission required");
+    await requireScope(b, p.divisionId, "nicejobs.finance.reconcile");
+    const profile = opportunityProfile(a.referral.version.configuration), rule = profile?.capacity;
+    if (!rule || rule.currency !== p.currency || !a.referral.version.publishedAt) fail("Approved opportunity payment configuration is unavailable");
+    const events = await db.niceJobsSourceEvent.findMany({ where: { admissionId, companyId: b.company.id, status: "VERIFIED", eventType: { in: ["PAYMENT_RECEIVED", "PAYMENT_REFUNDED", "ADMISSION_CANCELLED"] } }, select: { id: true, eventType: true, amountMinor: true, currency: true, externalTransactionId: true } });
+    if (events.some(e => e.eventType === "ADMISSION_CANCELLED")) fail("Admission was cancelled; review any posted credit for an authorized reversal");
+    if (events.some(e => e.eventType !== "ADMISSION_CANCELLED" && (!e.externalTransactionId || e.currency !== rule.currency || !e.amountMinor || e.amountMinor <= 0n))) fail("Verified payment evidence is incomplete");
+    const net = events.reduce((sum, e) => sum + (e.eventType === "PAYMENT_RECEIVED" ? e.amountMinor ?? 0n : e.eventType === "PAYMENT_REFUNDED" ? -(e.amountMinor ?? 0n) : 0n), 0n);
+    if (net < BigInt(rule.qualifyingPaymentMinor)) fail("Net verified payment does not meet the approved qualifying condition");
+    return { admission: a, events, net, qualifyingPaymentMinor: rule.qualifyingPaymentMinor };
   }
   async function balance(db: DB, walletId: string) {
     const [posted, reserved, pending] = await Promise.all([
@@ -132,7 +155,7 @@ export function createFinanceService(client: PrismaClient = prisma, now: () => D
     return client.$transaction(async db => {
       const b = await employee.boundary(db, userId);
       let scope: string, id = "", walletId: string | undefined, outcome: "SUCCESS" | "FAILURE" = "SUCCESS";
-      const v = "versionId" in c ? await version(db, b, c.versionId, c.operation === "POLICY_REVIEW" ? "nicejobs.finance.policy.review" : c.operation === "POLICY_PUBLISH" ? "nicejobs.finance.policy.publish" : "nicejobs.finance.policy.manage") : "policyVersionId" in c ? await version(db, b, c.policyVersionId, c.operation === "CALCULATE" ? "nicejobs.finance.calculate" : c.operation === "SETTLEMENT_CREATE" ? "nicejobs.finance.settlement.create" : c.operation === "WALLET_OPEN" ? "nicejobs.finance.wallet.open" : "nicejobs.finance.wallet.adjust") : null;
+      const v = "versionId" in c ? await version(db, b, c.versionId, c.operation === "POLICY_REVIEW" ? "nicejobs.finance.policy.review" : c.operation === "POLICY_PUBLISH" ? "nicejobs.finance.policy.publish" : "nicejobs.finance.policy.manage") : "policyVersionId" in c ? await version(db, b, c.policyVersionId, c.operation === "CALCULATE" || c.operation === "CALCULATE_ADMISSION" ? "nicejobs.finance.calculate" : c.operation === "SETTLEMENT_CREATE" ? "nicejobs.finance.settlement.create" : c.operation === "WALLET_OPEN" ? "nicejobs.finance.wallet.open" : "nicejobs.finance.wallet.adjust") : null;
       const earning = "earningId" in c ? await db.niceJobsIncentiveEarning.findUnique({ where: { id: c.earningId }, include: { policyVersion: { include: versionInclude } } }) : null;
       const adjustment = "adjustmentId" in c ? await db.niceJobsWalletAdjustment.findUnique({ where: { id: c.adjustmentId }, include: { policyVersion: { include: versionInclude }, reversalProposal: { include: { ledger: true } } } }) : null;
       const period = "periodId" in c ? await db.niceJobsSettlementPeriod.findUnique({ where: { id: c.periodId }, include: { policyVersion: { include: versionInclude } } }) : null;
@@ -142,6 +165,7 @@ export function createFinanceService(client: PrismaClient = prisma, now: () => D
       else if (c.operation.startsWith("POLICY") || c.operation === "SETTLEMENT_CREATE") { if (!v) throw new AccessError("Policy unavailable"); scope = v.policy.divisionId; }
       else if (c.operation === "WALLET_OPEN") { const a = await assignment(db, b, c.assignmentId, "nicejobs.finance.wallet.open", true); scope = a.divisionId; await applicable(db, v!, a.id); }
       else if (c.operation === "CALCULATE") { const proof = await sourceProof(db, b, c.snapshotId, incentivePolicy.parse(JSON.parse(v!.definition))); scope = (await assignment(db, b, proof.s.assignmentId, "nicejobs.finance.calculate")).divisionId; }
+      else if (c.operation === "CALCULATE_ADMISSION") { const p = incentivePolicy.parse(JSON.parse(v!.definition)); await admissionProof(db, b, c.admissionId, p); scope = p.divisionId; await requireScope(b, scope, "nicejobs.finance.calculate"); }
       else if (earning) { scope = (await target(db, b, "NICE_JOBS_EARNING", earning.id, c.operation === "EARNING_POST" ? "nicejobs.finance.wallet.post" : "nicejobs.finance.calculate")).organizationId; id = earning.id; if (c.operation === "EARNING_POST") await authority(db, earning.requestId); }
       else if (adjustment) { scope = (await target(db, b, "NICE_JOBS_ADJUSTMENT", adjustment.id, c.operation === "ADJUSTMENT_POST" ? "nicejobs.finance.wallet.post" : "nicejobs.finance.wallet.adjust")).organizationId; id = adjustment.id; if (c.operation === "ADJUSTMENT_POST") { await authority(db, adjustment.requestId); if (adjustment.reversalProposal) await requireScope(b, scope, "nicejobs.finance.wallet.reverse"); } }
       else if (period) { scope = (await target(db, b, "NICE_JOBS_SETTLEMENT", period.id, "nicejobs.finance.settlement.create")).organizationId; id = period.id; if (c.operation === "SETTLEMENT_POST") await authority(db, period.requestId); }
@@ -168,7 +192,7 @@ export function createFinanceService(client: PrismaClient = prisma, now: () => D
         id = (await db.niceJobsIncentiveVersion.create({ data: { policyId: v!.policyId, number: v!.number + 1, ownerUserId: userId, currency: v!.currency, effectiveAt: v!.effectiveAt, expiresAt: v!.expiresAt, definition: v!.definition } })).id;
       } else if (["POLICY_SUBMIT", "POLICY_REVIEW", "POLICY_PUBLISH", "POLICY_ARCHIVE"].includes(c.operation) && "versionId" in c) {
         id = v!.id; const p = incentivePolicy.parse(JSON.parse(v!.definition));
-        if (c.operation === "POLICY_SUBMIT") { if (v!.status !== "DRAFT") fail("Draft policy required"); if (p.rule.type === "MARGINAL_MILESTONE") fail("Admission attribution and verification are not configured; marginal plans remain drafts"); await validatePolicy(db, b, p); }
+        if (c.operation === "POLICY_SUBMIT") { if (v!.status !== "DRAFT") fail("Draft policy required"); await validatePolicy(db, b, p); }
         if (c.operation === "POLICY_REVIEW") { if (v!.status !== "REVIEW" || (await db.user.findUniqueOrThrow({ where: { id: v!.ownerUserId }, select: { personId: true } })).personId === b.personId) fail("Independent human policy review required"); }
         if (c.operation === "POLICY_PUBLISH") {
           if (v!.status !== "REVIEW" || !v!.reviewerUserId || !v!.reviewedAt) fail("Reviewed policy required");
@@ -184,7 +208,7 @@ export function createFinanceService(client: PrismaClient = prisma, now: () => D
         id = (await db.niceJobsWallet.upsert({ where: { assignmentId_currency: { assignmentId: c.assignmentId, currency: v!.currency } }, update: {}, create: { assignmentId: c.assignmentId, currency: v!.currency, creatorUserId: userId } })).id;
       } else if (c.operation === "CALCULATE") {
         const p = incentivePolicy.parse(JSON.parse(v!.definition)), { s, result } = await sourceProof(db, b, c.snapshotId, p);
-        if (p.rule.type === "MARGINAL_MILESTONE") fail("Performance snapshots cannot create admission incentives");
+        if (p.rule.type === "MARGINAL_MILESTONE" || p.rule.type === "ADMISSION_BONUS") fail("Performance snapshots cannot create admission incentives");
         await applicable(db, v!, s.assignmentId, s.periodStart);
         if (v!.status !== "PUBLISHED" || s.periodEnd > now() || p.expiresAt && s.periodEnd > new Date(p.expiresAt)) fail("Current published policy and closed compatible period required");
         let eligibility = "ELIGIBLE", reason = "Configured eligibility passed";
@@ -194,18 +218,59 @@ export function createFinanceService(client: PrismaClient = prisma, now: () => D
         if (!actual || !result.evidenceCount || !result.evidence.length || result.status === "NOT_MEASURED" || !p.eligibility.allowedStatuses.includes(result.status) || compareDecimal(actual, p.eligibility.minimumActual) < 0) { eligibility = "INELIGIBLE"; reason = "Configured threshold or recorded evidence requirement not met"; }
         const calculation = eligibility === "ELIGIBLE" ? calculateAmount(p, actual!) : { amountMinor: null, reason };
         if (eligibility === "ELIGIBLE" && calculation.amountMinor === null) eligibility = "NOT_CONFIGURED";
-        const prior = await db.niceJobsIncentiveEarning.findUnique({ where: { assignmentId_policyId_periodStart_periodEnd: { assignmentId: s.assignmentId, policyId: v!.policyId, periodStart: s.periodStart, periodEnd: s.periodEnd } } });
+        const prior = await db.niceJobsIncentiveEarning.findFirst({ where: { assignmentId: s.assignmentId, policyId: v!.policyId, periodStart: s.periodStart, periodEnd: s.periodEnd, snapshotId: { not: null } } });
         if (prior) { if (prior.snapshotId !== s.id || prior.policyVersionId !== v!.id) fail("This policy period already has an immutable calculation; use an approved correction"); id = prior.id; }
         else id = (await db.niceJobsIncentiveEarning.create({ data: { assignmentId: s.assignmentId, policyId: v!.policyId, policyVersionId: v!.id, snapshotId: s.id, periodStart: s.periodStart, periodEnd: s.periodEnd, currency: v!.currency, amountMinor: calculation.amountMinor === null ? null : BigInt(calculation.amountMinor), eligibility, calculation: JSON.stringify({ policyVersionId: v!.id, policyHash: hash(p), snapshotId: s.id, snapshotHash: hash(s.results), policy: p, metric: result.metric, evidence: result.evidence, evidenceCount: result.evidenceCount, sampled: result.sampled, currency: v!.currency, calculatedAt: now().toISOString(), metricKey: p.metricKey, actual, result: calculation, eligibility, reason }), creatorUserId: userId } })).id;
         if (eligibility !== "ELIGIBLE") await recordException(db, b, scope, eligibility === "NOT_CONFIGURED" ? "RULE_NOT_CONFIGURED" : "CALCULATION_NOT_PAYABLE", "Recorded calculation has no payable result; review its authorized policy and evidence.", "finance-calculation-exception:" + id);
+      } else if (c.operation === "CALCULATE_ADMISSION") {
+        const p = incentivePolicy.parse(JSON.parse(v!.definition));
+        if (p.rule.type !== "MARGINAL_MILESTONE" && p.rule.type !== "ADMISSION_BONUS") fail("An approved admission policy is required");
+        await db.$queryRaw`SELECT id FROM "NiceJobsIncentivePolicy" WHERE id = ${v!.policyId} FOR UPDATE`;
+        await db.$queryRaw`SELECT id FROM "NiceJobsAdmission" WHERE id = ${c.admissionId} FOR UPDATE`;
+        const proof = await admissionProof(db, b, c.admissionId, p);
+        const a = proof.admission.referral.assignment;
+        await assignment(db, b, a.id, "nicejobs.finance.calculate", true);
+        if (p.eligibility.excludedPipStatuses.length && await db.niceJobsPip.count({ where: { assignmentId: a.id, status: { in: p.eligibility.excludedPipStatuses }, startAt: { lte: proof.admission.verifiedAt! }, reviewAt: { gte: proof.admission.verifiedAt! } } })) fail("Configured improvement-plan exclusion applies");
+        await applicable(db, v!, a.id, proof.admission.verifiedAt!);
+        if (v!.status !== "PUBLISHED" || !v!.publishedAt || proof.admission.verifiedAt! < v!.publishedAt) fail("Published policy must precede admission verification");
+        const prior = await db.niceJobsIncentiveEarning.findUnique({ where: { admissionId: c.admissionId } });
+        if (prior) { if (prior.policyId !== v!.policyId || prior.policyVersionId !== v!.id || prior.assignmentId !== a.id) fail("Admission already has a different immutable incentive"); id = prior.id; }
+        else {
+          const first = await db.niceJobsIncentiveVersion.findFirstOrThrow({ where: { policyId: v!.policyId, status: { in: ["PUBLISHED", "ARCHIVED"] }, publishedAt: { not: null } }, orderBy: { effectiveAt: "asc" }, select: { effectiveAt: true } });
+          const counts = await db.$queryRaw<{ count: number }[]>`
+            SELECT COUNT(*)::integer AS count FROM "NiceJobsAdmission" admission
+            JOIN "NiceJobsReferralLink" referral ON referral.id = admission."referralId"
+            JOIN "NiceJobsVersion" job ON job.id = referral."versionId"
+            WHERE referral."assignmentId" = ${a.id} AND admission."companyId" = ${b.company.id}
+              AND admission.status = 'VERIFIED' AND admission."verifiedAt" >= ${first.effectiveAt}
+              AND (admission."verifiedAt" < ${proof.admission.verifiedAt!} OR (admission."verifiedAt" = ${proof.admission.verifiedAt!} AND admission.id <= ${c.admissionId}))
+              AND NOT EXISTS (SELECT 1 FROM "NiceJobsSourceEvent" cancelled WHERE cancelled."admissionId" = admission.id AND cancelled."eventType" = 'ADMISSION_CANCELLED' AND cancelled.status = 'VERIFIED')
+              AND job.configuration::jsonb #>> '{opportunity,capacity,currency}' = ${p.currency}
+              AND COALESCE((SELECT SUM(CASE WHEN payment."eventType" = 'PAYMENT_REFUNDED' THEN -payment."amountMinor" ELSE payment."amountMinor" END)
+                FROM "NiceJobsSourceEvent" payment WHERE payment."admissionId" = admission.id AND payment.status = 'VERIFIED'
+                  AND payment."eventType" IN ('PAYMENT_RECEIVED','PAYMENT_REFUNDED') AND payment.currency = ${p.currency}), 0)
+                  >= CASE WHEN job.configuration::jsonb #>> '{opportunity,capacity,qualifyingPaymentMinor}' ~ '^[1-9][0-9]{0,12}$'
+                    THEN (job.configuration::jsonb #>> '{opportunity,capacity,qualifyingPaymentMinor}')::bigint ELSE 9000000000001 END`;
+          const sequence = counts[0]?.count ?? 0;
+          if (sequence < 1 || sequence > 1_000_000) fail("Qualifying admission sequence is unavailable");
+          const amount = BigInt(admissionAmount(p.rule, sequence, p.rounding));
+          boundedMoney(amount);
+          if (amount <= 0n) fail("A positive configured admission incentive is required");
+          const start = proof.admission.verifiedAt!, end = new Date(start.getTime() + 1);
+          id = (await db.niceJobsIncentiveEarning.create({ data: { assignmentId: a.id, policyId: v!.policyId, policyVersionId: v!.id, admissionId: c.admissionId, periodStart: start, periodEnd: end, currency: v!.currency, amountMinor: amount, eligibility: "ELIGIBLE", calculation: JSON.stringify({ source: "VERIFIED_ADMISSION", admissionId: c.admissionId, policyVersionId: v!.id, policyHash: hash(p), rule: p.rule, sequence, verifiedPaymentMinor: proof.net.toString(), qualifyingPaymentMinor: proof.qualifyingPaymentMinor, evidenceEventIds: proof.events.map(e => e.id), amountMinor: amount.toString(), calculatedAt: now().toISOString() }), creatorUserId: userId } })).id;
+        }
       } else if (c.operation === "EARNING_SUBMIT") {
         if (earning!.status !== "CALCULATED" || earning!.eligibility !== "ELIGIBLE" || !earning!.amountMinor || earning!.amountMinor <= 0n) fail("Positive eligible calculation required");
-        const p = incentivePolicy.parse(JSON.parse(earning!.policyVersion.definition)); await sourceProof(db, b, earning!.snapshotId, p);
+        const p = incentivePolicy.parse(JSON.parse(earning!.policyVersion.definition));
+        if (earning!.admissionId) { await db.$queryRaw`SELECT id FROM "NiceJobsAdmission" WHERE id = ${earning!.admissionId} FOR UPDATE`; await admissionProof(db, b, earning!.admissionId, p); }
+        else await sourceProof(db, b, earning!.snapshotId!, p);
         const r = await approval(db, b, "NICE_JOBS_EARNING", id, p.approvalControlPointId, c.idempotencyKey, c.reason);
         await db.niceJobsIncentiveEarning.update({ where: { id, revision: c.revision }, data: { requestId: r.id, status: "UNDER_REVIEW", revision: { increment: 1 } } }); await operations.submitRequest(userId, r.id, db);
       } else if (c.operation === "EARNING_POST") {
         if (earning!.status !== "APPROVED" || !earning!.amountMinor || earning!.amountMinor <= 0n) fail("Unposted approved earning required");
-        await sourceProof(db, b, earning!.snapshotId, incentivePolicy.parse(JSON.parse(earning!.policyVersion.definition)));
+        const p = incentivePolicy.parse(JSON.parse(earning!.policyVersion.definition));
+        if (earning!.admissionId) { await db.$queryRaw`SELECT id FROM "NiceJobsAdmission" WHERE id = ${earning!.admissionId} FOR UPDATE`; await admissionProof(db, b, earning!.admissionId, p); }
+        else await sourceProof(db, b, earning!.snapshotId!, p);
         const w = await db.niceJobsWallet.findUnique({ where: { assignmentId_currency: { assignmentId: earning!.assignmentId, currency: earning!.currency } } }); if (!w) fail("Open the employee currency wallet first"); walletId = w.id;
         await post(db, b, w.id, { type: "CREDIT", amountMinor: earning!.amountMinor, earningId: id, reference, description: "Approved incentive" });
         await db.niceJobsIncentiveEarning.update({ where: { id, revision: c.revision }, data: { status: "POSTED", revision: { increment: 1 } } });
@@ -288,6 +353,17 @@ export function createFinanceService(client: PrismaClient = prisma, now: () => D
   }
   async function reconciliation(db: DB, walletId: string) {
     const w = await db.niceJobsWallet.findUniqueOrThrow({ where: { id: walletId } }), exceptions: string[] = [];
+    const admissionCredits = await db.niceJobsIncentiveEarning.findMany({ where: { assignmentId: w.assignmentId, currency: w.currency, status: "POSTED", admissionId: { not: null } }, select: { admissionId: true, calculation: true }, take: 1001 });
+    if (admissionCredits.length > 1000) exceptions.push("Admission credit review exceeds the bounded reconciliation window");
+    else for (const credit of admissionCredits) {
+      const admissionId = credit.admissionId!;
+      const current = await db.niceJobsSourceEvent.findMany({ where: { admissionId, status: "VERIFIED", eventType: { in: ["PAYMENT_RECEIVED", "PAYMENT_REFUNDED", "ADMISSION_CANCELLED"] } }, select: { eventType: true, amountMinor: true, currency: true } });
+      let threshold: bigint;
+      try { threshold = BigInt(z.object({ qualifyingPaymentMinor: z.string().regex(/^[1-9]\d{0,12}$/) }).passthrough().parse(JSON.parse(credit.calculation)).qualifyingPaymentMinor); }
+      catch { exceptions.push("Admission credit has no frozen qualifying payment rule"); continue; }
+      const net = current.filter(e => e.currency === w.currency).reduce((sum, e) => sum + (e.eventType === "PAYMENT_RECEIVED" ? e.amountMinor ?? 0n : e.eventType === "PAYMENT_REFUNDED" ? -(e.amountMinor ?? 0n) : 0n), 0n);
+      if (net < threshold || current.some(e => e.eventType === "ADMISSION_CANCELLED")) exceptions.push("Posted admission credit needs authorized refund or cancellation review");
+    }
     const currencyMismatch = await db.niceJobsWalletLedger.count({ where: { walletId, OR: [{ currency: { not: w.currency } }, { status: { not: "POSTED" } }, { amountMinor: 0n }] } });
     const missingCredits = await db.niceJobsIncentiveEarning.count({ where: { assignmentId: w.assignmentId, currency: w.currency, status: "POSTED", ledger: null } });
     const missingAdjustments = await db.niceJobsWalletAdjustment.count({ where: { walletId, status: "POSTED", ledger: null } });
@@ -352,7 +428,7 @@ export function createFinanceService(client: PrismaClient = prisma, now: () => D
       const records: FinanceRecord[] = [], scopeById = new Map<string, string>();
       const add = (scope: string, r: Omit<FinanceRecord, "capabilities">) => { records.push({ ...r, capabilities: q.management ? ["policy.manage", "policy.review", "policy.publish", "calculate", "wallet.open", "wallet.post", "wallet.adjust", "wallet.reverse", "settlement.create", "payout.request", "reconcile", "private"].filter(k => b.ctx.organizationIds("nicejobs.finance." + k).includes(scope)) : [] }); scopeById.set(r.id, scope); };
       if (kind === "policies") for (const v of await db.niceJobsIncentiveVersion.findMany({ where: { ...page, policy: { ...policyWhere, name: { contains: q.search } }, ...(q.policyVersionId ? { id: q.policyVersionId } : {}) }, include: versionInclude, orderBy: { id: "asc" }, take: q.limit + 1 })) add(v.policy.divisionId, { id: v.id, name: v.policy.name + " / v" + v.number, status: v.status, revision: v.revision, currency: v.currency, definition: incentivePolicy.parse(JSON.parse(v.definition)) });
-      if (kind === "incentives") for (const e of await db.niceJobsIncentiveEarning.findMany({ where: { ...page, assignment: assignmentWhere, ...(q.policyVersionId ? { policyVersionId: q.policyVersionId } : {}) }, include: { assignment: { include: { profile: { include: { person: true } } } }, policy: true }, orderBy: { id: "asc" }, take: q.limit + 1 })) add(e.assignment.divisionId, { id: e.id, name: e.policy.name + (q.management ? " / " + e.assignment.profile.person.displayName : ""), status: e.status, revision: e.revision, currency: e.currency, amountMinor: e.amountMinor?.toString() ?? null, assignmentId: e.assignmentId, versionId: e.policyVersionId, snapshotId: q.management ? e.snapshotId : undefined, requestId: q.management ? e.requestId : undefined, periodStart: e.periodStart, periodEnd: e.periodEnd, detail: q.management ? e.status + "; " + (e.eligibility === "ELIGIBLE" ? "Eligible immutable policy/evidence calculation" : "No payable amount available") : workerEarningState(e.status, e.eligibility === "ELIGIBLE") });
+      if (kind === "incentives") for (const e of await db.niceJobsIncentiveEarning.findMany({ where: { ...page, assignment: assignmentWhere, ...(q.policyVersionId ? { policyVersionId: q.policyVersionId } : {}) }, include: { assignment: { include: { profile: { include: { person: true } } } }, policy: true }, orderBy: { id: "asc" }, take: q.limit + 1 })) add(e.assignment.divisionId, { id: e.id, name: e.policy.name + (q.management ? " / " + e.assignment.profile.person.displayName : ""), status: e.status, revision: e.revision, currency: e.currency, amountMinor: e.amountMinor?.toString() ?? null, assignmentId: e.assignmentId, versionId: e.policyVersionId, snapshotId: q.management ? e.snapshotId ?? undefined : undefined, admissionId: q.management ? e.admissionId ?? undefined : undefined, requestId: q.management ? e.requestId : undefined, periodStart: e.periodStart, periodEnd: e.periodEnd, detail: q.management ? e.status + "; " + (e.eligibility === "ELIGIBLE" ? "Eligible immutable policy/evidence calculation" : "No payable amount available") : workerEarningState(e.status, e.eligibility === "ELIGIBLE") });
       if (kind === "adjustments") for (const a of await db.niceJobsWalletAdjustment.findMany({ where: { ...page, wallet: { assignment: assignmentWhere }, ...(q.policyVersionId ? { policyVersionId: q.policyVersionId } : {}) }, include: { wallet: { include: { assignment: true } } }, orderBy: { id: "asc" }, take: q.limit + 1 })) add(a.wallet.assignment.divisionId, { id: a.id, name: a.description, status: a.status, revision: a.revision, currency: a.wallet.currency, amountMinor: (a.direction === "DEBIT" ? -a.amountMinor : a.amountMinor).toString(), walletId: a.walletId, versionId: a.policyVersionId, requestId: a.requestId, detail: a.reason, privateNote: b.ctx.organizationIds("nicejobs.finance.private").includes(a.wallet.assignment.divisionId) ? a.privateNote : undefined });
       if (kind === "settlements") for (const p of await db.niceJobsSettlementPeriod.findMany({ where: { ...page, policy: { ...policyWhere, name: { contains: q.search } }, ...(q.policyVersionId ? { policyVersionId: q.policyVersionId } : {}) }, include: { policy: true }, orderBy: { id: "asc" }, take: q.limit + 1 })) add(p.policy.divisionId, { id: p.id, name: p.policy.name, status: p.status, revision: p.revision, currency: p.currency, versionId: p.policyVersionId, requestId: p.requestId, periodStart: p.from, periodEnd: p.until });
       if (kind === "statements") for (const s of await db.niceJobsSettlementStatement.findMany({ where: { ...page, wallet: { assignment: assignmentWhere }, ...(q.policyVersionId ? { period: { policyVersionId: q.policyVersionId } } : {}) }, include: { wallet: { include: { assignment: true } }, period: true }, orderBy: { id: "asc" }, take: q.limit + 1 })) add(s.wallet.assignment.divisionId, { id: s.id, name: "Settlement statement", status: s.status, revision: 0, currency: s.currency, amountMinor: s.amountMinor.toString(), walletId: s.walletId, periodStart: s.period.from, periodEnd: s.period.until, detail: "Immutable recorded statement; not proof of payment" });
@@ -364,7 +440,8 @@ export function createFinanceService(client: PrismaClient = prisma, now: () => D
         if (approvals.length > 2500) fail("Financial approval history bound exceeded");
         for (const r of visible) r.approvals = approvals.filter(a => a.requestId === r.requestId).map(a => ({ id: a.id, status: a.status, name: a.approver?.person?.displayName ?? "Human approver", comment: a.comment, canDecide: a.approverUserId === userId && a.status === "PENDING" && b.ctx.organizationIds("approval.decide").includes(scopeById.get(r.id)!) }));
       }
-      return { records: visible, nextCursor: records.length > q.limit ? records[q.limit - 1].id : null, companyId: b.company.id, timezone: b.timezone, provider: "NOT_CONFIGURED" };
+      const incentiveTotals = kind === "incentives" ? await db.niceJobsIncentiveEarning.groupBy({ by: ["status", "currency"], where: { assignment: assignmentWhere, ...(q.policyVersionId ? { policyVersionId: q.policyVersionId } : {}), ...(q.status ? { status: q.status } : {}) }, _sum: { amountMinor: true }, _count: { _all: true } }) : [];
+      return { records: visible, nextCursor: records.length > q.limit ? records[q.limit - 1].id : null, companyId: b.company.id, timezone: b.timezone, provider: "NOT_CONFIGURED", incentiveTotals: incentiveTotals.map(row => ({ status: row.status, currency: row.currency, count: row._count._all, amountMinor: row._sum.amountMinor?.toString() ?? null })) };
     });
   }
   async function options(userId: string) {
@@ -378,17 +455,20 @@ export function createFinanceService(client: PrismaClient = prisma, now: () => D
       const workforceScopes = orgs.filter(id => b.ctx.organizationIds("person.read").includes(id) && b.ctx.organizationIds("nicejobs.workspace.read").includes(id));
       const assignments = await db.niceJobsAssignment.findMany({ where: { profile: { companyId: b.company.id }, divisionId: { in: workforceScopes }, version: { template: { productId: b.product.id } } }, include: { profile: { include: { person: true } } }, take: 50, orderBy: { id: "asc" } });
       const snapshots = await db.niceJobsPerformanceSnapshot.findMany({ where: { assignment: { profile: { companyId: b.company.id }, divisionId: { in: workforceScopes.filter(id => b.ctx.organizationIds("nicejobs.performance.read").includes(id)) } }, correction: null }, select: { id: true, assignmentId: true, frameworkVersionId: true, periodStart: true, periodEnd: true }, take: 50, orderBy: { id: "asc" } });
+      const admissions = await db.niceJobsAdmission.findMany({ where: { companyId: b.company.id, status: "VERIFIED", incentiveEarning: null, referral: { assignment: { divisionId: { in: workforceScopes.filter(id => b.ctx.organizationIds("nicejobs.finance.reconcile").includes(id) && b.ctx.organizationIds("nicejobs.finance.calculate").includes(id)) } } } }, select: { id: true, externalAdmissionId: true, referral: { select: { assignmentId: true, versionId: true } } }, orderBy: { verifiedAt: "desc" }, take: 50 });
       const wallets = await db.niceJobsWallet.findMany({ where: { assignment: { profile: { companyId: b.company.id }, divisionId: { in: workforceScopes.filter(id => b.ctx.organizationIds("nicejobs.finance.wallet.read").includes(id)) } } }, select: { id: true, assignmentId: true, currency: true }, take: 50, orderBy: { id: "asc" } });
-      return { divisions, frameworks: frameworks.map(f => ({ id: f.id, name: f.framework.name + " / v" + f.number, divisionId: f.framework.divisionId, jobVersionId: f.framework.jobVersionId, metrics: z.object({ metrics: z.array(metricResult.shape.metric) }).passthrough().parse(JSON.parse(f.definition)).metrics.filter(m => m.active).map(m => ({ id: m.key, name: m.name })) })), points, policies: policies.map(p => ({ id: p.id, name: p.policy.name + " / v" + p.number, divisionId: p.policy.divisionId, jobVersionId: p.policy.jobVersionId, currency: p.currency })), templates: templates.map(t => ({ id: t.id, name: t.policy.name + " / v" + t.number + " / " + t.status, definition: incentivePolicy.parse(JSON.parse(t.definition)) })), assignments: assignments.map(a => ({ id: a.id, name: a.profile.person.displayName, divisionId: a.divisionId, jobVersionId: a.versionId })), snapshots, wallets, companyId: b.company.id, capabilities: Object.fromEntries(divisions.map(d => [d.id, ["policy.manage", "calculate", "wallet.open", "wallet.adjust", "settlement.create"].filter(k => b.ctx.organizationIds("nicejobs.finance." + k).includes(d.id))])) };
+      return { divisions, frameworks: frameworks.map(f => ({ id: f.id, name: f.framework.name + " / v" + f.number, divisionId: f.framework.divisionId, jobVersionId: f.framework.jobVersionId, metrics: z.object({ metrics: z.array(metricResult.shape.metric) }).passthrough().parse(JSON.parse(f.definition)).metrics.filter(m => m.active).map(m => ({ id: m.key, name: m.name })) })), points, policies: policies.map(p => ({ id: p.id, name: p.policy.name + " / v" + p.number, divisionId: p.policy.divisionId, jobVersionId: p.policy.jobVersionId, currency: p.currency, ruleType: incentivePolicy.parse(JSON.parse(p.definition)).rule.type })), templates: templates.map(t => ({ id: t.id, name: t.policy.name + " / v" + t.number + " / " + t.status, definition: incentivePolicy.parse(JSON.parse(t.definition)) })), assignments: assignments.map(a => ({ id: a.id, name: a.profile.person.displayName, divisionId: a.divisionId, jobVersionId: a.versionId })), snapshots, admissions, wallets, companyId: b.company.id, capabilities: Object.fromEntries(divisions.map(d => [d.id, ["policy.manage", "calculate", "wallet.open", "wallet.adjust", "settlement.create"].filter(k => b.ctx.organizationIds("nicejobs.finance." + k).includes(d.id))])) };
     });
   }
   async function explanation(userId: string, earningId: string, constraint?: AgentConstraint) {
     return client.$transaction(async db => {
       const b = await employee.boundary(db, userId, constraint); await financialRead(db, b.ctx, "NICE_JOBS_EARNING", earningId);
       const e = await db.niceJobsIncentiveEarning.findUniqueOrThrow({ where: { id: earningId }, include: { policyVersion: { include: versionInclude } } });
-      const p = incentivePolicy.parse(JSON.parse(e.policyVersion.definition)), proof = await sourceProof(db, b, e.snapshotId, p, true);
-      const frozen = z.object({ actual: z.string().nullable(), result: z.object({ amountMinor: z.string().nullable(), reason: z.string() }), calculatedAt: z.string() }).passthrough().parse(JSON.parse(e.calculation));
-      return { id: e.id, policy: e.policyVersion.policy.name, policyVersion: e.policyVersion.number, assignmentId: e.assignmentId, periodStart: e.periodStart, periodEnd: e.periodEnd, metric: proof.result.metric.name, source: proof.result.metric.source, actual: frozen.actual, threshold: p.eligibility.minimumActual, target: proof.result.metric.target ?? null, rule: p.rule, rounding: p.rounding, status: e.status, eligibility: e.eligibility === "ELIGIBLE" ? "ELIGIBLE" : "NO_PAYABLE_RESULT", amountMinor: e.amountMinor?.toString() ?? null, currency: e.currency, evidence: proof.result.evidence, evidenceCount: proof.result.evidenceCount, sampled: proof.result.sampled, calculatedAt: frozen.calculatedAt, calculation: frozen.result.reason };
+      const p = incentivePolicy.parse(JSON.parse(e.policyVersion.definition));
+      const proof = e.snapshotId ? await sourceProof(db, b, e.snapshotId, p, true) : null;
+      const admission = e.admissionId ? await db.niceJobsAdmission.findUnique({ where: { id: e.admissionId }, select: { status: true, verificationEvidenceReference: true } }) : null;
+      const frozen = z.object({ actual: z.string().nullable().optional(), result: z.object({ amountMinor: z.string().nullable(), reason: z.string() }).optional(), calculatedAt: z.string() }).passthrough().parse(JSON.parse(e.calculation));
+      return { id: e.id, policy: e.policyVersion.policy.name, policyVersion: e.policyVersion.number, assignmentId: e.assignmentId, periodStart: e.periodStart, periodEnd: e.periodEnd, metric: proof?.result.metric.name ?? "Verified admission", source: proof?.result.metric.source ?? "ADMISSION_AND_PAYMENT", actual: frozen.actual ?? null, threshold: p.eligibility.minimumActual, target: proof?.result.metric.target ?? null, rule: p.rule, rounding: p.rounding, status: e.status, eligibility: e.eligibility === "ELIGIBLE" ? "ELIGIBLE" : "NO_PAYABLE_RESULT", amountMinor: e.amountMinor?.toString() ?? null, currency: e.currency, evidence: proof?.result.evidence ?? (e.admissionId && admission ? [{ type: "NiceJobsAdmission", id: e.admissionId }] : []), evidenceCount: proof?.result.evidenceCount ?? (admission ? 1 : 0), sampled: proof?.result.sampled ?? false, calculatedAt: frozen.calculatedAt, calculation: frozen.result?.reason ?? "Verified admission and qualifying net payment; human approval required" };
     });
   }
   async function statementDetail(userId: string, statementId: string, constraint?: AgentConstraint) {

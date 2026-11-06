@@ -153,7 +153,7 @@ export function createExecutionService(client: PrismaClient = prisma, createAcce
       await ctx.requireAccess(domain + ".manage", scope);
       if ("programId" in parsed && parsed.programId) {
         const program = await db.program.findUnique({ where: { id: parsed.programId } });
-        if (!program || program.organizationId !== scope.organizationId || ["RETIRED", "ARCHIVED"].includes(program.status)) throw new AccessError("Program belongs to another scope or is closed");
+        if (!program || program.organizationId !== scope.organizationId || ["CLOSED", "RETIRED", "ARCHIVED"].includes(program.status)) throw new AccessError("Program belongs to another scope or is closed");
         await ctx.requireAccess("program.read", program);
       }
       if (previous && (previous.organizationId !== scope.organizationId || kind !== "projects" && "projectId" in previous && (previous.projectId ?? null) !== (scope.projectId ?? null))) throw new AccessError("Resource scope cannot be changed");

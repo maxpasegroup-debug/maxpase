@@ -4,12 +4,16 @@ import { workforcePermissions } from "@/server/authorization/registry";
 import { automationProvenance } from "@/server/nicejobs/automation-provenance";
 
 describe("Nice Jobs focused management navigation", () => {
-  it("groups existing lifecycle work in six sections without manufacturing capabilities", () => {
-    expect(niceJobsControlGroups.map(g => g.label)).toEqual(["Overview", "Opportunities", "Applicants", "Workforce", "Earnings", "System"]);
+  it("groups existing lifecycle work in eight founder sections without manufacturing capabilities", () => {
+    expect(niceJobsControlGroups.map(g => g.label)).toEqual(["Companies", "Products & Programmes", "Resources", "Opportunities", "Incentives", "Participants", "Admissions", "Reports"]);
     for (const g of niceJobsControlGroups) for (const [, , permission] of g.entries) expect(workforcePermissions.some(p => p.key === permission)).toBe(true);
-    expect(niceJobsControlGroup("worker-detail")).toBe("workforce");
-    expect(niceJobsControlGroup("finance-incentive-detail")).toBe("earnings");
-    expect(niceJobsControlGroup("automation-detail")).toBe("system");
+    expect(niceJobsControlGroup("founder-companies")).toBe("companies");
+    expect(niceJobsControlGroup("founder-programmes")).toBe("programmes");
+    expect(niceJobsControlGroup("content-management")).toBe("resources");
+    expect(niceJobsControlGroup("worker-detail")).toBe("participants");
+    expect(niceJobsControlGroup("finance-incentive-detail")).toBe("incentives");
+    expect(niceJobsControlGroup("automation-detail")).toBe("reports");
+    expect(niceJobsControlGroup("admissions")).toBe("admissions");
     expect(niceJobsControlGroup("job-setup")).toBe("opportunities");
     expect(niceJobsControlGroups.find(group => group.key === "opportunities")?.entries[0][0]).toBe("job-setup");
     for (const participant of ["my-day", "my-work", "worker-reports", "worker-wallet", "worker-resources", "worker-help", "my-onboarding", "my-applications"]) expect(niceJobsControlGroup(participant)).toBeNull();

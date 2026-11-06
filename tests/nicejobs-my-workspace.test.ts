@@ -19,7 +19,7 @@ async function renderSpace(applications: unknown, learning: unknown, worker = fa
     "next/link": Link,
     "./candidate-space.module.css": css,
     "@/lib/nicejobs-application-stage": { applicationStage },
-    "@/server/nicejobs/participant-dashboard": { participantDashboard: { candidateSpace: async () => ({ applications, learning }) } }
+    "@/server/nicejobs/participant-dashboard": { participantDashboard: { candidateSpace: async () => ({ applications, learning, participantId: { status: "AVAILABLE", data: "NJ-2026-TEST" } }) } }
   };
   runInNewContext(code, { module: target, exports: target.exports, require: (name: string) => name in mocks ? mocks[name] : nativeRequire(name), encodeURIComponent });
   return renderToStaticMarkup(await target.exports.CandidateSpace({ userId: "server-user", base: "/sites/jobs/gateway", name: "Maya", worker }));

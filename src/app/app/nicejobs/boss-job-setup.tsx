@@ -12,6 +12,7 @@ export async function BossJobSetup({ userId, base, realm }: { userId: string; ba
   const recorded = roles.filter(role => role.version);
   return <section className="nj-workspace" aria-labelledby="job-setup-heading">
     <header><p>Boss / Nice Jobs</p><h1 id="job-setup-heading">Set up launch jobs</h1><p>Complete each role in order. A draft is never shown as an open job.</p></header>
+    <p><Link href="/app/boss?view=companies">Manage companies, brands and products</Link>. Open a brand’s Program Management and Commercial Terms workspaces to prepare a programme, fee, tax and written conditions before linking it to a partner opportunity.</p>
     <ol className="nj-setup-stages" aria-label="Job setup steps"><li>Employer and role</li><li>Terms and manager</li><li>Orientation</li><li>Training</li><li>Human review and publication</li></ol>
     {roles.map(({ code, version, setup }) => {
       const status = version?.publishedAt ? version.template.status : version?.status ?? "NOT CREATED";

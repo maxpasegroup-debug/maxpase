@@ -9,6 +9,7 @@ import { NiceJobsUnavailable } from "./input";
 import { safeDiagnostic } from "@/server/security/diagnostics";
 import { participantStage } from "@/lib/nicejobs-dashboard";
 import { resultPage } from "@/server/domain/query-bounds";
+import { ownNiceJobsId } from "./participant-id";
 
 export type DashboardResult<T> = { status: "AVAILABLE"; data: T } | { status: "UNAUTHORIZED" | "UNAVAILABLE"; data: null };
 export async function dashboardRead<T>(read: () => Promise<T>): Promise<DashboardResult<T>> {
@@ -20,8 +21,8 @@ export async function dashboardRead<T>(read: () => Promise<T>): Promise<Dashboar
   }
 }
 
-const dependencies = { account: accountPreferences, applications: applicationService, onboarding: onboardingService, employee: employeeService, knowledge: knowledgeService, operations: operationsService };
-export function createParticipantDashboard(services = dependencies) {
+const dependencies = { account: accountPreferences, applications: applicationService, onboarding: onboardingService, employee: employeeService, knowledge: knowledgeService, operations: operationsService, identity: ownNiceJobsId };
+export function createParticipantDashboard(services: Omit<typeof dependencies, "identity"> & { identity?: typeof ownNiceJobsId } = dependencies) {
   async function notifications(userId: string, read?: string, navigation?: Awaited<ReturnType<typeof services.employee.navigation>>) {
     return dashboardRead(async () => {
       const nav = navigation ?? await services.employee.navigation(userId);
@@ -57,11 +58,12 @@ export function createParticipantDashboard(services = dependencies) {
     return { applications, opportunities };
   }
   async function candidateSpace(userId: string) {
-    const [applications, learning] = await Promise.all([
+    const [applications, learning, participantId] = await Promise.all([
       dashboardRead(() => services.applications.list(userId, true, { limit: 5, recent: true })),
-      dashboardRead(() => services.onboarding.list(userId, true, { limit: 5 }))
+      dashboardRead(() => services.onboarding.list(userId, true, { limit: 5 })),
+      dashboardRead(() => (services.identity ?? ownNiceJobsId)(userId))
     ]);
-    return { applications, learning };
+    return { applications, learning, participantId };
   }
   async function search(userId: string, worker: boolean, query: string) {
     const search = query.trim();
