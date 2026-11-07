@@ -1750,6 +1750,14 @@ model Organization {
   metadata                 String?
   group                    GroupProfile?
   company                  CompanyProfile?
+  labsBillingProfile       LabsBillingProfile?       @relation("LabsBillingCompany")
+  labsBillingEvidence      LabsBillingEvidence[]
+  labsBillingCustomers    LabsBillingCustomer[]
+  labsBillingServices     LabsBillingService[]
+  labsBillingInvoices     LabsBillingInvoice[] @relation("LabsInvoiceCompany")
+  labsBillingDivisionInvoices LabsBillingInvoice[] @relation("LabsInvoiceDivision")
+  labsBillingSequences    LabsBillingSequence[]
+  labsVendorBills         LabsVendorBill[]
   department               DepartmentProfile?
   team                     TeamProfile?
   memberships              Membership[]
@@ -1824,6 +1832,214 @@ model CompanyProfile {
   updatedAt         DateTime                @updatedAt
 
   @@index([groupId])
+}
+
+model LabsBillingProfile {
+  id                    String       @id @default(cuid())
+  companyId             String       @unique
+  company               Organization @relation("LabsBillingCompany", fields: [companyId], references: [id], onDelete: Restrict)
+  legalName             String?
+  registeredAddress     String?
+  registeredState       String?
+  gstin                 String?
+  gstRegistrationStatus String       @default("NOT_CONFIRMED")
+  pan                   String?
+  financialYear         String?
+  companyEmail          String?
+  companyPhone          String?
+  logoReference         String?
+  authorizedSignatory   String?
+  bankDetails           String?
+  quotationTerms        String?
+  invoiceTerms          String?
+  documentFooter        String?
+  profileStatus         String       @default("INCOMPLETE")
+  taxReviewStatus       String       @default("PENDING_CA_REVIEW")
+  approvedTaxBasisPoints String?
+  taxReviewEvidence     String?
+  eInvoiceStatus        String       @default("PENDING_CA_REVIEW")
+  eInvoiceReviewNote    String?
+  verificationEvidence  String?
+  legalVerifiedAt       DateTime?
+  legalVerifiedByUserId String?
+  caReviewedAt          DateTime?
+  caReviewedByUserId    String?
+  updatedByUserId       String?
+  version               Int          @default(0)
+  createdAt             DateTime     @default(now())
+  updatedAt             DateTime     @updatedAt
+
+  evidence LabsBillingEvidence[]
+  @@index([profileStatus, updatedAt])
+}
+
+model LabsBillingEvidence {
+  id             String       @id @default(cuid())
+  companyId      String
+  company        Organization @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  profileId      String?
+  profile        LabsBillingProfile? @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  vendorBillId   String?
+  vendorBill     LabsVendorBill? @relation(fields: [vendorBillId], references: [id], onDelete: Cascade)
+  evidenceType   String
+  fileName       String
+  storageKey     String
+  mimeType       String
+  sizeBytes      Int
+  uploadedByUserId String
+  verifiedByUserId String?
+  verifiedAt     DateTime?
+  createdAt      DateTime     @default(now())
+  @@index([companyId, evidenceType, createdAt])
+}
+
+model LabsBillingCustomer {
+  id                     String       @id @default(cuid())
+  companyId              String
+  company                Organization @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  customerType           String
+  legalName              String
+  businessName           String?
+  contactPerson          String?
+  email                  String?
+  phone                  String?
+  billingAddress         String
+  state                  String
+  pinCode                String
+  gstRegistrationStatus  String       @default("UNREGISTERED")
+  gstin                  String?
+  placeOfSupply          String
+  notes                  String?
+  active                 Boolean      @default(true)
+  createdByUserId        String
+  version                Int          @default(0)
+  createdAt              DateTime     @default(now())
+  updatedAt              DateTime     @updatedAt
+  invoices               LabsBillingInvoice[]
+  @@unique([companyId, email])
+  @@index([companyId, legalName, active])
+}
+
+model LabsBillingService {
+  id                   String       @id @default(cuid())
+  companyId            String
+  company              Organization @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  category             String
+  name                 String
+  description          String
+  scope                String?
+  deliverables         String?
+  pricingBasis         String
+  defaultPrice         String?
+  sacCode              String?
+  gstTreatment         String       @default("PENDING_CA_REVIEW")
+  gstBasisPoints       Int?
+  placeOfSupplyRule    String?
+  taxApprovalStatus    String       @default("PENDING_CA_REVIEW")
+  taxEvidence          String?
+  active               Boolean      @default(false)
+  createdByUserId      String
+  reviewedByUserId     String?
+  reviewedAt           DateTime?
+  version              Int          @default(0)
+  createdAt            DateTime     @default(now())
+  updatedAt            DateTime     @updatedAt
+  @@unique([companyId, name])
+  @@index([companyId, active, category])
+}
+
+model LabsBillingSequence {
+  id             String       @id @default(cuid())
+  companyId      String
+  company        Organization @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  documentType   String
+  financialYear  String
+  nextNumber     Int          @default(1)
+  updatedAt      DateTime     @updatedAt
+  @@unique([companyId, documentType, financialYear])
+}
+
+model LabsBillingInvoice {
+  id                   String       @id @default(cuid())
+  companyId            String
+  company              Organization @relation("LabsInvoiceCompany", fields: [companyId], references: [id], onDelete: Restrict)
+  divisionId           String
+  division             Organization @relation("LabsInvoiceDivision", fields: [divisionId], references: [id], onDelete: Restrict)
+  customerId           String
+  customer             LabsBillingCustomer @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  quoteId              String       @unique
+  quote                ExecutiveRecord @relation(fields: [quoteId], references: [id], onDelete: Restrict)
+  invoiceNumber        String
+  financialYear        String
+  issueDate            DateTime
+  dueDate              DateTime?
+  currency             String
+  customerSnapshot     String
+  supplierSnapshot     String
+  serviceSnapshot      String
+  calculationSnapshot  String
+  totalAmount          String
+  status               String       @default("ISSUED")
+  deliveryStatus       String       @default("NOT_SENT")
+  sentAt               DateTime?
+  cancellationReason   String?
+  cancelledAt          DateTime?
+  createdByUserId      String
+  createdAt            DateTime     @default(now())
+  updatedAt            DateTime     @updatedAt
+  payments             LabsBillingPayment[]
+  @@unique([companyId, invoiceNumber])
+  @@index([companyId, status, issueDate])
+  @@index([customerId, issueDate])
+}
+
+model LabsBillingPayment {
+  id                    String       @id @default(cuid())
+  invoiceId             String
+  invoice               LabsBillingInvoice @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+  paymentDate           DateTime
+  amount                String
+  paymentMode           String
+  bankReference         String?
+  notes                 String?
+  verificationStatus    String       @default("PENDING_RECONCILIATION")
+  recordedByUserId      String
+  verifiedByUserId      String?
+  verifiedAt            DateTime?
+  reconciliationEvidence String?
+  createdAt             DateTime     @default(now())
+  @@index([invoiceId, paymentDate])
+}
+
+model LabsVendorBill {
+  id                  String       @id @default(cuid())
+  companyId           String
+  company             Organization @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  vendorName          String
+  vendorGstin         String?
+  vendorInvoiceNumber String
+  billDate            DateTime
+  description         String
+  expenseCategory     String
+  taxableAmount       String
+  gstComponents       String
+  totalAmount         String
+  dueDate             DateTime?
+  approvalStatus      String       @default("PENDING_REVIEW")
+  approvalEvidence    String?
+  paymentStatus       String       @default("UNPAID")
+  paymentReference    String?
+  paymentDate         DateTime?
+  paymentRecordedByUserId String?
+  paymentVerifiedByUserId String?
+  paymentVerifiedAt   DateTime?
+  paymentEvidence     String?
+  createdByUserId     String
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+  evidence            LabsBillingEvidence[]
+  @@unique([companyId, vendorGstin, vendorInvoiceNumber])
+  @@index([companyId, billDate, paymentStatus])
 }
 
 model CompanyRelationship {
@@ -2094,6 +2310,7 @@ model Project {
 // Discriminated executive records. Payload contracts are validated server-side.
 model ExecutiveRecord {
   customerGrants LabsCustomerGrant[]
+  billingInvoice LabsBillingInvoice?
   id             String             @id @default(cuid())
   kind           String
   organizationId String

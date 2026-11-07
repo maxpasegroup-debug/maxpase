@@ -11,7 +11,8 @@ export const migrationManifest = [
   ["20261104000000_nicejobs_tara_transcript", "f9a92220dbc068f3044c586f69411064ead1b50a8f3fbe355e5102df19c76a2c"],
     ["20261105000000_nicejobs_participant_identity", "f72d0f0cbe590e57cf046eba82f760e0abbef1c455a701a4a39b0777936f323c"],
     ["20261106000000_nicejobs_source_events", "c184c280d9e488beb24c753dae17d361ba0fe26829bcd178fd645fe4014a3c7d"],
-    ["20261106010000_nicejobs_admission_incentives", "aec3955c3ead6ec54428790324f57021b2fd4c5414cc560e59df949e823cd5c4"]
+    ["20261106010000_nicejobs_admission_incentives", "aec3955c3ead6ec54428790324f57021b2fd4c5414cc560e59df949e823cd5c4"],
+    ["20261107000000_aira_labs_billing_profile", "0e50be29fdf33ecf4c10763166bb294b48c423325d3b804f00228d76e915e110"]
 ] as const;
 
 export async function verifyDatabaseReadiness(db: Prisma.TransactionClient) {
@@ -30,6 +31,9 @@ export async function verifyDatabaseReadiness(db: Prisma.TransactionClient) {
     NiceJobsWalletLedger: ["amountMinor", "reference"], NiceJobsIncentiveEarning: ["snapshotId", "admissionId", "policyVersionId"], NiceJobsSourceEvent: ["externalEventId", "externalTransactionId", "status"], NiceJobsPayoutIntent: ["amountMinor", "status"], NiceJobsWalletReversalProposal: ["adjustmentId", "ledgerId"],
     Task: ["niceJobsAssignmentId", "evidenceRequired"], ScheduledJob: ["scanCursor", "scanStartedAt", "scanRuleVersion"],
     AutomationRule: ["lifecycle", "divisionId"], AutomationRun: ["workflowVersionId", "sourceEventId", "attempts", "nextRetryAt", "failureClass"],
+    LabsBillingProfile: ["companyId", "legalName", "gstin", "profileStatus", "taxReviewStatus", "eInvoiceStatus"], LabsBillingEvidence: ["companyId", "profileId", "storageKey", "fileName"],
+    LabsBillingCustomer: ["companyId", "legalName", "gstRegistrationStatus", "placeOfSupply"], LabsBillingService: ["companyId", "sacCode", "gstBasisPoints", "taxApprovalStatus"],
+    LabsBillingInvoice: ["companyId", "divisionId", "quoteId", "invoiceNumber", "supplierSnapshot", "customerSnapshot", "calculationSnapshot"], LabsBillingPayment: ["invoiceId", "verificationStatus", "reconciliationEvidence"], LabsVendorBill: ["companyId", "approvalStatus", "paymentStatus", "paymentEvidence"],
     NiceJobsAutomationVersion: ["ruleId", "status", "definition", "publishedAt"], NiceJobsOperationalException: ["companyId", "divisionId", "sourceKey", "status", "revision"]
   };
   const columns = await db.$queryRaw<{ table_name: string; column_name: string }[]>`SELECT table_name, column_name FROM information_schema.columns WHERE table_schema = current_schema()`;

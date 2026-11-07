@@ -137,12 +137,19 @@ export function createLabsService(client: PrismaClient = prisma, now = () => new
     });
   }
   async function quote(userId: string, raw: unknown, reference: string) {
-    const data = quoteInput.parse(raw), totals = quoteTotals(data);
+    let data = quoteInput.parse(raw);
     z.string().min(8).max(100).parse(reference);
     if (new Date(data.expiresAt) <= now()) throw new AccessError("Quotation expiry must be future");
     return client.$transaction(async db => {
       const { a, row: lead } = await owned(db, userId, data.leadId, "LABS_LEAD", "labs.quote.prepare");
       if (["WON", "LOST"].includes(lead.status)) throw new AccessError("Closed leads cannot prepare new quotations");
+      if (data.serviceId) {
+        if (data.items.length !== 1) throw new AccessError("A selected catalogue service must match the single quotation line");
+        const service = await db.labsBillingService.findFirst({ where: { id: data.serviceId, companyId: a.companyId, active: true, taxApprovalStatus: "APPROVED" } });
+        if (!service || service.gstBasisPoints === null) throw new AccessError("Select a current CA-approved AIRA Labs service");
+        data = quoteInput.parse({ ...data, items: [{ ...data.items[0], description: data.items[0].description || service.description }], taxBasisPoints: service.gstBasisPoints });
+      }
+      const totals = quoteTotals(data);
       const sourceKey = "labs:quote:" + digest([userId, reference]);
       const previous = await db.executiveRecord.findUnique({ where: { sourceKey } });
       if (previous) { if (JSON.stringify(quotePayload.parse(JSON.parse(previous.payload)).input) !== JSON.stringify(data)) throw new AccessError("Quotation replay mismatch"); return previous; }
@@ -150,6 +157,10 @@ export function createLabsService(client: PrismaClient = prisma, now = () => new
       await event(db, userId, q, "labs.quote_drafted");
       return q;
     });
+  }
+  async function serviceCatalogue(userId: string) {
+    const gateway = await access(client, userId, "labs.quote.prepare");
+    return client.labsBillingService.findMany({ where: { companyId: gateway.companyId, active: true, taxApprovalStatus: "APPROVED" }, select: { id: true, name: true, description: true, pricingBasis: true, defaultPrice: true, sacCode: true, gstBasisPoints: true }, orderBy: { name: "asc" }, take: 100 });
   }
   async function submitQuote(userId: string, raw: unknown) {
     const data = command.strict().parse(raw);
@@ -179,6 +190,9 @@ export function createLabsService(client: PrismaClient = prisma, now = () => new
       const { a, row } = await owned(db, userId, data.id, "LABS_QUOTE", "labs.quote.issue");
       const token = await replay(db, userId, row, data.reference, data); if (token.previous) return;
       const q = quotePayload.parse(JSON.parse(row.payload));
+      if (!q.input.serviceId) throw new AccessError("Select a CA-approved active service from the AIRA Labs service catalogue before quote issuance");
+      const service = await db.labsBillingService.findFirst({ where: { id: q.input.serviceId, companyId: a.companyId, active: true, taxApprovalStatus: "APPROVED", gstBasisPoints: q.input.taxBasisPoints } });
+      if (!service) throw new AccessError("The selected catalogue service tax approval changed; prepare a new quotation");
       if (!q.requestId) throw new AccessError("Submit the draft for review first");
       const r = await db.operationalRequest.findUniqueOrThrow({ where: { id: q.requestId } });
       if (row.status !== "UNDER_REVIEW" || !row.dueAt || row.dueAt <= now() || r.organizationId !== a.divisionId || r.description !== JSON.stringify({ input: q.input, totals: q.totals }) || !await operations.approvedAuthority(db, r.id)) throw new AccessError("Current independent approval required");
@@ -186,6 +200,8 @@ export function createLabsService(client: PrismaClient = prisma, now = () => new
       if (!config) throw new AccessError("Verified issuer and tax configuration required");
       const issuer = billingConfig.parse(JSON.parse(config.value));
       if (issuer.companyId !== a.companyId || !issuer.allowedTaxBasisPoints.includes(q.input.taxBasisPoints)) throw new AccessError("Issuer/tax configuration mismatch");
+      const billingProfile = await db.labsBillingProfile.findUnique({ where: { companyId: a.companyId } });
+      if (!billingProfile || billingProfile.profileStatus !== "APPROVED_FOR_BILLING" || billingProfile.taxReviewStatus !== "APPROVED" || billingProfile.eInvoiceStatus === "PENDING_CA_REVIEW" || !billingProfile.legalVerifiedAt || billingProfile.legalName !== issuer.legalName || billingProfile.registeredAddress !== issuer.address || billingProfile.gstin !== issuer.taxRegistration) throw new AccessError("Approved AIRA Skill City billing profile and CA tax configuration required");
       const company=await db.companyProfile.findUnique({where:{organizationId:a.companyId}}),legal=JSON.parse(company?.metadata??"{}");
       if(!company||company.status!=="ACTIVE"||company.legalName!==issuer.legalName||legal.legalInformationVerified!==true||typeof legal.legalVerificationEvidence!=="string"||legal.legalVerificationEvidence.trim().length<10)throw new AccessError("Canonical issuer legal identity verification is required");
       await access(db, issuer.authorizedByUserId, "labs.quote.issue");
@@ -302,7 +318,7 @@ export function createLabsService(client: PrismaClient = prisma, now = () => new
   async function saveTask(userId:string,raw:unknown){const data=z.object({projectId:z.string(),taskId:z.string().optional(),title:z.string().trim().min(1).max(200),description:z.string().trim().max(4000),dueDate:z.string().datetime(),status:z.enum(["TODO","IN_PROGRESS","BLOCKED","COMPLETED","CANCELLED"]),reference:z.string().min(8).max(100)}).strict().parse(raw);return client.$transaction(async db=>{const {project,canManage}=await projectWork(userId,data.projectId,db,"task.manage");if(!canManage)throw new AccessError("Closed project is read-only");const a=await access(db,userId);const manager=(await a.ctx.decide("labs.delivery.manage",{organizationId:a.divisionId,projectId:project.id})).allowed;const prior=data.taskId?await db.task.findFirst({where:{id:data.taskId,projectId:data.projectId}}):null;if(data.taskId&&!prior)throw new AccessError("Task unavailable");if(!manager&&(prior&&prior.assigneePersonId!==a.ctx.user!.personId||["COMPLETED","CANCELLED"].includes(data.status)))throw new AccessError("Assigned open task required");const reference="labs:task:"+digest([data.projectId,userId,data.reference]),fingerprint=digest(data),old=await db.operationalEvent.findUnique({where:{reference}});if(old){if(JSON.parse(old.metadata??"{}").fingerprint!==fingerprint)throw new AccessError("Task replay mismatch");return;}const task=await execution.save(userId,"tasks",{organizationId:project.organizationId,projectId:project.id,title:data.title,description:data.description,dueDate:data.dueDate,status:data.status,assigneePersonId:prior?.assigneePersonId??project.ownerPersonId},data.taskId,db);await event(db,userId,{organizationId:project.organizationId,id:task.id},"labs.task_saved",reference,{fingerprint});});}
   async function processFollowups(userId:string){const a=await access(client,userId,"labs.sales.manage");await a.ctx.requireAccess("operations.process",{organizationId:a.divisionId});const scoped=createOperationsService(client,(id,db)=>createAccessContext(id,db,undefined,{organizationId:a.divisionId}));return scoped.processDue(userId,25,"LABS_FOLLOWUP");}
   async function reminders(userId:string){const a=await access(client,userId);const scope={organizationId:a.divisionId};await a.ctx.requireAccess("reminder.read",scope);const manager=(await a.ctx.decide("labs.sales.read",scope)).allowed;if(!manager)await a.ctx.requireAccess("labs.sales.self",scope);return {canProcess:manager&&(await a.ctx.decide("labs.sales.manage",scope)).allowed&&(await a.ctx.decide("operations.process",scope)).allowed,records:await client.reminder.findMany({where:{organizationId:a.divisionId,reference:{startsWith:"labs-followup:"},...(!manager?{recipientUserId:userId}:{})},select:{id:true,status:true,remindAt:true,completedAt:true},orderBy:{remindAt:"desc"},take:50})};}
-  return { createLead, enquire, assignEnquiry, unassigned, assign, updateLead, quote, submitQuote, decideQuote, issue, accept, startProject, deliver, list, detail, projectList, people,projectWork,saveTask,processFollowups,reminders, quoteDocument: async (userId: string, id: string) => { const { row } = await owned(client, userId, id, "LABS_QUOTE"); return { row, data: quotePayload.parse(JSON.parse(row.payload)) }; } };
+  return { createLead, enquire, assignEnquiry, unassigned, assign, updateLead, quote, serviceCatalogue, submitQuote, decideQuote, issue, accept, startProject, deliver, list, detail, projectList, people,projectWork,saveTask,processFollowups,reminders, quoteDocument: async (userId: string, id: string) => { const { a, row } = await owned(client, userId, id, "LABS_QUOTE"); const data = quotePayload.parse(JSON.parse(row.payload)); const lead = await client.executiveRecord.findFirst({ where: { id: data.input.leadId, organizationId: a.divisionId, kind: "LABS_LEAD" } }); return { row, data, customer: lead ? leadPayload.parse(JSON.parse(lead.payload)) : null }; } };
 }
 export const labsService = createLabsService();
 export const skillCityLabsService = createLabsService(prisma, () => new Date(), "skillcity");

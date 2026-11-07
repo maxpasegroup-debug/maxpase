@@ -5,7 +5,7 @@ export const leadInput = z.object({ company: z.string().trim().min(1).max(160), 
 export const leadPayload = leadInput.extend({ contactId: z.string().optional(), ownerUserId: z.string(), nextFollowUp: z.string().datetime().nullable(), lastContact: z.string().datetime().nullable(), outcome: z.string().max(3000), qualification: z.string().max(3000), quoteId: z.string().nullable(), acceptance: z.string().max(3000), projectId: z.string().nullable() });
 const money = z.string().regex(/^(0|[1-9][0-9]{0,9})(\.[0-9]{1,2})?$/);
 const computedMoney=z.string().regex(/^(0|[1-9][0-9]{0,19})\.[0-9]{2}$/);
-export const quoteInput = z.object({ leadId: z.string().min(1).max(200), currency: z.enum(["INR", "USD", "EUR"]), items: z.array(z.object({ description: z.string().trim().min(1).max(200), quantity: z.string().regex(/^(0|[1-9][0-9]{0,5})(\.[0-9]{1,3})?$/), rate: money })).min(1).max(20), discount: money.default("0"), taxBasisPoints: z.number().int().min(0).max(10000), expiresAt: z.string().datetime() }).strict();
+export const quoteInput = z.object({ leadId: z.string().min(1).max(200), serviceId: z.string().min(1).max(200).optional(), currency: z.enum(["INR", "USD", "EUR"]), items: z.array(z.object({ description: z.string().trim().min(1).max(200), quantity: z.string().regex(/^(0|[1-9][0-9]{0,5})(\.[0-9]{1,3})?$/), rate: money })).min(1).max(20), discount: money.default("0"), taxBasisPoints: z.number().int().min(0).max(10000).default(0), expiresAt: z.string().datetime() }).strict();
 function scaled(value: string, places: number) { const [whole, part = ""] = value.split("."); return BigInt(whole) * 10n ** BigInt(places) + BigInt(part.padEnd(places, "0")); }
 export function quoteTotals(raw: unknown) {
   const data = quoteInput.parse(raw);
