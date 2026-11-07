@@ -19,8 +19,35 @@ import { jobsPinActivation, jobsRegistrationPin } from "@/server/auth/jobs-pin-a
 import { assertJobsPinReady } from "@/server/auth/jobs-pin";
 import { parsePhoneNumberFromString } from "libphonenumber-js";
 import { clearJobsRegistrationProof, hasJobsRegistrationProof, setJobsRegistrationProof } from "@/server/auth/jobs-registration-proof";
+import { staffInvite } from "@/server/skillcity/staff-invite";
 
 export type PortalLoginState = { error?: string; challengeId?: string; message?: string; complete?: boolean; pendingVerification?: boolean; deliveryPending?: boolean };
+export async function staffPasswordResetRequestAction(_state: PortalLoginState, form: FormData): Promise<PortalLoginState> {
+  try {
+    const { site } = await requestPortal(String(form.get("site") ?? ""), true);
+    if (site.id !== "skillcity" && site.id !== "labs") return { error: "Recovery is unavailable for this portal." };
+    const result = await staffInvite.beginPasswordReset({ email: String(form.get("email") ?? ""), portal: site.id });
+    return { challengeId: result.challengeId, message: "If this is an eligible staff account, a recovery code will be sent to its verified work email. Check your inbox or spam folder." };
+  } catch (error) {
+    if (error instanceof RateLimitError) return { error: error.message };
+    if (error instanceof ZodError) return { error: "Enter a valid work email address." };
+    safeDiagnostic("authentication_failed");
+    return { error: "Recovery is temporarily unavailable. Try again later." };
+  }
+}
+export async function staffPasswordResetCompleteAction(_state: PortalLoginState, form: FormData): Promise<PortalLoginState> {
+  try {
+    const { site } = await requestPortal(String(form.get("site") ?? ""), true);
+    if (site.id !== "skillcity" && site.id !== "labs") return { error: "Recovery is unavailable for this portal." };
+    await staffInvite.completePasswordReset({ challengeId: String(form.get("challengeId") ?? ""), code: String(form.get("code") ?? ""), password: String(form.get("password") ?? ""), confirmPassword: String(form.get("confirmPassword") ?? ""), portal: site.id });
+    return { complete: true, message: "Password changed. Existing sessions have been signed out. Sign in with your new password." };
+  } catch (error) {
+    if (error instanceof RateLimitError) return { error: error.message };
+    if (error instanceof ZodError) return { error: "Check the recovery code and matching passwords (at least 12 characters)." };
+    safeDiagnostic("authentication_failed");
+    return { error: "Could not reset this password. Check the unexpired code or request a new one." };
+  }
+}
 export async function jobsPhoneSignupAction(_state: PortalLoginState, form: FormData): Promise<PortalLoginState> {
   await requestPortal("jobs", true);
   let registeredUserId: string | undefined;

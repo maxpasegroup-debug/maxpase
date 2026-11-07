@@ -8,10 +8,12 @@ import { createBossService } from "@/server/group/boss-service";
 const advisor = ["organization.read", "product.read", "aira.crm.self", "aira.crm.perform"];
 const director = ["organization.read", "executive.read", "decision.read", "decision.decide", "approval.read", "approval.decide", "person.read", "person.create", "person.update", "user.read", "user.create", "user.update", "membership.read", "membership.manage", "membership.assign_role", "membership.scope.manage", "role.read", "product.read", "program.manage", "project.read", "task.read", "task.manage", "aira.crm.self", "aira.crm.perform", "aira.crm.manage", "labs.sales.self", "labs.sales.perform", "labs.sales.read", "labs.sales.manage", "labs.delivery.assignee", "sia.access.read"];
 const divisionDirector = ["organization.read", "executive.read", "decision.read", "decision.decide", "approval.read", "approval.decide", "person.read", "person.create", "person.update", "user.read", "user.create", "user.update", "membership.read", "membership.manage", "membership.assign_role", "role.read", "project.read", "task.read", "task.manage"];
+export const administrativeOfficerRolePermissions = ["organization.read", "company.read", "skillcity.administrative.read", "skillcity.administrative.task.perform", "task.read", "event.read", "labs.billing.status.read", "labs.billing.customer.read", "labs.billing.customer.manage"] as const;
+export const labsDeveloperRolePermissions = ["organization.read", "labs.delivery.assignee", "project.read", "task.read", "task.manage", "blocker.manage"] as const;
 const templates = [
   { scope: "aira-skill-city", key: "aira-03", name: "Director", permissions: director },
   { scope: "aira-skill-city", key: "aira-26", name: "Senior Academic Advisor", permissions: [...advisor, "labs.sales.self", "labs.sales.perform", "sia.access.read"] },
-  { scope: "aira-skill-city", key: "aira-administrative-officer", name: "Administrative Officer", permissions: ["organization.read", "company.read", "brand.read", "person.read", "reporting.read", "responsibility.read", "program.manage", "project.read", "task.read", "labs.sales.read"] },
+  { scope: "aira-skill-city", key: "aira-administrative-officer", name: "Administrative Officer", permissions: administrativeOfficerRolePermissions },
   { scope: "aira-labs", key: "labs-division-director", name: "Division Director", permissions: [...divisionDirector, "labs.sales.self", "labs.sales.perform", "labs.sales.read", "labs.sales.manage", "labs.delivery.assignee", "labs.customer.manage"] },
   { scope: "aira-startup-school", key: "startup-division-director", name: "Division Director", permissions: [...divisionDirector, "program.manage", "aira.crm.self", "aira.crm.perform", "aira.crm.manage"] },
   { scope: "aira-skill-studio", key: "studio-division-director", name: "Division Director", permissions: [...divisionDirector, "aira.crm.self", "aira.crm.perform", "aira.crm.manage"] },
@@ -19,9 +21,9 @@ const templates = [
   { scope: "aira-labs", key: "labs-junior-academic-advisor", name: "Junior Academic Advisor", permissions: ["organization.read", "labs.sales.self", "labs.sales.perform"] },
   { scope: "aira-startup-school", key: "startup-junior-academic-advisor", name: "Junior Academic Advisor", permissions: ["organization.read", "aira.crm.self", "aira.crm.perform"] },
   { scope: "aira-skill-studio", key: "studio-junior-academic-advisor", name: "Junior Academic Advisor", permissions: ["organization.read", "aira.crm.self", "aira.crm.perform"] },
-  { scope: "aira-labs", key: "labs-full-stack-developer", name: "Full Stack Developer", permissions: ["organization.read", "labs.delivery.assignee", "project.read", "task.read", "task.manage"] },
-  { scope: "aira-labs", key: "labs-software-developer", name: "Software Developer", permissions: ["organization.read", "labs.delivery.assignee", "project.read", "task.read", "task.manage"] },
-  { scope: "aira-labs", key: "labs-junior-developer", name: "Junior Developer", permissions: ["organization.read", "labs.delivery.assignee", "project.read", "task.read", "task.manage"] },
+  { scope: "aira-labs", key: "labs-full-stack-developer", name: "Full Stack Developer", permissions: labsDeveloperRolePermissions },
+  { scope: "aira-labs", key: "labs-software-developer", name: "Software Developer", permissions: labsDeveloperRolePermissions },
+  { scope: "aira-labs", key: "labs-junior-developer", name: "Junior Developer", permissions: labsDeveloperRolePermissions },
   { scope: "aira-labs", key: "labs-business-development-manager", name: "Business Development Manager", permissions: ["organization.read", "person.read", "notification.read", "labs.sales.self", "labs.sales.perform", "labs.sales.read", "labs.sales.manage"] }
 ] as const;
 
@@ -51,6 +53,12 @@ export function createSkillCityRoleTemplates(client: PrismaClient = prisma) {
           if (!permission || permission.scope === "GLOBAL") throw new AccessError("Role capability unavailable");
           await ctx.requireDelegation(permission, { organizationId: target.id }, saved.organizationId === company.id);
           await db.rolePermission.upsert({ where: { roleId_permissionId: { roleId: saved.id, permissionId: permission.id } }, create: { roleId: saved.id, permissionId: permission.id }, update: {} });
+        }
+        if (template.key === "aira-administrative-officer" || template.key.startsWith("labs-") && template.key.endsWith("-developer")) {
+          const allowed = new Set<string>(template.permissions);
+          const assigned = await db.rolePermission.findMany({ where: { roleId: saved.id }, select: { permissionId: true, permission: { select: { key: true } } } });
+          const revoked = assigned.filter(grant => !allowed.has(grant.permission.key)).map(grant => grant.permissionId);
+          if (revoked.length) await db.rolePermission.deleteMany({ where: { roleId: saved.id, permissionId: { in: revoked } } });
         }
         configured++;
         await operationalEvent(db, { actorUserId: bossUserId, actorPersonId: ctx.user!.personId, organizationId: target.id, action: "staff.role_template_prepared", entityType: "Role", entityId: saved.id, result: "SUCCESS", metadata: { capabilityKeys: [...template.permissions], existingDirectorAppointmentsReviewed: reviewedExistingDirectors } });

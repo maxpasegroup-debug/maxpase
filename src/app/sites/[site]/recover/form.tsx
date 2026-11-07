@@ -1,0 +1,13 @@
+"use client";
+import Link from "next/link";
+import { useActionState } from "react";
+import { staffPasswordResetCompleteAction, staffPasswordResetRequestAction, type PortalLoginState } from "../actions";
+
+export function StaffPasswordRecoveryForm({ site, login, challengeId }: { site: "skillcity" | "labs"; login: string; challengeId?: string }) {
+  const [requestState, requestAction, requesting] = useActionState(staffPasswordResetRequestAction, {} as PortalLoginState);
+  const [resetState, resetAction, resetting] = useActionState(staffPasswordResetCompleteAction, {} as PortalLoginState);
+  const challenge = challengeId ?? requestState.challengeId;
+  if (resetState.complete) return <section className="portal-login-panel"><h1>Password changed</h1><p>{resetState.message}</p><Link href={login}>Sign in</Link></section>;
+  if (challenge) return <section className="portal-login-panel"><h1>Enter your recovery code</h1><p>Use the code sent to your verified work email. It expires in 10 minutes.</p><form action={resetAction} className="form-stack" aria-busy={resetting}><input type="hidden" name="site" value={site}/><input type="hidden" name="challengeId" value={challenge}/><label>Six-digit code<input name="code" inputMode="numeric" pattern="[0-9]{6}" minLength={6} maxLength={6} autoComplete="one-time-code" required/></label><label>New password<input name="password" type="password" minLength={12} maxLength={72} autoComplete="new-password" required/></label><label>Confirm new password<input name="confirmPassword" type="password" minLength={12} maxLength={72} autoComplete="new-password" required/></label>{resetState.error && <p role="alert" className="error">{resetState.error}</p>}<button className="portal-button" disabled={resetting}>{resetting ? "Changing password..." : "Change password"}</button></form><p><Link href={login}>Back to sign in</Link></p></section>;
+  return <section className="portal-login-panel"><h1>Recover your staff account</h1><p>Enter your work email. If it belongs to an active staff account, we’ll send a recovery code.</p><form action={requestAction} className="form-stack" aria-busy={requesting}><input type="hidden" name="site" value={site}/><label>Work email<input name="email" type="email" autoComplete="username" maxLength={254} required/></label>{requestState.error && <p role="alert" className="error">{requestState.error}</p>}{requestState.message && <p role="status">{requestState.message}</p>}<button className="portal-button" disabled={requesting}>{requesting ? "Requesting code..." : "Send recovery code"}</button></form><p><Link href={login}>Back to sign in</Link></p></section>;
+}

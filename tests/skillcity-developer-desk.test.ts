@@ -17,10 +17,10 @@ beforeAll(async () => {
   const companyId = (await db.organization.findUniqueOrThrow({ where: { slug: "aira-skill-city" } })).id;
   labsId = (await db.organization.findUniqueOrThrow({ where: { slug: "aira-labs" } })).id;
   const foreignId = (await db.organization.findUniqueOrThrow({ where: { slug: "pearn" } })).id;
-  const keys = ["organization.read", "project.read", "task.read", "task.manage", "labs.delivery.assignee", "membership.manage", "person.read", "responsibility.manage", "responsibility.read", "decision.decide"];
+  const keys = ["organization.read", "project.read", "task.read", "task.manage", "blocker.manage", "labs.delivery.assignee", "membership.manage", "person.read", "responsibility.manage", "responsibility.read", "decision.decide"];
   for (const key of keys) await db.permission.upsert({ where: { key }, create: { key, name: key, scope: "GROUP" }, update: {} });
   const directorRole = await db.role.create({ data: { organizationId: companyId, key: "developer-desk-director", name: "Director", permissions: { create: keys.map(key => ({ permission: { connect: { key } } })) } } });
-  const developerRole = await db.role.create({ data: { organizationId: labsId, key: "developer-desk-worker", name: "Junior Developer", permissions: { create: keys.filter(key => ["organization.read", "project.read", "task.read", "task.manage", "labs.delivery.assignee"].includes(key)).map(key => ({ permission: { connect: { key } } })) } } });
+  const developerRole = await db.role.create({ data: { organizationId: labsId, key: "developer-desk-worker", name: "Junior Developer", permissions: { create: keys.filter(key => ["organization.read", "project.read", "task.read", "task.manage", "blocker.manage", "labs.delivery.assignee"].includes(key)).map(key => ({ permission: { connect: { key } } })) } } });
   async function account(name: string, roleId: string, organizationId: string, scope = "ORGANIZATION") {
     const person = await db.person.create({ data: { displayName: name } });
     const user = await db.user.create({ data: { email: `${name.toLowerCase().replaceAll(" ", "-")}@test.invalid`, personId: person.id, emailVerifiedAt: new Date() } });
@@ -86,6 +86,11 @@ describe("Skill City developer desk", () => {
     expect((await db.task.findUniqueOrThrow({ where: { id: one.id } })).status).toBe("COMPLETED");
     await expect(desk.review(secondId, { taskId: one.id, duty: "TESTING", verdict: "APPROVED", comment: "Post-completion review", reference: randomUUID() })).rejects.toThrow();
     await expect(desk.updateOwnTask(firstId, { taskId: one.id, revision: revision + 2, status: "TODO", description: "Forged reopen", reference: randomUUID() })).rejects.toThrow();
+    const blocker = await desk.reportBlocker(secondId, { taskId: two.id, description: "Waiting on the approved external API credential", expectedResolution: null, reference: randomUUID() });
+    expect((await desk.workspace(secondId)).projects.flatMap(project => project.tasks).find(task => task.id === two.id)?.blockers.map(item => item.id)).toEqual([blocker.id]);
+    await desk.assignTask(directorId, { projectId, taskId: two.id, developerUserId: firstId, reference: randomUUID() });
+    expect((await desk.workspace(firstId)).projects.flatMap(project => project.tasks).some(task => task.id === two.id)).toBe(true);
+    expect((await desk.workspace(secondId)).projects.flatMap(project => project.tasks).some(task => task.id === two.id)).toBe(false);
   });
 
   it("rejects foreign scope and revoked project membership", async () => {

@@ -14,6 +14,8 @@ const settings = z.object({ SKILLCITY_EMAIL_AUTH_ENABLED: z.literal("true"), RES
 const sendInput = z.object({ userId: z.string().min(1), verificationEvidence: z.string().trim().min(10).max(1000) }).strict();
 const password = z.string().min(12).max(72).refine(v => Buffer.byteLength(v, "utf8") <= 72);
 const activateInput = z.object({ challengeId: z.uuid(), code: z.string().regex(/^[0-9]{6}$/), password, confirmPassword: z.string(), portal: z.enum(["skillcity", "labs"]) }).strict().refine(v => v.password === v.confirmPassword);
+const resetRequestInput = z.object({ email: z.email().transform(value => value.trim().toLowerCase()), portal: z.enum(["skillcity", "labs"]) }).strict();
+const resetInput = z.object({ challengeId: z.uuid(), code: z.string().regex(/^[0-9]{6}$/), password, confirmPassword: z.string(), portal: z.enum(["skillcity", "labs"]) }).strict().refine(v => v.password === v.confirmPassword);
 const otpHash = (id: string, code: string, secret: string) => createHash("sha256").update(`${id}:${code}:${secret}`).digest("hex");
 
 export function createStaffInvite(client: PrismaClient = prisma, env: Record<string, string | undefined> = process.env, now = () => new Date(), transport: typeof fetch = fetch) {
@@ -127,7 +129,70 @@ export function createStaffInvite(client: PrismaClient = prisma, env: Record<str
       return { activated: true };
     });
   }
-  return { drafts, send, activate, deliveryReady };
+  async function beginPasswordReset(raw: unknown) {
+    const data = resetRequestInput.parse(raw), config = settings.parse(env);
+    await consume(securityKey("skillcity:staff-password-reset", data.email), 3, 900);
+    const id = randomUUID(), code = String(randomInt(0, 1000000)).padStart(6, "0");
+    const user = await client.user.findUnique({ where: { email: data.email }, include: { person: true } });
+    let eligible = !!user && user.status === "ACTIVE" && !!user.emailVerifiedAt && !!user.passwordHash && user.person?.status === "ACTIVE";
+    let organizationId: string | undefined;
+    if (eligible && user) {
+      try {
+        const metadata = JSON.parse(user.person?.metadata ?? "{}");
+        eligible = metadata.authenticationRealm === data.portal && metadata.credentialKind === "STAFF_PASSWORD" && metadata.staffOnboarding === "ACTIVE";
+        const company = await client.organization.findUnique({ where: { slug: "aira-skill-city" }, select: { id: true } });
+        organizationId = data.portal === "labs" ? (await client.organization.findFirst({ where: { slug: "aira-labs", parentId: company?.id }, select: { id: true } }))?.id : company?.id;
+        eligible = eligible && !!company && !!organizationId && !!(await client.employment.findFirst({ where: { personId: user.personId!, companyId: company.id, status: "ACTIVE" } }));
+        if (eligible) await requirePortalAccess(client, user.id, data.portal);
+      } catch (error) { if (error instanceof AccessError) eligible = false; else throw error; }
+    }
+    if (!eligible || !user || !organizationId) return { challengeId: randomUUID(), sent: false };
+    await client.$transaction(async db => {
+      await db.emailAuthChallenge.updateMany({ where: { userId: user.id, purpose: "STAFF_PASSWORD_RESET", status: { in: ["PENDING", "SENT"] } }, data: { status: "CANCELLED" } });
+      await db.emailAuthChallenge.create({ data: { id, userId: user.id, email: user.email, purpose: "STAFF_PASSWORD_RESET", otpHash: otpHash(id, code, config.SKILLCITY_OTP_SECRET), credentialHash: user.passwordHash!, expiresAt: new Date(now().getTime() + 600000) } });
+      await operationalEvent(db, { organizationId, action: "staff.password_reset_requested", entityType: "User", entityId: user.id, result: "SUCCESS", metadata: { challengeId: id, portal: data.portal } });
+    });
+    try {
+      const domain = data.portal === "labs" ? "airalabs.online" : "airaskillcity.com";
+      const response = await transport("https://api.resend.com/emails", { method: "POST", redirect: "error", signal: AbortSignal.timeout(8000), headers: { Authorization: `Bearer ${config.RESEND_API_KEY}`, "Content-Type": "application/json", "Idempotency-Key": `staff-password-reset/${id}` }, body: JSON.stringify({ from: config.SKILLCITY_AUTH_FROM, to: [user.email], subject: `Reset your ${data.portal === "labs" ? "AIRA Labs" : "AIRA Skill City"} staff password`, text: `Your password reset code is ${code}. Open https://${domain}/recover?challenge=${id} and enter it within 10 minutes. If you did not request this, ignore the message. Do not share this code.` }) });
+      if (!response.ok) throw new Error("Email provider unavailable");
+      const receipt = z.object({ id: z.string().min(1) }).parse(await response.json());
+      if ((await client.emailAuthChallenge.updateMany({ where: { id, status: "PENDING", expiresAt: { gt: now() } }, data: { status: "SENT", providerRef: receipt.id } })).count !== 1) throw new Error("Reset state changed");
+      return { challengeId: id, sent: true };
+    } catch {
+      await client.emailAuthChallenge.updateMany({ where: { id, status: "PENDING" }, data: { status: "FAILED" } });
+      await operationalEvent(client, { organizationId, action: "staff.password_reset_delivery_failed", entityType: "User", entityId: user.id, result: "FAILURE", metadata: { challengeId: id, portal: data.portal } });
+      return { challengeId: randomUUID(), sent: false };
+    }
+  }
+  async function completePasswordReset(raw: unknown) {
+    const data = resetInput.parse(raw), config = settings.parse(env);
+    await consume(securityKey("skillcity:staff-password-reset-code", data.challengeId), 6, 900);
+    const attempted = await client.emailAuthChallenge.updateMany({ where: { id: data.challengeId, purpose: "STAFF_PASSWORD_RESET", status: "SENT", expiresAt: { gt: now() }, attempts: { lt: 5 } }, data: { attempts: { increment: 1 } } });
+    if (attempted.count !== 1) throw new AccessError("Invalid or expired reset code");
+    const hash = await hashPassword(data.password);
+    return client.$transaction(async db => {
+      const challenge = await db.emailAuthChallenge.findUnique({ where: { id: data.challengeId } });
+      const user = challenge ? await db.user.findUnique({ where: { id: challenge.userId }, include: { person: true } }) : null;
+      if (!challenge || !user || challenge.email !== user.email || challenge.credentialHash !== user.passwordHash || challenge.status !== "SENT" || challenge.expiresAt <= now() || !user.emailVerifiedAt || user.status !== "ACTIVE" || user.person?.status !== "ACTIVE") throw new AccessError("Invalid or expired reset code");
+      const metadata = JSON.parse(user.person?.metadata ?? "{}");
+      if (metadata.authenticationRealm !== data.portal || metadata.credentialKind !== "STAFF_PASSWORD" || metadata.staffOnboarding !== "ACTIVE") throw new AccessError("Staff account unavailable");
+      const company = await db.organization.findUnique({ where: { slug: "aira-skill-city" }, select: { id: true } });
+      const organization = data.portal === "labs" ? await db.organization.findFirst({ where: { slug: "aira-labs", parentId: company?.id }, select: { id: true } }) : company;
+      if (!company || !organization || !(await db.employment.findFirst({ where: { personId: user.personId!, companyId: company.id, status: "ACTIVE" } }))) throw new AccessError("Staff account unavailable");
+      await requirePortalAccess(db, user.id, data.portal);
+      const expected = Buffer.from(challenge.otpHash, "hex"), supplied = Buffer.from(otpHash(challenge.id, data.code, config.SKILLCITY_OTP_SECRET), "hex");
+      if (expected.length !== supplied.length || !timingSafeEqual(expected, supplied)) throw new AccessError("Invalid or expired reset code");
+      const consumed = await db.emailAuthChallenge.updateMany({ where: { id: challenge.id, status: "SENT", credentialHash: user.passwordHash, attempts: { lte: 5 }, expiresAt: { gt: now() } }, data: { status: "CONSUMED", consumedAt: now() } });
+      if (consumed.count !== 1) throw new AccessError("Reset code already used");
+      await db.user.update({ where: { id: user.id }, data: { passwordHash: hash } });
+      await db.session.deleteMany({ where: { userId: user.id } });
+      await db.emailAuthChallenge.updateMany({ where: { userId: user.id, purpose: "STAFF_PASSWORD_RESET", status: { in: ["PENDING", "SENT"] }, id: { not: challenge.id } }, data: { status: "CANCELLED" } });
+      await operationalEvent(db, { actorUserId: user.id, actorPersonId: user.personId, organizationId: organization.id, action: "staff.password_reset_completed", entityType: "User", entityId: user.id, result: "SUCCESS", metadata: { challengeId: challenge.id, portal: data.portal, sessionsRevoked: true } });
+      return { reset: true };
+    });
+  }
+  return { drafts, send, activate, beginPasswordReset, completePasswordReset, deliveryReady };
 }
 
 export const staffInvite = createStaffInvite();

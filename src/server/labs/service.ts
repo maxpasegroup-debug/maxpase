@@ -255,7 +255,7 @@ export function createLabsService(client: PrismaClient = prisma, now = () => new
     });
   }
   async function startProject(userId: string, raw: unknown) {
-    const data = command.extend({ scope: z.string().trim().min(10).max(3000), developerUserId: z.string(), targetDate: z.string().datetime() }).strict().parse(raw);
+    const data = command.extend({ scope: z.string().trim().min(10).max(3000), developerUserId: z.string(), targetDate: z.string().datetime(), repositoryUrl: z.string().trim().max(2048).url().refine(value => value.startsWith("https://")).optional().or(z.literal("")), documentationUrl: z.string().trim().max(2048).url().refine(value => value.startsWith("https://")).optional().or(z.literal("")), acceptanceCriteria: z.string().trim().max(3000).optional() }).strict().parse(raw);
     return client.$transaction(async db => {
       const { a, row } = await owned(db, userId, data.id, "LABS_LEAD", "labs.delivery.manage");
       const p = leadPayload.parse(JSON.parse(row.payload));
@@ -264,7 +264,7 @@ export function createLabsService(client: PrismaClient = prisma, now = () => new
       if (p.projectId) throw new AccessError("A linked project already exists");
       if (new Date(data.targetDate) <= now()) throw new AccessError("Target date must be future");
       const developer = await access(db, data.developerUserId,"labs.delivery.assignee");
-      const project = await execution.save(userId, "projects", { organizationId: a.divisionId, name: row.title, slug: "labs-" + row.id.toLowerCase(), status: "PLANNED", description: data.scope, ownerPersonId: developer.ctx.user!.personId, accountablePersonId: a.ctx.user!.personId, targetDate: data.targetDate, metadata: { kind: "AIRALABS_PROJECT", leadId: row.id, quoteId: p.quoteId, lifecycle: "PLANNED", reviewEvidence: null, acceptanceEvidence: null } }, undefined, db);
+      const project = await execution.save(userId, "projects", { organizationId: a.divisionId, name: row.title, slug: "labs-" + row.id.toLowerCase(), status: "PLANNED", description: data.scope, ownerPersonId: developer.ctx.user!.personId, accountablePersonId: a.ctx.user!.personId, targetDate: data.targetDate, metadata: { kind: "AIRALABS_PROJECT", leadId: row.id, quoteId: p.quoteId, lifecycle: "PLANNED", reviewEvidence: null, acceptanceEvidence: null, repositoryUrl: data.repositoryUrl || null, documentationUrl: data.documentationUrl || null, acceptanceCriteria: data.acceptanceCriteria || null } }, undefined, db);
       await change(db, userId, row, data.version, "WON", { ...p, projectId: project.id }, "Linked canonical delivery project created");
       await db.executiveRecord.update({where:{id:row.id},data:{projectId:project.id}});
       await event(db, userId, row, "labs.project_linked", token.reference, { fingerprint: token.fingerprint });

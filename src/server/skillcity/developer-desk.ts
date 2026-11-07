@@ -15,6 +15,7 @@ const digest = (value: unknown) => createHash("sha256").update(JSON.stringify(va
 const assignmentInput = z.object({ projectId: z.string().min(1), taskId: z.string().min(1).optional(), developerUserId: z.string().min(1), title: z.string().trim().min(3).max(200).optional(), dueDate: z.iso.datetime().optional(), reference: z.uuid() }).strict();
 const dutyInput = z.object({ taskId: z.string().min(1), reviewerUserId: z.string().min(1), duty: z.enum(["CODE_REVIEW", "TESTING"]), reference: z.uuid() }).strict();
 const contributionInput = z.object({ taskId: z.string().min(1), detail: z.string().trim().min(10).max(4000), reference: z.uuid() }).strict();
+const blockerInput = z.object({ taskId: z.string().min(1), description: z.string().trim().min(10).max(2000), expectedResolution: z.string().datetime().nullable(), reference: z.uuid() }).strict();
 const updateInput = z.object({ taskId: z.string().min(1), revision: z.number().int().min(0), status: z.enum(["TODO", "IN_PROGRESS", "BLOCKED"]), description: z.string().trim().max(4000), reference: z.uuid() }).strict();
 const reviewInput = z.object({ taskId: z.string().min(1), duty: z.enum(["CODE_REVIEW", "TESTING"]), verdict: z.enum(["APPROVED", "REWORK"]), comment: z.string().trim().min(10).max(4000), reference: z.uuid() }).strict();
 const completionInput = z.object({ taskId: z.string().min(1), revision: z.number().int().min(0), reason: z.string().trim().min(10).max(2000), reference: z.uuid() }).strict();
@@ -93,8 +94,9 @@ export function createSkillCityDeveloperDesk(client: PrismaClient = prisma, now 
       await ensureMember(db, target.user.personId!, organizationId, p.id);
       const prior = input.taskId ? await db.task.findUnique({ where: { id: input.taskId } }) : null;
       if (input.taskId && (!prior || prior.projectId !== p.id || prior.organizationId !== organizationId || ["COMPLETED", "CANCELLED"].includes(prior.status))) throw new AccessError("Open project task required");
+      if (prior?.assigneePersonId && prior.assigneePersonId !== target.user.personId) await db.responsibility.updateMany({ where: { organizationId, taskId: prior.id, status: "ACTIVE", kind: "ACCOUNTABLE" }, data: { status: "ARCHIVED" } });
       const task = await execution.save(userId, "tasks", { organizationId, projectId: p.id, title: prior?.title ?? input.title!, status: prior?.status ?? "TODO", description: prior?.description ?? "", ownerPersonId: prior?.ownerPersonId ?? null, assigneePersonId: target.user.personId, dueDate: prior?.dueDate ?? input.dueDate, priority: prior?.priority ?? "NORMAL", startDate: prior?.startDate ?? null, goalId: prior?.goalId ?? null, milestoneId: prior?.milestoneId ?? null, metadata: { ...(prior?.metadata ? JSON.parse(prior.metadata) : {}), skillCityDeveloperReviewRequired: true } }, prior?.id, db);
-      await operationalEvent(db, { actorUserId: userId, actorPersonId: ctx.user!.personId, organizationId, projectId: p.id, action: "staff.developer_task_assigned", entityType: "Task", entityId: task.id, reference: token.reference, result: "SUCCESS", metadata: { fingerprint: token.fingerprint, assigneePersonId: target.user.personId } });
+      await operationalEvent(db, { actorUserId: userId, actorPersonId: ctx.user!.personId, organizationId, projectId: p.id, action: "staff.developer_task_assigned", entityType: "Task", entityId: task.id, reference: token.reference, result: "SUCCESS", metadata: { fingerprint: token.fingerprint, previousAssigneePersonId: prior?.assigneePersonId ?? null, assigneePersonId: target.user.personId } });
       return { id: task.id, replay: false };
     });
   }
@@ -131,6 +133,19 @@ export function createSkillCityDeveloperDesk(client: PrismaClient = prisma, now 
       const evidence = await db.taskEvidence.create({ data: { taskId: task.id, actorUserId: userId, actorPersonId: ctx.user!.personId!, data: JSON.stringify({ kind: "SKILLCITY_CONTRIBUTION", detail: input.detail }) } });
       await operationalEvent(db, { actorUserId: userId, actorPersonId: ctx.user!.personId, organizationId, projectId: task.projectId, action: "staff.developer_contribution_recorded", entityType: "TaskEvidence", entityId: evidence.id, reference: token.reference, result: "SUCCESS", metadata: { fingerprint: token.fingerprint, taskId: task.id } });
       return { id: evidence.id, replay: false };
+    });
+  }
+  async function reportBlocker(userId: string, raw: unknown) {
+    const input = blockerInput.parse(raw);
+    return client.$transaction(async db => {
+      const { ctx, task, organizationId } = await ownTask(db, userId, input.taskId);
+      if (["COMPLETED", "CANCELLED"].includes(task.status)) throw new AccessError("Closed task is read-only");
+      await ctx.requireAccess("blocker.manage", { organizationId, projectId: task.projectId });
+      const token = await replay(db, userId, "blocker", input);
+      if (token.previous) return { id: token.previous.entityId, replay: true };
+      const blocker = await execution.blocker(userId, { organizationId, projectId: task.projectId, taskId: task.id, description: input.description, ownerPersonId: ctx.user!.personId!, dependencyTaskId: null, expectedResolution: input.expectedResolution, status: "OPEN" }, undefined, db);
+      await operationalEvent(db, { actorUserId: userId, actorPersonId: ctx.user!.personId, organizationId, projectId: task.projectId, action: "staff.developer_blocker_reported", entityType: "ExecutionBlocker", entityId: blocker.id, reference: token.reference, result: "SUCCESS", metadata: { fingerprint: token.fingerprint, taskId: task.id } });
+      return { id: blocker.id, replay: false };
     });
   }
   async function updateOwnTask(userId: string, raw: unknown) {
@@ -199,12 +214,13 @@ export function createSkillCityDeveloperDesk(client: PrismaClient = prisma, now 
     const projects = [];
     for (const row of rows) {
       if (!(await ctx.decide("project.read", { organizationId, projectId: row.id })).allowed || !(await ctx.decide("task.read", { organizationId, projectId: row.id })).allowed) continue;
-      let metadata: { kind?: string };
+      let metadata: { kind?: string; repositoryUrl?: string | null; documentationUrl?: string | null; acceptanceCriteria?: string | null; lifecycle?: string };
       try { metadata = JSON.parse(row.metadata ?? "{}"); } catch { continue; }
       if (metadata.kind !== "AIRALABS_PROJECT") continue;
-      const tasks = await client.task.findMany({ where: { projectId: row.id, organizationId, OR: [{ assigneePersonId: actor.user.personId }, { responsibilities: { some: { personId: actor.user.personId!, kind: "ACCOUNTABLE", status: "ACTIVE" } } }] }, select: { id: true, title: true, description: true, status: true, dueDate: true, revision: true, assigneePersonId: true, responsibilities: { where: { personId: actor.user.personId!, kind: "ACCOUNTABLE", status: "ACTIVE" }, select: { metadata: true } }, evidence: { select: { id: true, actorPersonId: true, data: true, createdAt: true }, orderBy: { createdAt: "desc" }, take: 20 } }, orderBy: [{ dueDate: "asc" }, { id: "asc" }], take: 30 });
-      const visible = tasks.map(task => ({ id: task.id, title: task.title, description: task.description, status: task.status, dueDate: task.dueDate, revision: task.revision, own: task.assigneePersonId === actor.user.personId, canUpdate: task.assigneePersonId === actor.user.personId && !["COMPLETED", "CANCELLED"].includes(task.status) && !["COMPLETED", "CANCELLED", "ARCHIVED"].includes(row.status) && ctx.organizationIds("task.manage").includes(organizationId), duties: task.responsibilities.flatMap(item => { try { const duty = JSON.parse(item.metadata ?? "{}").skillCityDuty; return duty === "CODE_REVIEW" || duty === "TESTING" ? [duty as "CODE_REVIEW" | "TESTING"] : []; } catch { return []; } }), history: task.evidence.flatMap(item => { try { const data = JSON.parse(item.data); return [data.kind === "SKILLCITY_CONTRIBUTION" ? { id: item.id, kind: "Contribution", detail: String(data.detail), createdAt: item.createdAt, actorPersonId: item.actorPersonId } : data.kind === "SKILLCITY_REVIEW" ? { id: item.id, kind: data.duty === "TESTING" ? "Testing" : "Code review", detail: `${data.verdict}: ${data.comment}`, createdAt: item.createdAt, actorPersonId: item.actorPersonId } : null]; } catch { return []; } }).filter((item): item is NonNullable<typeof item> => item !== null) })).filter(task => task.own || task.duties.length);
-      if (visible.length) projects.push({ id: row.id, name: row.name, status: row.status, specification: row.description, targetDate: row.targetDate, tasks: visible });
+      const tasks = await client.task.findMany({ where: { projectId: row.id, organizationId, OR: [{ assigneePersonId: actor.user.personId }, { responsibilities: { some: { personId: actor.user.personId!, kind: "ACCOUNTABLE", status: "ACTIVE" } } }] }, select: { id: true, title: true, description: true, status: true, dueDate: true, revision: true, assigneePersonId: true, responsibilities: { where: { personId: actor.user.personId!, kind: "ACCOUNTABLE", status: "ACTIVE" }, select: { metadata: true } }, evidence: { select: { id: true, actorPersonId: true, data: true, createdAt: true }, orderBy: { createdAt: "desc" }, take: 20 }, blockers: { where: { status: "OPEN" }, select: { id: true, description: true, expectedResolution: true } } }, orderBy: [{ dueDate: "asc" }, { id: "asc" }], take: 30 });
+      const visible = tasks.map(task => ({ id: task.id, title: task.title, description: task.description, status: task.status, dueDate: task.dueDate, revision: task.revision, own: task.assigneePersonId === actor.user.personId, canUpdate: task.assigneePersonId === actor.user.personId && !["COMPLETED", "CANCELLED"].includes(task.status) && !["COMPLETED", "CANCELLED", "ARCHIVED"].includes(row.status) && ctx.organizationIds("task.manage").includes(organizationId), blockers: task.blockers, duties: task.responsibilities.flatMap(item => { try { const duty = JSON.parse(item.metadata ?? "{}").skillCityDuty; return duty === "CODE_REVIEW" || duty === "TESTING" ? [duty as "CODE_REVIEW" | "TESTING"] : []; } catch { return []; } }), history: task.evidence.flatMap(item => { try { const data = JSON.parse(item.data); return [data.kind === "SKILLCITY_CONTRIBUTION" ? { id: item.id, kind: "Contribution", detail: String(data.detail), createdAt: item.createdAt, actorPersonId: item.actorPersonId } : data.kind === "SKILLCITY_REVIEW" ? { id: item.id, kind: data.duty === "TESTING" ? "Testing" : "Code review", detail: `${data.verdict}: ${data.comment}`, createdAt: item.createdAt, actorPersonId: item.actorPersonId } : null]; } catch { return []; } }).filter((item): item is NonNullable<typeof item> => item !== null) })).filter(task => task.own || task.duties.length);
+      const safeUrl = (value: string | null | undefined) => { if (!value) return null; try { return new URL(value).protocol === "https:" ? value : null; } catch { return null; } };
+      if (visible.length) projects.push({ id: row.id, name: row.name, status: row.status, specification: row.description, targetDate: row.targetDate, lifecycle: metadata.lifecycle ?? row.status, repositoryUrl: safeUrl(metadata.repositoryUrl), documentationUrl: safeUrl(metadata.documentationUrl), acceptanceCriteria: metadata.acceptanceCriteria ?? null, tasks: visible });
     }
     return { projects };
   }
@@ -228,7 +244,7 @@ export function createSkillCityDeveloperDesk(client: PrismaClient = prisma, now 
     }
     return { developers, projects, canAssignDuty, canComplete };
   }
-  return { assignTask, assignDuty, contribute, updateOwnTask, review, completeReviewedTask, workspace, management };
+  return { assignTask, assignDuty, contribute, reportBlocker, updateOwnTask, review, completeReviewedTask, workspace, management };
 }
 
 export const skillCityDeveloperDesk = createSkillCityDeveloperDesk();

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { staffPortalForRole, isPreparedStaffRole, labsStaffViewsForRole, hasStaffWorkspaceCapabilities } from "@/server/skillcity/staff-roles";
 import { siteByHost } from "@/server/portals/sites";
 import { marketingDivisionSlug } from "@/server/group/brand-marketing-scope";
+import { administrativeOfficerRolePermissions, labsDeveloperRolePermissions } from "@/server/skillcity/role-templates";
 
 describe("AIRA staff domain routing", () => {
   it("routes prepared Labs employee roles to Labs and keeps their scope separate", () => {
@@ -19,6 +20,8 @@ describe("AIRA staff domain routing", () => {
     expect(labsStaffViewsForRole("labs-customer")).toEqual([]);
     expect(hasStaffWorkspaceCapabilities("labs-business-development-manager", ["organization.read", "labs.sales.self", "labs.sales.read", "labs.sales.manage"])).toBe(false);
     expect(hasStaffWorkspaceCapabilities("labs-business-development-manager", ["organization.read", "notification.read", "labs.sales.self", "labs.sales.read", "labs.sales.manage"])).toBe(true);
+    expect(hasStaffWorkspaceCapabilities("labs-full-stack-developer", labsDeveloperRolePermissions)).toBe(true);
+    for (const forbidden of ["labs.billing.read", "labs.billing.manage", "labs.billing.review", "labs.billing.issue", "labs.billing.payment", "labs.billing.reconcile", "labs.sales.read", "labs.sales.manage", "person.read", "membership.manage"]) expect(labsDeveloperRolePermissions).not.toContain(forbidden);
   });
 
   it("keeps directors and advisors in the Skill City workplace", () => {
@@ -29,7 +32,9 @@ describe("AIRA staff domain routing", () => {
     expect(isPreparedStaffRole("aira-administrative-officer", "aira-skill-city")).toBe(true);
     expect(isPreparedStaffRole("aira-administrative-officer", "aira-labs")).toBe(false);
     expect(hasStaffWorkspaceCapabilities("aira-administrative-officer", ["organization.read"])).toBe(false);
-    expect(hasStaffWorkspaceCapabilities("aira-administrative-officer", ["organization.read", "person.read", "reporting.read", "responsibility.read"])).toBe(true);
+    expect(hasStaffWorkspaceCapabilities("aira-administrative-officer", administrativeOfficerRolePermissions)).toBe(true);
+    const aoPermissions: readonly string[] = administrativeOfficerRolePermissions;
+    for (const forbidden of ["program.manage", "labs.sales.read", "person.read", "membership.manage", "labs.billing.manage", "labs.billing.review", "labs.billing.issue", "labs.billing.payment", "labs.billing.reconcile"]) expect(aoPermissions).not.toContain(forbidden);
   });
   it("maps registered top-level brand slugs to the prepared AIRA divisions", () => {
     for (const [brand, division] of [["startup-school", "aira-startup-school"], ["aira-skill-studio", "aira-skill-studio"], ["aira-labs", "aira-labs"], ["aira-career-hub", "aira-career-hub"]]) {

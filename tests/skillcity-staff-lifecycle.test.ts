@@ -59,9 +59,20 @@ describe("Skill City Boss employee lifecycle", () => {
     await invite.activate({ challengeId: challenge.id, code, password: "synthetic-password-123", confirmPassword: "synthetic-password-123", portal: "labs" });
     expect((await db.user.findUniqueOrThrow({ where: { id: user.id } })).status).toBe("ACTIVE");
     expect((await db.reportingRelationship.findFirstOrThrow({ where: { personId: user.personId!, organizationId: labsId } })).status).toBe("ACTIVE");
-    expect(await createAuthenticationService(db).loginPortal({ email: address, password: "synthetic-password-123" }, secret, "labs")).not.toBeNull();
+    const auth = createAuthenticationService(db);
+    const activeSession = await auth.loginPortal({ email: address, password: "synthetic-password-123" }, secret, "labs");
+    expect(activeSession).not.toBeNull();
     expect(await createAuthenticationService(db).loginPortal({ email: address, password: "synthetic-password-123" }, secret, "skillcity")).toBeNull();
     await expect(invite.activate({ challengeId: challenge.id, code, password: "synthetic-password-123", confirmPassword: "synthetic-password-123", portal: "labs" })).rejects.toThrow();
+    const reset = await invite.beginPasswordReset({ email: address, portal: "labs" });
+    expect(reset.sent).toBe(true);
+    expect(invitationText).toContain("https://airalabs.online/recover");
+    const resetChallenge = await db.emailAuthChallenge.findFirstOrThrow({ where: { id: reset.challengeId, purpose: "STAFF_PASSWORD_RESET" } });
+    await invite.completePasswordReset({ challengeId: resetChallenge.id, code, password: "synthetic-password-reset-456", confirmPassword: "synthetic-password-reset-456", portal: "labs" });
+    expect(await db.session.count({ where: { userId: user.id } })).toBe(0);
+    expect(await auth.validate(activeSession!.token, secret, "labs")).toBeNull();
+    expect(await auth.loginPortal({ email: address, password: "synthetic-password-123" }, secret, "labs")).toBeNull();
+    expect(await auth.loginPortal({ email: address, password: "synthetic-password-reset-456" }, secret, "labs")).not.toBeNull();
   });
   it("reuses an eligible unclaimed AIRA Person but refuses duplicate and foreign identities", async () => {
     const address = email();

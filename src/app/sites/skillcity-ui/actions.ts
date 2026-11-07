@@ -17,6 +17,7 @@ import { staffInvite } from "@/server/skillcity/staff-invite";
 import { skillCityManagerDesk } from "@/server/skillcity/manager-desk";
 import { skillCityDeveloperDesk } from "@/server/skillcity/developer-desk";
 import { labsCustomerService } from "@/server/labs/customer";
+import { skillCityAdministrativeDesk } from "@/server/skillcity/administrative-desk";
 
 export type SkillCityActionState = { error?: string; message?: string };
 const field = (form: FormData, name: string) => String(form.get(name) ?? "");
@@ -46,11 +47,19 @@ export async function skillCityWorkAction(_state: SkillCityActionState, form: Fo
     } else if (field(form, "action") === "LABS_CUSTOMER_GRANT") {
       await skillCityEmployeeDashboard.dashboard(session.userId, "director");
       await labsCustomerService.grant(session.userId, { leadId: field(form, "leadId"), customerEmail: field(form, "customerEmail"), evidence: field(form, "evidence") });
+    } else if (field(form, "action") === "AO_CUSTOMER_CONTACT") {
+      await skillCityEmployeeDashboard.dashboard(session.userId, "administrative-officer");
+      await skillCityAdministrativeDesk.updateCustomerContact(session.userId, { customerId: field(form, "customerId"), version: Number(field(form, "version")), reference, contactPerson: field(form, "contactPerson"), email: field(form, "email"), phone: field(form, "phone"), billingAddress: field(form, "billingAddress"), pinCode: field(form, "pinCode"), notes: field(form, "notes") });
+    } else if (field(form, "action") === "AO_TASK_UPDATE") {
+      await skillCityEmployeeDashboard.dashboard(session.userId, "administrative-officer");
+      await skillCityAdministrativeDesk.updateOwnTask(session.userId, { taskId: field(form, "taskId"), revision: Number(field(form, "revision")), status: field(form, "taskStatus"), note: field(form, "taskNote"), reference });
     } else if (field(form, "action") === "TASK") {
       await skillCityEmployeeDashboard.dashboard(session.userId, "developer");
       await skillCityDeveloperDesk.updateOwnTask(session.userId, { taskId: field(form, "taskId"), revision: Number(field(form, "revision")), description: field(form, "description"), status: field(form, "status"), reference });
     } else if (field(form, "action") === "DEV_CONTRIBUTE") {
       await skillCityDeveloperDesk.contribute(session.userId, { taskId: field(form, "taskId"), detail: field(form, "detail"), reference });
+    } else if (field(form, "action") === "DEV_BLOCKER") {
+      await skillCityDeveloperDesk.reportBlocker(session.userId, { taskId: field(form, "taskId"), description: field(form, "description"), expectedResolution: field(form, "expectedResolution") || null, reference });
     } else if (field(form, "action") === "DEV_REVIEW") {
       await skillCityDeveloperDesk.review(session.userId, { taskId: field(form, "taskId"), duty: field(form, "duty"), verdict: field(form, "verdict"), comment: field(form, "comment"), reference });
     } else if (field(form, "action") === "DEV_ASSIGN") {

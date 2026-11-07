@@ -25,6 +25,9 @@ export async function labsDeveloperAction(_state: LabsDeveloperActionState, form
       case "DEV_CONTRIBUTE":
         await skillCityDeveloperDesk.contribute(session.userId, { taskId: field(form, "taskId"), detail: field(form, "detail"), reference });
         break;
+      case "DEV_BLOCKER":
+        await skillCityDeveloperDesk.reportBlocker(session.userId, { taskId: field(form, "taskId"), description: field(form, "description"), expectedResolution: field(form, "expectedResolution") || null, reference });
+        break;
       case "DEV_REVIEW":
         await skillCityDeveloperDesk.review(session.userId, { taskId: field(form, "taskId"), duty: field(form, "duty"), verdict: field(form, "verdict"), comment: field(form, "comment"), reference });
         break;
