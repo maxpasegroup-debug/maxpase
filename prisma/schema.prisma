@@ -1700,8 +1700,14 @@ model Organization {
   niceJobsSourceEvents NiceJobsSourceEvent[]
   niceJobsSourceConnections NiceJobsSourceConnection[]
   hrOnboardingConfig HrCompanyOnboardingConfig?
+  hrCandidates HrCandidate[]
+  hrLetterTemplates HrLetterTemplate[]
+  hrLetters HrLetter[]
   hrDocumentCategories HrDocumentCategory[]
   hrDocuments HrDocument[]
+  hrCompensationRecords HrCompensation[]
+  hrPayrollRuleSets HrPayrollRuleSet[]
+  hrPayrollRuns HrPayrollRun[]
   employments             Employment[] @relation("EmploymentCompany")
   hrDepartments           HrAssignment[] @relation("HrAssignmentDepartment")
   nexaDirectives NexaDirective[]
@@ -2099,6 +2105,9 @@ model TeamProfile {
 model Brand {
   hrDocuments HrDocument[]
   hrAssignments  HrAssignment[]
+  hrCandidates HrCandidate[]
+  hrLetterTemplates HrLetterTemplate[]
+  hrLetters HrLetter[]
   id             String          @id @default(cuid())
   organizationId String
   organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Restrict)
@@ -2134,8 +2143,78 @@ enum HrAssignmentState {
   ENDED
 }
 
+enum HrCandidateStatus {
+  NEW
+  SCREENING
+  INTERVIEW
+  OFFER
+  OFFER_ACCEPTED
+  OFFER_DECLINED
+  HIRED
+  REJECTED
+  WITHDRAWN
+}
+
+enum HrLetterKind {
+  OFFER
+  APPOINTMENT
+  PROBATION_CONFIRMATION
+  SALARY_CHANGE
+  INCENTIVE
+}
+
+enum HrLetterStatus {
+  DRAFT
+  SENDING
+  SENT
+  DELIVERY_UNKNOWN
+  FAILED
+  ACCEPTED
+  DECLINED
+  VOID
+}
+
+enum HrLetterDeliveryStatus {
+  NOT_SENT
+  SENDING
+  SENT
+  DELIVERED
+  BOUNCED
+  FAILED
+  UNKNOWN
+}
+
+enum HrLetterDocumentStatus {
+  NOT_APPLICABLE
+  WAITING_EMPLOYMENT
+  PENDING
+  ARCHIVING
+  STORED
+  FAILED
+}
+
+enum HrPayrollRuleSetStatus {
+  DRAFT
+  ACTIVE
+  RETIRED
+}
+
+enum HrPayrollRunStatus {
+  DRAFT
+  REVIEWED
+  RECONCILED
+  VOID
+}
+
+enum HrPayrollPaymentStatus {
+  RECORDED
+  RECONCILED
+}
+
 model Employment {
   documents HrDocument[]
+  compensationRecords HrCompensation[]
+  payrollLines HrPayrollLine[]
   id          String @id @default(cuid())
   personId    String
   companyId   String
@@ -2146,8 +2225,16 @@ model Employment {
   endDate     DateTime?
   designation String?
   employmentType String?
+  contactEmail String?
+  contactPhone String?
+  emergencyContactName String?
+  emergencyContactRelationship String?
+  emergencyContactPhone String?
+  emergencyContactEmail String?
   decisionReference String?
   assignments HrAssignment[]
+  convertedCandidates HrCandidate[] @relation("HrCandidateConvertedEmployment")
+  hrLetters HrLetter[] @relation("HrEmploymentLetters")
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -2180,6 +2267,9 @@ model HrDocumentCategory {
   key String
   label String
   active Boolean @default(true)
+  retentionDays Int?
+  retentionDecisionReference String?
+  updatedAt DateTime @updatedAt
   createdAt DateTime @default(now())
   @@unique([companyId, key])
 }
@@ -2203,9 +2293,16 @@ model HrDocument {
   format String?
   status HrDocumentStatus @default(UPLOADING)
   employeeVisible Boolean @default(false)
+  retentionDays Int?
+  retentionDueAt DateTime?
+  retentionPolicyReference String?
+  retentionReviewedAt DateTime?
+  retentionReviewReference String?
   replacesId String? @unique
   replaces HrDocument? @relation("HrDocumentVersions", fields: [replacesId], references: [id], onDelete: Restrict)
   replacedBy HrDocument? @relation("HrDocumentVersions")
+  storedForLetter HrLetter? @relation("HrLetterStoredDocument")
+  payslipForLine HrPayrollLine? @relation("HrPayrollPayslip")
   uploaderUserId String
   uploader User @relation("HrDocumentUploader", fields: [uploaderUserId], references: [id], onDelete: Restrict)
   archivedAt DateTime?
@@ -2236,6 +2333,209 @@ model HrAssignment {
   @@index([employmentId, status])
   @@index([brandId, status])
   @@index([managerPersonId])
+}
+
+model HrCandidate {
+  id String @id @default(cuid())
+  companyId String
+  company Organization @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  brandId String?
+  brand Brand? @relation(fields: [brandId], references: [id], onDelete: Restrict)
+  fullName String
+  email String
+  phone String?
+  roleTitle String
+  source String?
+  notes String?
+  status HrCandidateStatus @default(NEW)
+  convertedEmploymentId String? @unique
+  convertedEmployment Employment? @relation("HrCandidateConvertedEmployment", fields: [convertedEmploymentId], references: [id], onDelete: Restrict)
+  letters HrLetter[] @relation("HrCandidateLetters")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([companyId, status, createdAt])
+  @@index([brandId, status])
+  @@index([email, companyId])
+}
+
+model HrLetterTemplate {
+  id String @id @default(cuid())
+  companyId String
+  company Organization @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  brandId String?
+  brand Brand? @relation(fields: [brandId], references: [id], onDelete: Restrict)
+  kind HrLetterKind
+  name String
+  subject String
+  body String
+  active Boolean @default(true)
+  updatedByUserId String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  letters HrLetter[]
+
+  @@index([companyId, brandId, kind, active])
+}
+
+model HrLetter {
+  id String @id @default(uuid())
+  companyId String
+  company Organization @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  brandId String?
+  brand Brand? @relation(fields: [brandId], references: [id], onDelete: Restrict)
+  candidateId String?
+  candidate HrCandidate? @relation("HrCandidateLetters", fields: [candidateId], references: [id], onDelete: Restrict)
+  employmentId String?
+  employment Employment? @relation("HrEmploymentLetters", fields: [employmentId], references: [id], onDelete: Restrict)
+  templateId String?
+  template HrLetterTemplate? @relation(fields: [templateId], references: [id], onDelete: Restrict)
+  kind HrLetterKind
+  status HrLetterStatus @default(DRAFT)
+  deliveryStatus HrLetterDeliveryStatus @default(NOT_SENT)
+  title String
+  recipientName String
+  recipientEmail String
+  subject String
+  bodySnapshot String
+  dataSnapshot String
+  decisionReference String?
+  acceptanceTokenHash String? @unique
+  tokenExpiresAt DateTime?
+  acceptedAt DateTime?
+  declinedAt DateTime?
+  sentAt DateTime?
+  providerReference String? @unique
+  lastDeliveryEventAt DateTime?
+  storedDocumentId String? @unique
+  storedDocument HrDocument? @relation("HrLetterStoredDocument", fields: [storedDocumentId], references: [id], onDelete: Restrict)
+  documentStorageStatus HrLetterDocumentStatus @default(NOT_APPLICABLE)
+  documentStorageStartedAt DateTime?
+  deliveryEvents HrLetterDeliveryEvent[]
+  deliveryAttempts Int @default(0)
+  lastDeliveryError String?
+  createdByUserId String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([companyId, status, createdAt])
+  @@index([candidateId, kind, status])
+  @@index([employmentId, kind, createdAt])
+}
+
+model HrLetterDeliveryEvent {
+  id String @id @default(cuid())
+  providerEventId String @unique
+  letterId String
+  letter HrLetter @relation(fields: [letterId], references: [id], onDelete: Restrict)
+  eventType String
+  occurredAt DateTime
+  receivedAt DateTime @default(now())
+  @@index([letterId, occurredAt])
+}
+
+model HrCompensation {
+  id String @id @default(uuid())
+  companyId String
+  company Organization @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  employmentId String
+  employment Employment @relation(fields: [employmentId], references: [id], onDelete: Restrict)
+  effectiveFrom DateTime
+  currency String @default("INR")
+  monthlyBasePaise BigInt
+  monthlyVariablePaise BigInt @default(0)
+  decisionReference String
+  createdByUserId String
+  createdAt DateTime @default(now())
+  @@unique([employmentId, effectiveFrom])
+  @@index([companyId, effectiveFrom])
+}
+
+model HrPayrollRuleSet {
+  id String @id @default(uuid())
+  companyId String
+  company Organization @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  name String
+  currency String @default("INR")
+  componentsSnapshot String
+  status HrPayrollRuleSetStatus @default(DRAFT)
+  accountantName String?
+  accountantReviewReference String?
+  accountantReviewedAt DateTime?
+  recordedByUserId String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  runs HrPayrollRun[]
+  @@index([companyId, status, createdAt])
+}
+
+model HrPayrollRun {
+  id String @id @default(uuid())
+  companyId String
+  company Organization @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  period String
+  status HrPayrollRunStatus @default(DRAFT)
+  ruleSetId String
+  ruleSet HrPayrollRuleSet @relation(fields: [ruleSetId], references: [id], onDelete: Restrict)
+  ruleSnapshot String
+  excludedEmployeesSnapshot String @default("[]")
+  totalGrossPaise BigInt
+  totalDeductionsPaise BigInt
+  totalNetPaise BigInt
+  reviewedAt DateTime?
+  reviewReference String?
+  reviewedByUserId String?
+  reconciliationReference String?
+  reconciledAt DateTime?
+  reconciledByUserId String?
+  voidReference String?
+  voidedAt DateTime?
+  voidedByUserId String?
+  createdByUserId String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  lines HrPayrollLine[]
+  @@index([companyId, status, period])
+}
+
+model HrPayrollLine {
+  id String @id @default(uuid())
+  runId String
+  run HrPayrollRun @relation(fields: [runId], references: [id], onDelete: Restrict)
+  employmentId String
+  employment Employment @relation(fields: [employmentId], references: [id], onDelete: Restrict)
+  employeeName String
+  employeeEmail String?
+  designation String
+  currency String @default("INR")
+  monthlyBasePaise BigInt
+  monthlyVariablePaise BigInt
+  ruleEarningsPaise BigInt
+  grossPaise BigInt
+  deductionsPaise BigInt
+  netPaise BigInt
+  componentsSnapshot String
+  payment HrPayrollPayment?
+  payslipDocumentId String? @unique
+  payslipDocument HrDocument? @relation("HrPayrollPayslip", fields: [payslipDocumentId], references: [id], onDelete: Restrict)
+  createdAt DateTime @default(now())
+  @@unique([runId, employmentId])
+  @@index([employmentId, createdAt])
+}
+
+model HrPayrollPayment {
+  id String @id @default(uuid())
+  lineId String @unique
+  line HrPayrollLine @relation(fields: [lineId], references: [id], onDelete: Restrict)
+  amountPaise BigInt
+  paymentReference String
+  evidenceReference String
+  paidAt DateTime
+  status HrPayrollPaymentStatus @default(RECORDED)
+  reconciledAt DateTime?
+  recordedByUserId String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model Product {

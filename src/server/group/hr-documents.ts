@@ -8,7 +8,7 @@ import { operationalEvent } from "@/server/domain/operational-events";
 import { hrCloudinary, HrStorageUnavailable } from "./hr-cloudinary";
 
 export const defaultHrCategories = [
-  ["PROFILE_PHOTO", "Profile photograph"], ["IDENTITY", "Identity documents"], ["TAX", "PAN and tax documents"],
+  ["PROFILE_PHOTO", "Profile photograph"], ["IDENTITY", "Identity documents"], ["TAX", "PAN and tax documents"], ["PAYSLIP", "Payslips"],
   ["RESUME", "Resume / CV"], ["EDUCATION", "Educational certificates"], ["EXPERIENCE", "Experience certificates"],
   ["APPOINTMENT", "Appointment letters"], ["AGREEMENT", "Employment agreements"], ["OTHER", "Other HR documents"]
 ] as const;
@@ -61,10 +61,26 @@ export function createHrDocuments(client: PrismaClient = prisma, storage = hrClo
     if (worker.status === "ENDED") throw new AccessError("Employment has ended");
     if (brandId && !(await client.hrAssignment.findFirst({ where: { employmentId, brandId, status: "ACTIVE" } }))) throw new AccessError("Active brand assignment required");
   }
+  async function canManage(actorId: string, employmentId: string) {
+    const worker = await employment(client, employmentId);
+    try { await scope(client, actorId, worker.companyId, null, true); return true; }
+    catch (error) { if (!(error instanceof AccessError)) throw error; }
+    const assignments = await client.hrAssignment.findMany({ where: { employmentId, status: { in: ["ACTIVE", "DRAFT"] } }, select: { brandId: true }, distinct: ["brandId"], take: 100 });
+    for (const assignment of assignments) {
+      try { await scope(client, actorId, worker.companyId, assignment.brandId, true); return true; }
+      catch (error) { if (!(error instanceof AccessError)) throw error; }
+    }
+    return false;
+  }
+  async function canManageCompany(actorId: string, companyId: string) {
+    try { await scope(client, actorId, companyId, null, true); return true; }
+    catch (error) { if (error instanceof AccessError) return false; throw error; }
+  }
   async function categories(actorId: string, companyId: string) {
     await scope(client, actorId, companyId, null, false);
-    const configured = await client.hrDocumentCategory.findMany({ where: { companyId, active: true }, select: { key: true, label: true }, orderBy: { label: "asc" }, take: 100 });
-    return [...defaultHrCategories.map(([key,label]) => ({ key, label })), ...configured];
+    const configured = await client.hrDocumentCategory.findMany({ where: { companyId, active: true }, select: { key: true, label: true, retentionDays: true, retentionDecisionReference: true }, orderBy: { label: "asc" }, take: 100 });
+    const byKey = new Map(configured.map(row => [row.key, row]));
+    return [...defaultHrCategories.map(([key,label]) => byKey.get(key) ?? ({ key, label, retentionDays: null, retentionDecisionReference: null })), ...configured.filter(row => !defaultHrCategories.some(([key]) => key === row.key))];
   }
   async function addCategory(actorId: string, raw: unknown) {
     const input = z.object({ companyId: id, key: category, label: z.string().trim().min(2).max(100) }).strict().parse(raw);
@@ -77,6 +93,24 @@ export function createHrDocuments(client: PrismaClient = prisma, storage = hrClo
       const row = await db.hrDocumentCategory.create({ data: input });
       await operationalEvent(db, { actorUserId: actorId, actorPersonId: ctx.user!.personId, organizationId: input.companyId, action: "hr.document_category_created", entityType: "HrDocumentCategory", entityId: row.id, result: "SUCCESS" });
       return row;
+    });
+  }
+  async function setRetentionPolicy(actorId: string, raw: unknown) {
+    const input = z.object({ companyId: id, key: category, retentionDays: z.coerce.number().int().min(30).max(36500), decisionReference: z.string().trim().min(8).max(200) }).strict().parse(raw);
+    const standard = defaultHrCategories.find(([key]) => key === input.key);
+    return client.$transaction(async db => {
+      const { ctx, root } = await boss.authority(actorId, db);
+      const company = await db.organization.findFirst({ where: { id: input.companyId, parentId: root.id, type: "COMPANY" }, select: { id: true } });
+      if (!company) throw new AccessError("Company unavailable");
+      await ctx.requireAccess("person.update", { organizationId: input.companyId });
+      const existing = await db.hrDocumentCategory.findFirst({ where: { companyId: input.companyId, key: input.key, active: true } });
+      if (!standard && !existing) throw new AccessError("Document category unavailable");
+      const categoryRow = existing
+        ? await db.hrDocumentCategory.update({ where: { id: existing.id }, data: { retentionDays: input.retentionDays, retentionDecisionReference: input.decisionReference } })
+        : await db.hrDocumentCategory.create({ data: { companyId: input.companyId, key: input.key, label: standard![1], retentionDays: input.retentionDays, retentionDecisionReference: input.decisionReference } });
+      const affectedDocuments = await db.$executeRaw`UPDATE "HrDocument" SET "retentionDays" = ${input.retentionDays}, "retentionDueAt" = "createdAt" + (${input.retentionDays} * INTERVAL '1 day'), "retentionPolicyReference" = ${input.decisionReference}, "retentionReviewedAt" = NULL, "retentionReviewReference" = NULL WHERE "companyId" = ${input.companyId} AND "categoryKey" = ${input.key} AND "status" IN ('ACTIVE', 'REPLACED', 'ARCHIVED')`;
+      await operationalEvent(db, { actorUserId: actorId, actorPersonId: ctx.user!.personId, organizationId: input.companyId, action: "hr.document_retention_policy_set", entityType: "HrDocumentCategory", entityId: categoryRow.id, result: "SUCCESS", metadata: { categoryKey: input.key, retentionDays: input.retentionDays, decisionReference: input.decisionReference, affectedDocuments } });
+      return { affectedDocuments };
     });
   }
   async function list(actorId: string, employmentId: string, filter: { categoryKey?: string; search?: string } = {}) {
@@ -92,7 +126,7 @@ export function createHrDocuments(client: PrismaClient = prisma, storage = hrClo
       }
     }
     if (!authorized) throw new AccessError("Document unavailable for this account");
-    const all = await client.hrDocument.findMany({ where: { employmentId, ...(filter.categoryKey ? { categoryKey: filter.categoryKey } : {}), ...(filter.search ? { title: { contains: filter.search.slice(0,100), mode: "insensitive" } } : {}) }, select: { id: true, companyId: true, brandId: true, categoryKey: true, title: true, filename: true, mime: true, bytes: true, status: true, employeeVisible: true, replacesId: true, uploaderUserId: true, createdAt: true, archivedAt: true, brand: { select: { name: true } } }, orderBy: { createdAt: "desc" }, take: 100 });
+    const all = await client.hrDocument.findMany({ where: { employmentId, ...(filter.categoryKey ? { categoryKey: filter.categoryKey } : {}), ...(filter.search ? { title: { contains: filter.search.slice(0,100), mode: "insensitive" } } : {}) }, select: { id: true, companyId: true, brandId: true, categoryKey: true, title: true, filename: true, mime: true, bytes: true, status: true, employeeVisible: true, replacesId: true, uploaderUserId: true, retentionDays: true, retentionDueAt: true, retentionReviewedAt: true, retentionPolicyReference: true, retentionReviewReference: true, createdAt: true, archivedAt: true, brand: { select: { name: true } } }, orderBy: { createdAt: "desc" }, take: 100 });
     const visible = [];
     for (const doc of all) {
       try { await scope(client, actorId, row.companyId, doc.brandId, false); visible.push(doc); }
@@ -100,13 +134,13 @@ export function createHrDocuments(client: PrismaClient = prisma, storage = hrClo
     }
     return visible;
   }
-  async function upload(actorId: string, raw: unknown, bytes: Uint8Array) {
+  async function upload(actorId: string, raw: unknown, bytes: Uint8Array, options: { allowEnded?: boolean } = {}) {
     const input = uploadInput.parse(raw), mime = verifiedFile(bytes, input.filename);
     if (!storage.configured()) throw new HrStorageUnavailable("Private document storage is not configured");
     const pending = await client.$transaction(async db => {
       const worker = await employment(db, input.employmentId);
       const ctx = await scope(db, actorId, worker.companyId, input.brandId ?? null, true);
-      if (worker.status === "ENDED") throw new AccessError("Employment has ended");
+      if (worker.status === "ENDED" && !options.allowEnded) throw new AccessError("Employment has ended");
       if (input.brandId && !(await db.hrAssignment.findFirst({ where: { employmentId: worker.id, brandId: input.brandId, status: "ACTIVE" } }))) throw new AccessError("Active brand assignment required");
       if (!defaultHrCategories.some(([key]) => key === input.categoryKey) && !(await db.hrDocumentCategory.findFirst({ where: { companyId: worker.companyId, key: input.categoryKey, active: true } }))) throw new AccessError("Document category unavailable");
       if (input.replacesId) {
@@ -114,7 +148,10 @@ export function createHrDocuments(client: PrismaClient = prisma, storage = hrClo
         if (!old) throw new AccessError("Replacement document unavailable");
       }
       const fileId = randomUUID(), publicId = `maxpase/hr/${fileId}`;
-      const doc = await db.hrDocument.create({ data: { id: fileId, employmentId: worker.id, companyId: worker.companyId, brandId: input.brandId ?? null, categoryKey: input.categoryKey, title: input.title, filename: input.filename, mime, bytes: bytes.length, publicId, uploaderUserId: actorId } });
+      const configuredCategory = await db.hrDocumentCategory.findFirst({ where: { companyId: worker.companyId, key: input.categoryKey, active: true }, select: { retentionDays: true, retentionDecisionReference: true } });
+      const retentionDays = configuredCategory?.retentionDays ?? null;
+      const retentionDueAt = retentionDays ? new Date(Date.now() + retentionDays * 86400000) : null;
+      const doc = await db.hrDocument.create({ data: { id: fileId, employmentId: worker.id, companyId: worker.companyId, brandId: input.brandId ?? null, categoryKey: input.categoryKey, title: input.title, filename: input.filename, mime, bytes: bytes.length, publicId, uploaderUserId: actorId, retentionDays, retentionDueAt, retentionPolicyReference: configuredCategory?.retentionDecisionReference ?? null } });
       await operationalEvent(db, { actorUserId: actorId, actorPersonId: ctx.user!.personId, organizationId: worker.companyId, action: "hr.document_upload_started", entityType: "HrDocument", entityId: doc.id, result: "SUCCESS" });
       return doc;
     });
@@ -148,6 +185,18 @@ export function createHrDocuments(client: PrismaClient = prisma, storage = hrClo
       const changed = await db.hrDocument.updateMany({ where: { id: doc.id, status: "ACTIVE" }, data: { status: "ARCHIVED", archivedAt: new Date() } });
       if (changed.count !== 1) throw new AccessError("Document already changed");
       await operationalEvent(db, { actorUserId: actorId, actorPersonId: ctx.user!.personId, organizationId: doc.companyId, action: "hr.document_archived", entityType: "HrDocument", entityId: doc.id, result: "SUCCESS" });
+    });
+  }
+  async function reviewRetention(actorId: string, documentId: string, outcomeRaw: unknown, decisionReferenceRaw: unknown) {
+    const outcome = z.enum(["RETAIN", "ARCHIVE"]).parse(outcomeRaw);
+    const decisionReference = z.string().trim().min(8).max(200).parse(decisionReferenceRaw);
+    return client.$transaction(async db => {
+      const doc = await db.hrDocument.findUnique({ where: { id: documentId } });
+      if (!doc || !doc.retentionDueAt || doc.retentionDueAt > new Date() || doc.retentionReviewedAt || !["ACTIVE", "REPLACED", "ARCHIVED"].includes(doc.status)) throw new AccessError("Document is not awaiting retention review");
+      const ctx = await scope(db, actorId, doc.companyId, doc.brandId, true);
+      const updated = await db.hrDocument.update({ where: { id: doc.id }, data: outcome === "ARCHIVE" ? { status: "ARCHIVED", archivedAt: new Date(), retentionReviewedAt: new Date(), retentionReviewReference: decisionReference } : { retentionReviewedAt: new Date(), retentionReviewReference: decisionReference } });
+      await operationalEvent(db, { actorUserId: actorId, actorPersonId: ctx.user!.personId, organizationId: doc.companyId, action: outcome === "ARCHIVE" ? "hr.document_retention_archived" : "hr.document_retention_reviewed", entityType: "HrDocument", entityId: doc.id, result: "SUCCESS", metadata: { categoryKey: doc.categoryKey, outcome, decisionReference } });
+      return updated.status;
     });
   }
   async function download(actorId: string, documentId: string) {
@@ -200,6 +249,6 @@ export function createHrDocuments(client: PrismaClient = prisma, storage = hrClo
     });
     return { bytes, filename: document.filename, mime: document.mime };
   }
-  return { categories, addCategory, list, upload, preflight, archive, download, history, setEmployeeVisibility, selfDocuments, selfDownload, configured: storage.configured };
+  return { categories, addCategory, setRetentionPolicy, list, upload, preflight, canManage, canManageCompany, archive, reviewRetention, download, history, setEmployeeVisibility, selfDocuments, selfDownload, configured: storage.configured };
 }
 export const hrDocuments = createHrDocuments();

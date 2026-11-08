@@ -9,8 +9,17 @@ import { marketingDivisionSlug } from "./brand-marketing-scope";
 
 const id = z.string().min(1).max(200);
 const reference = z.string().trim().min(8).max(200);
+const optionalEmail = z.union([z.literal(""), z.email().max(254)]).transform(value => value ? value.toLowerCase() : null);
+const optionalPhone = z.union([z.literal(""), z.string().trim().regex(/^\+?[0-9().\-\s]{7,24}$/)]).transform(value => value || null);
 const personDraft = z.object({ companyId: id, personId: id.optional(), displayName: z.string().trim().min(2).max(200).optional(), email: z.email().max(254).transform(v => v.toLowerCase()).optional(), linkExisting: z.boolean().optional(), designation: z.string().trim().max(120).optional(), employmentType: z.string().trim().min(2).max(80).optional(), joiningDate: z.coerce.date().optional(), initialBrandIds: z.array(id).max(20).optional(), initialDepartmentId: id.optional(), initialManagerPersonId: id.optional(), assignmentDecisionReference: reference.optional() }).strict();
 const assignmentDraft = z.object({ employmentId: id, brandId: id, departmentId: id.optional(), managerPersonId: id.optional(), designation: z.string().trim().min(2).max(120), startDate: z.coerce.date(), decisionReference: reference }).strict();
+export const hrEmployeeProfileInput = z.object({ employmentId: id, contactEmail: optionalEmail, contactPhone: optionalPhone, emergencyContactName: z.string().trim().max(160).transform(value => value || null), emergencyContactRelationship: z.string().trim().max(80).transform(value => value || null), emergencyContactPhone: optionalPhone, emergencyContactEmail: optionalEmail }).strict();
+
+export function hrProfileCompleteness(profile: { displayName?: string | null; email?: string | null; contactEmail?: string | null; contactPhone?: string | null; emergencyContactName?: string | null; emergencyContactRelationship?: string | null; emergencyContactPhone?: string | null; designation?: string | null; startDate?: Date | null }) {
+  const checks = [!!profile.displayName, !!(profile.contactEmail || profile.email), !!profile.contactPhone, !!profile.emergencyContactName, !!profile.emergencyContactRelationship, !!profile.emergencyContactPhone, !!profile.designation, !!profile.startDate];
+  const complete = checks.filter(Boolean).length;
+  return { complete, total: checks.length, percent: Math.round(complete / checks.length * 100), missing: checks.flatMap((ok, i) => ok ? [] : [(["Name", "Contact email", "Phone", "Emergency contact name", "Relationship", "Emergency phone", "Role", "Joining date"] as const)[i]]) };
+}
 
 export function createHrEmploymentService(client: PrismaClient = prisma) {
   const boss = createBossService(client);
@@ -44,6 +53,24 @@ export function createHrEmploymentService(client: PrismaClient = prisma) {
     if (!row) throw new AccessError("Employee unavailable");
     await authorized(actorId, client, row.companyId);
     return row;
+  }
+  async function updateProfile(actorId: string, raw: unknown) {
+    const input = hrEmployeeProfileInput.parse(raw);
+    return client.$transaction(async db => {
+      const row = await db.employment.findUnique({ where: { id: input.employmentId }, include: { person: { select: { displayName: true, email: true } } } });
+      if (!row || row.status === "ENDED") throw new AccessError("Active employment profile unavailable");
+      const ctx = await authorized(actorId, db, row.companyId, "person.update");
+      const updated = await db.employment.update({ where: { id: row.id }, data: { contactEmail: input.contactEmail, contactPhone: input.contactPhone, emergencyContactName: input.emergencyContactName, emergencyContactRelationship: input.emergencyContactRelationship, emergencyContactPhone: input.emergencyContactPhone, emergencyContactEmail: input.emergencyContactEmail }, include: { person: { select: { displayName: true, email: true } } } });
+      const completeness = hrProfileCompleteness({ ...updated, displayName: updated.person.displayName, email: updated.person.email });
+      await operationalEvent(db, { actorUserId: actorId, actorPersonId: ctx.user!.personId, organizationId: row.companyId, action: "hr.employee_profile_updated", entityType: "Employment", entityId: row.id, result: "SUCCESS", metadata: { profileCompleteness: completeness.percent, fields: ["contactEmail", "contactPhone", "emergencyContactName", "emergencyContactRelationship", "emergencyContactPhone", "emergencyContactEmail"] } });
+      return { completeness };
+    });
+  }
+  async function canUpdateProfile(actorId: string, employmentId: string) {
+    const row = await client.employment.findUnique({ where: { id: employmentId }, select: { companyId: true } });
+    if (!row) return false;
+    try { await authorized(actorId, client, row.companyId, "person.update"); return true; }
+    catch (error) { if (error instanceof AccessError) return false; throw error; }
   }
   async function create(actorId: string, raw: unknown) {
     const input = personDraft.parse(raw);
@@ -198,7 +225,7 @@ export function createHrEmploymentService(client: PrismaClient = prisma) {
       await operationalEvent(db, { actorUserId: actorId, actorPersonId: ctx.user!.personId, organizationId: row.companyId, action: `hr.employment_${input.action}`, entityType: "Employment", entityId: row.id, result: "SUCCESS", metadata: { decisionReference: input.decisionReference, previousDesignation: row.designation, designation: input.designation ?? row.designation } });
     });
   }
-  return { list, get, create, addAssignment, changeAssignment, changeEmployment };
+  return { list, get, create, addAssignment, changeAssignment, changeEmployment, updateProfile, canUpdateProfile };
 }
 
 export const hrEmploymentService = createHrEmploymentService();
