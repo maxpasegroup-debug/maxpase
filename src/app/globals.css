@@ -97,12 +97,14 @@
 }
 
 .portal-startup { --portal-accent: var(--aira-burgundy); --portal-highlight: var(--aira-gold); --portal-band: var(--aira-soft-ivory); }
-.portal-skillcity { --portal-accent: var(--aira-burgundy); --portal-highlight: var(--aira-gold); --portal-band: var(--aira-soft-ivory); }
+.portal-skillcity { --portal-accent: var(--aira-ruby); --portal-highlight: var(--aira-gold); --portal-band: #f7eeee; }
 .portal-labs { --portal-accent: var(--aira-burgundy); --portal-highlight: var(--aira-gold); --portal-band: var(--aira-soft-ivory); }
 .portal-jobs { --portal-accent: var(--aira-burgundy); --portal-highlight: var(--aira-gold); --portal-band: var(--aira-soft-ivory); }
 .portal-landing, .portal-workspace { background: #fff; color: var(--aira-deep-burgundy); min-height: 100svh; }
 .portal-header { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 22px 6%; min-height: 88px; }
 .portal-wordmark { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 10px; font-weight: 800; font-size: 21px; }
+.portal-wordmark .skillcity-logo { width: 48px; height: 48px; }
+.portal-login.portal-skillcity > .portal-wordmark .skillcity-logo { width: 80px; height: 80px; }
 .portal-wordmark > span > span, .portal-wordmark > span:last-child:not(:first-child) { display: block; }
 .portal-wordmark > span > span { font-size: 9px; color: var(--aira-burgundy); font-weight: 600; margin-top: 5px; }
 .portal-header nav { display: flex; align-items: center; gap: 30px; font-size: 14px; }
@@ -204,7 +206,17 @@
 .portal-back { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--aira-burgundy); }
 .portal-workspace .portal-header { border-bottom: 1px solid #dce3e5; }
 .portal-workspace .portal-wordmark { flex-direction: column; align-items: flex-start; }
+.portal-workspace.portal-skillcity .portal-wordmark { flex-direction: row; align-items: center; }
 .portal-workspace .portal-wordmark > span { font-size: 10px; color: var(--portal-accent); }
+.portal-workspace.portal-skillcity .portal-header { border-bottom-color: color-mix(in srgb, var(--aira-gold) 55%, #dce3e5); }
+.portal-workspace.portal-skillcity .portal-button { background: linear-gradient(135deg, var(--aira-ruby), var(--aira-burgundy)); }
+.portal-workspace.portal-skillcity:not(.sc-workspace) { background: var(--portal-band); }
+.portal-workspace.portal-skillcity:not(.sc-workspace) .portal-workspace-nav { border-bottom-color: color-mix(in srgb, var(--aira-gold) 55%, var(--aira-border)); }
+.portal-workspace.portal-skillcity:not(.sc-workspace) .portal-workspace-nav a[aria-current="page"] { color: var(--aira-ruby); border-color: var(--aira-ruby); }
+.portal-workspace.portal-skillcity:not(.sc-workspace) .portal-records li { border-bottom-color: color-mix(in srgb, var(--aira-gold) 38%, var(--aira-border)); }
+.portal-workspace.portal-skillcity:not(.sc-workspace) .portal-records li span,
+.portal-workspace.portal-skillcity:not(.sc-workspace) .portal-records time,
+.portal-workspace.portal-skillcity:not(.sc-workspace) .portal-kicker { color: var(--aira-ruby); }
 .portal-workspace-inner { max-width: 1100px; margin: auto; padding: 32px 6% 60px; }
 .portal-workspace-heading h1 { font-size: 30px; margin: 0; }
 .portal-workspace-heading .portal-kicker { color: var(--portal-accent); margin-bottom: 10px; }

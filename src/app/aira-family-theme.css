@@ -49,14 +49,24 @@
 .boss-dashboard-nexa-body a { background: var(--aira-ruby); }
 .boss-dashboard-metric-copy small, .boss-dashboard-company-name small, .boss-dashboard-attention small, .boss-dashboard-company-stat small, .boss-dashboard-footnote { color: #695b60; }
 
-.sc-workspace { background: var(--aira-soft-ivory); color: var(--aira-deep-burgundy); }
+.sc-workspace { background: #f7eeee; color: var(--aira-deep-burgundy); }
 .sc-skip, .sc-heading p, .sc-workspace summary, .sc-list article header span, .sc-project header span { color: var(--aira-burgundy); }
-.sc-nav a { color: var(--aira-deep-burgundy); }
-.sc-nav a[aria-current="page"] { background: var(--aira-light-gold); color: var(--aira-deep-burgundy); }
-.sc-pipelines > .sc-section, .sc-pipelines > article { border-top-color: var(--aira-burgundy); }
+.sc-workspace .portal-header, .sc-nav { background: #f7eeee; }
+.sc-workspace .portal-header { border-bottom-color: color-mix(in srgb, var(--aira-gold) 55%, var(--aira-border)); }
+.sc-nav { border-bottom-color: color-mix(in srgb, var(--aira-gold) 55%, var(--aira-border)); }
+.sc-nav a { color: var(--aira-deep-burgundy); transition: background .2s ease, color .2s ease; }
+.sc-nav a:hover { background: var(--aira-soft-ivory); color: var(--aira-ruby); }
+.sc-nav a[aria-current="page"] { background: var(--aira-burgundy); color: var(--aira-white); }
+.sc-section { border-top-color: color-mix(in srgb, var(--aira-gold) 45%, var(--aira-border)); }
+.sc-section p { color: #695b60; }
+.sc-pipelines > .sc-section, .sc-pipelines > article { border-top-color: var(--aira-burgundy); background: #fbf5f5; }
 .sc-pipelines > :nth-child(2) { border-color: var(--aira-ruby); }
 .sc-pipelines > :nth-child(3) { border-color: var(--aira-gold); }
-.sc-work-form button { background: var(--aira-burgundy); }
+.sc-list article, .sc-project, .sc-task { border-color: color-mix(in srgb, var(--aira-gold) 38%, var(--aira-border)); }
+.sc-workspace .sc-account a, .sc-workspace .sc-main a:not(.sc-skip) { color: var(--aira-ruby); }
+.sc-workspace .sc-account button { border-color: var(--aira-gold); color: var(--aira-burgundy); }
+.sc-work-form input:focus, .sc-work-form select:focus, .sc-work-form textarea:focus { border-color: var(--aira-ruby); outline: 2px solid color-mix(in srgb, var(--aira-ruby) 22%, transparent); }
+.sc-work-form button { background: linear-gradient(135deg, var(--aira-ruby), var(--aira-burgundy)); }
 .sc-workspace :is(a,button,input,select,textarea,summary):focus-visible { outline-color: var(--aira-ruby); }
 
 .al-workspace { color: var(--aira-deep-burgundy); background: var(--aira-soft-ivory); }

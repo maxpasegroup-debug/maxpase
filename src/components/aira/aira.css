@@ -1,7 +1,9 @@
 .aira-root {
   --accent: var(--aira-gold);
   min-height: 100vh;
-  background: var(--aira-black);
+  background:
+    radial-gradient(ellipse at 50% 5%, rgba(139, 16, 37, 0.2), transparent 48%),
+    #21050B;
   color: var(--aira-ivory);
   font-family: var(--aira-text), "Segoe UI", sans-serif;
   overflow-x: clip;
@@ -37,11 +39,20 @@
 }
 
 .aira-logo {
+  display: inline-flex;
+  align-items: center;
   color: #fff;
   font-family: var(--aira-display), "Arial Narrow", sans-serif;
   font-size: 22px;
   font-weight: 800;
   letter-spacing: 0.28em;
+  text-decoration: none;
+}
+
+.skillcity-logo {
+  display: block;
+  flex: none;
+  object-fit: contain;
 }
 
 .aira-nav-actions {
@@ -63,13 +74,23 @@
   cursor: pointer;
 }
 
+.aira-login {
+  color: var(--aira-light-gold);
+  transition: color 0.2s ease;
+}
+
+.aira-login:hover,
+.aira-explore:hover {
+  color: #fff;
+}
+
 .aira-stage {
   position: relative;
   height: 100svh;
   overflow: hidden;
   background:
-    radial-gradient(ellipse at 50% 80%, rgba(87,7,19,0.28), transparent 42%),
-    var(--aira-black);
+    radial-gradient(ellipse at 50% 78%, rgba(139, 16, 37, 0.22), transparent 48%),
+    #21050B;
 }
 
 .aira-canvas,
@@ -379,8 +400,8 @@
 .aira-purpose {
   padding: 9vh 6vw 4vh;
   background:
-    radial-gradient(ellipse at 50% 0%, rgba(87,7,19,0.22), transparent 42%),
-    var(--aira-black);
+    radial-gradient(ellipse at 50% 0%, rgba(139, 16, 37, 0.2), transparent 48%),
+    #21050B;
 }
 
 .aira-purpose-head {
@@ -433,15 +454,26 @@
     linear-gradient(160deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.02)),
     var(--aira-black);
   box-shadow: 0 18px 40px rgba(0, 0, 0, 0.28);
-  transition: border-color 0.22s ease, box-shadow 0.22s ease;
+  transition: background 0.22s ease, border-color 0.22s ease, box-shadow 0.22s ease, color 0.22s ease;
 }
 
 .aira-purpose-grid article:nth-child(2) { z-index: 2; }
 .aira-purpose-grid article:nth-child(3) { z-index: 3; }
 
-.aira-purpose-grid article:hover {
-  border-color: var(--accent);
-  box-shadow: 0 22px 48px rgba(0, 0, 0, 0.36), 0 0 28px color-mix(in srgb, var(--accent) 24%, transparent);
+.aira-purpose-grid article:is(:hover, :focus-within) {
+  border-color: var(--aira-light-gold);
+  background: linear-gradient(135deg, var(--aira-ruby), var(--aira-burgundy));
+  color: #fff;
+  box-shadow: 0 22px 48px rgba(0, 0, 0, 0.36), 0 0 32px color-mix(in srgb, var(--aira-ruby) 52%, transparent);
+}
+
+.aira-purpose-grid article:is(:hover, :focus-within) :is(h3, p, .aira-purpose-index) {
+  color: #fff;
+}
+
+.aira-purpose-grid article:is(:hover, :focus-within) .aira-purpose-badge {
+  background: var(--aira-light-gold);
+  color: var(--aira-deep-burgundy);
 }
 
 .aira-purpose.is-settled .aira-purpose-grid article:hover {
@@ -487,8 +519,8 @@
   position: relative;
   padding: 18vh 6vw 48px;
   background:
-    radial-gradient(ellipse at 50% 0%, rgba(87,7,19,0.28), transparent 36%),
-    var(--aira-black);
+    radial-gradient(ellipse at 50% 0%, rgba(139, 16, 37, 0.22), transparent 42%),
+    #21050B;
 }
 
 .aira-finale h2 {
@@ -511,14 +543,20 @@
   min-height: 48px;
   margin-top: 8px;
   padding: 0 22px;
-  border: 1px solid rgba(232,213,165,0.45);
+  border: 1px solid var(--aira-ruby);
+  border-radius: 4px;
+  background: linear-gradient(135deg, var(--aira-ruby), var(--aira-burgundy));
   color: #fff;
+  font-weight: 700;
   letter-spacing: 0.18em;
   font-size: 13px;
+  text-decoration: none;
+  transition: filter 0.2s ease, box-shadow 0.2s ease;
 }
 
 .aira-discover:hover {
-  background: rgba(212,175,98,0.12);
+  filter: brightness(1.12);
+  box-shadow: 0 0 24px rgba(139,16,37,0.42);
 }
 
 .aira-footer {
@@ -530,10 +568,6 @@
   margin-top: 18vh;
   padding-top: 22px;
   border-top: 1px solid rgba(232,213,165,0.18);
-}
-
-.aira-footer strong {
-  letter-spacing: 0.28em;
 }
 
 .aira-footer nav {

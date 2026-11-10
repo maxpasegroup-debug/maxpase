@@ -18,6 +18,7 @@ import { DeveloperAssignments } from "./developer-assignments";
 import { CrossBrandQueue } from "./cross-brand-queue";
 import { LabsBusinessDevelopment } from "./labs-business-development";
 import { AdministrativeWorkspace } from "./administrative-workspace";
+import { SkillCityLogo } from "@/components/skillcity-logo";
 
 type Dashboard = Awaited<ReturnType<typeof skillCityEmployeeDashboard.dashboard>>;
 const labels: Record<EmployeeView,string> = { advisor: "Advisory", director: "Director", manager: "Manager desk", "administrative-officer": "Administration", developer: "Labs delivery", "business-development": "Labs business development" };
@@ -27,7 +28,7 @@ const date = (value: Date | string | null | undefined) => value ? new Date(value
 export function SkillCityWorkspace({ data, email, userId, base, home }: { data: Dashboard; email: string; userId: string; base: string; home: string }) {
   return <main className="portal-workspace portal-skillcity sc-workspace">
     <a className="sc-skip" href="#skillcity-work">Skip to work</a>
-    <header className="portal-header"><Link className="portal-wordmark" href={home}>AIRA Skill City<span>EMPLOYEE WORKPLACE</span></Link><div className="sc-account"><Link href={`${base}?view=my-profile`}>My profile</Link><span>{email}</span><form action={portalLogoutAction}><input type="hidden" name="site" value="skillcity"/><button title="Sign out" aria-label="Sign out"><LogOut size={18}/></button></form></div></header>
+    <header className="portal-header"><Link className="portal-wordmark" href={home}><SkillCityLogo size={48} /><span>AIRA Skill City<span>EMPLOYEE WORKPLACE</span></span></Link><div className="sc-account"><Link href={`${base}?view=my-profile`}>My profile</Link><span>{email}</span><form action={portalLogoutAction}><input type="hidden" name="site" value="skillcity"/><button title="Sign out" aria-label="Sign out"><LogOut size={18}/></button></form></div></header>
     {data.available.length>1&&<nav className="sc-nav" aria-label="Your workspaces">{data.available.map(view=><Link key={view} href={`${base}?view=${view}`} aria-current={data.view===view?"page":undefined}>{view==="advisor"?<GraduationCap size={18} aria-hidden="true"/>:view==="developer"||view==="manager"?<BriefcaseBusiness size={18} aria-hidden="true"/>:<ClipboardCheck size={18} aria-hidden="true"/>} {labels[view]}</Link>)}</nav>}
     <div className="sc-layout"><div className="sc-main" id="skillcity-work">{!data.view?<section className="sc-section"><h1>Employee access pending</h1><p>Your account does not yet have a verified Skill City employee assignment with the required permissions. Ask an authorized director to review your membership and role.</p></section>:null}
       {data.view === "advisor" && <CrossBrandQueue userId={userId} mode="SELF"/>}

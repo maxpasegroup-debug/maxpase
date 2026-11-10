@@ -40,7 +40,7 @@ function planetTexture() {
   context.fillRect(0, 0, 1024, 512);
 
   for (let index = 0; index < 16; index += 1) {
-    context.fillStyle = index % 3 === 0 ? "rgba(22, 78, 92, 0.55)" : "rgba(16, 48, 86, 0.72)";
+    context.fillStyle = index % 3 === 0 ? "rgba(139, 16, 37, 0.55)" : "rgba(87, 7, 19, 0.72)";
     context.beginPath();
     context.ellipse(
       Math.random() * 1024,
@@ -61,7 +61,7 @@ function planetTexture() {
     context.fillRect(x, y, 1.6, 1.6);
   }
 
-  context.fillStyle = "rgba(214, 232, 255, 0.09)";
+  context.fillStyle = "rgba(232, 213, 165, 0.09)";
   for (let index = 0; index < 24; index += 1) {
     context.beginPath();
     context.ellipse(Math.random() * 1024, Math.random() * 512, 70 + Math.random() * 150, 8 + Math.random() * 16, 0.2, 0, Math.PI * 2);

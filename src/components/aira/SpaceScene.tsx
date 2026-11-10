@@ -14,7 +14,7 @@ function SpaceEnvironment() {
   useLayoutEffect(() => {
     const generator = new PMREMGenerator(gl);
     const source = new Scene();
-    source.background = new Color("#171014");
+    source.background = new Color("#21050B");
     const key = new DirectionalLight("#F4E5C3", 4);
     key.position.set(10, 8, 6);
     source.add(key);
@@ -52,8 +52,8 @@ function JourneyRig({ progress }: { progress: MutableRefObject<{ t: number }> })
 function SceneContents({ progress, mobile, shadows }: { progress: MutableRefObject<{ t: number }>; mobile: boolean; shadows: boolean }) {
   return (
     <>
-      <color attach="background" args={["#171014"]} />
-      <fog attach="fog" args={["#171014", 120, 420]} />
+      <color attach="background" args={["#21050B"]} />
+      <fog attach="fog" args={["#21050B", 120, 420]} />
       <SpaceEnvironment />
       <JourneyRig progress={progress} />
       <ambientLight intensity={0.12} color="#39040D" />

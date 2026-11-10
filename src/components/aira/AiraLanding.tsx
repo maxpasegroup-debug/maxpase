@@ -10,6 +10,7 @@ import { VenturePortals } from "./VenturePortals";
 import { airaDestinations, type Venture } from "./ventures";
 import { roomOpacity, smoothstep } from "./journey";
 import { SiaGuide } from "@/components/sia/sia-guide";
+import { SkillCityLogo } from "@/components/skillcity-logo";
 import "lenis/dist/lenis.css";
 import "./aira.css";
 
@@ -208,7 +209,7 @@ export function AiraLanding({
           <div>{faqs.map(([question, answer]) => <details key={question}><summary>{question}</summary><p>{answer}</p></details>)}</div>
         </section>
         <footer className="aira-footer">
-          <strong>AIRA</strong>
+          <SkillCityLogo size={72} />
           <nav aria-label="AIRA">
             <a href="#faq">About</a>
             <a href={contact}>Contact</a>

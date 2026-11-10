@@ -1,0 +1,14 @@
+  < [33macbc2fb[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m)[m the ui changed
+> [33m664ed7d[m[33m ([m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m  HR MODULE full build
+> [33me7ec754[m  AO AND DEVELOPER DASHBOARD LAUNCHED
+> [33m1495854[m  added AIRA SKILL CITY BILLING WORKSPACE
+> [33m03d46e8[m[33m ([m[1;33mtag: [m[1;33mnicejobs-review-20261106[m[33m)[m Connect Nice Jobs participant, referral, admission and founder controls
+> [33m12abf7a[m[33m ([m[1;31morigin/recovery/nicejobs-auth-20261105[m[33m)[m Polish Nice Jobs OTP email layout
+> [33m8c6904a[m Patch transitive lint dependency advisory
+> [33ma3349e2[m Bundle site fonts for reproducible CI builds
+> [33m38b5db3[m Repair Nice Jobs release CI and scoped staff dashboard
+> [33m91cf89d[m Fix Nice Jobs signup flow, OTP email, and migration readiness
+> [33m23438c4[m Advance Nice Jobs candidate journey and management workspaces
+> [33m5c00cce[m Align Nice Jobs renewal test session with simulated clock
+> [33mcaca352[m Fix Nice Jobs PIN setup expiry test clock
+> [33m0d9a755[m Complete Nice Jobs email verification before PIN setup

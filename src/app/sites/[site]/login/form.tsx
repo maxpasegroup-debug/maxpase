@@ -5,10 +5,37 @@ import { ArrowLeft, ArrowRight, LockKeyhole } from "lucide-react";
 import { portalLoginAction, type PortalLoginState } from "../actions";
 import type { PortalSite } from "@/server/portals/sites";
 import { StartupSiaAssistant } from "../../startup-ui/sia-assistant";
+import { SkillCityLogo } from "@/components/skillcity-logo";
 
 export function PortalLoginForm({ site, home, versionId, signup, staff = false }: { site: PortalSite; home: string; versionId?: string; signup?: string; staff?: boolean }) {
   const [state, action, pending] = useActionState(portalLoginAction, {} as PortalLoginState);
   const labs = site.id === "labs";
   const loginPath = `${home === "/" ? "" : home}/login`;
-  return <main className={`portal-login portal-${site.theme}${site.id === "startup" ? " startup-login" : ""}`}><Link className="portal-wordmark" href={home}>{site.name}<span>{site.id === "startup" ? "FOUNDER JOURNEY" : "AIRA SKILL CITY"}</span></Link><section className="portal-login-panel"><LockKeyhole size={28} /><p className="portal-kicker">{labs ? staff ? "EMPLOYEE SIGN IN" : "CUSTOMER SIGN IN" : site.id === "startup" ? "YOUR FOUNDER SPACE" : "MEMBER GATEWAY"}</p><h1>Welcome back.</h1><p className="muted">{versionId ? "Sign in to continue your application." : site.id === "startup" ? "Pick up where your entrepreneur journey left off." : `Sign in to ${site.name}.`}</p><form action={action} className="form-stack" aria-busy={pending}><input type="hidden" name="site" value={site.id}/>{labs && <input type="hidden" name="labsAccount" value={staff ? "staff" : "customer"}/ >}{versionId && <input type="hidden" name="versionId" value={versionId}/>}<label>Email<input name="email" type="email" autoComplete="username" maxLength={254} required/></label><label>{labs && !staff ? "Six-digit customer PIN" : "Password"}<input name="password" type="password" autoComplete="current-password" minLength={labs && !staff ? 6 : 8} maxLength={labs && !staff ? 6 : 72} required/></label>{state.error && <p role="alert" className="error">{state.error}</p>}<button className="portal-button" disabled={pending}>{pending ? "Signing in..." : "Sign in"}<ArrowRight size={18}/></button></form>{labs && <p>{staff ? "Use the password you set through your reviewed employee invitation." : "Customers use their six-digit PIN."} <Link href={staff ? loginPath : `${loginPath}?mode=staff`}>{staff ? "Customer sign-in" : "Employee sign-in"}</Link></p>}{(site.id === "skillcity" || labs && staff) && <p><Link href={`${loginPath.replace(/\/login$/, "")}/recover`}>Forgot your staff password?</Link></p>}{signup && <div className="startup-login-cta"><p>New to Startup Skool?</p><Link className="portal-button" href={signup}>Book your entrepreneur journey with SIA<ArrowRight size={18}/></Link><small>Create an account, then send an application for human review.</small></div>}</section><Link className="portal-back" href={home}><ArrowLeft size={16}/>Back to {site.name}</Link>{site.id === "startup" && <StartupSiaAssistant context="login" journey={signup}/>}</main>;
+  return <main className={`portal-login portal-${site.theme}${site.id === "startup" ? " startup-login" : ""}`}>
+    <Link className="portal-wordmark" href={home}>
+      {site.id === "skillcity" && <SkillCityLogo size={80} />}
+      {site.name}
+      <span>{site.id === "startup" ? "FOUNDER JOURNEY" : "AIRA SKILL CITY"}</span>
+    </Link>
+    <section className="portal-login-panel">
+      <LockKeyhole size={28} />
+      <p className="portal-kicker">{labs ? staff ? "EMPLOYEE SIGN IN" : "CUSTOMER SIGN IN" : site.id === "startup" ? "YOUR FOUNDER SPACE" : "MEMBER GATEWAY"}</p>
+      <h1>Welcome back.</h1>
+      <p className="muted">{versionId ? "Sign in to continue your application." : site.id === "startup" ? "Pick up where your entrepreneur journey left off." : `Sign in to ${site.name}.`}</p>
+      <form action={action} className="form-stack" aria-busy={pending}>
+        <input type="hidden" name="site" value={site.id} />
+        {labs && <input type="hidden" name="labsAccount" value={staff ? "staff" : "customer"} />}
+        {versionId && <input type="hidden" name="versionId" value={versionId} />}
+        <label>Email<input name="email" type="email" autoComplete="username" maxLength={254} required /></label>
+        <label>{labs && !staff ? "Six-digit customer PIN" : "Password"}<input name="password" type="password" autoComplete="current-password" minLength={labs && !staff ? 6 : 8} maxLength={labs && !staff ? 6 : 72} required /></label>
+        {state.error && <p role="alert" className="error">{state.error}</p>}
+        <button className="portal-button" disabled={pending}>{pending ? "Signing in..." : "Sign in"}<ArrowRight size={18} /></button>
+      </form>
+      {labs && <p>{staff ? "Use the password you set through your reviewed employee invitation." : "Customers use their six-digit PIN."} <Link href={staff ? loginPath : `${loginPath}?mode=staff`}>{staff ? "Customer sign-in" : "Employee sign-in"}</Link></p>}
+      {(site.id === "skillcity" || labs && staff) && <p><Link href={`${loginPath.replace(/\/login$/, "")}/recover`}>Forgot your staff password?</Link></p>}
+      {signup && <div className="startup-login-cta"><p>New to Startup Skool?</p><Link className="portal-button" href={signup}>Book your entrepreneur journey with SIA<ArrowRight size={18} /></Link><small>Create an account, then send an application for human review.</small></div>}
+    </section>
+    <Link className="portal-back" href={home}><ArrowLeft size={16} />Back to {site.name}</Link>
+    {site.id === "startup" && <StartupSiaAssistant context="login" journey={signup} />}
+  </main>;
 }

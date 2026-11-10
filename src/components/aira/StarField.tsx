@@ -53,9 +53,9 @@ function StarLayer({ count, size, radius, spread }: { count: number; size: numbe
 
 export function StarField({ mobile }: { mobile: boolean }) {
   const clouds = useMemo(() => [
-    radialTexture("rgba(48, 92, 180, 0.55)"),
-    radialTexture("rgba(120, 64, 150, 0.45)"),
-    radialTexture("rgba(40, 130, 170, 0.4)")
+    radialTexture("rgba(139, 16, 37, 0.55)"),
+    radialTexture("rgba(87, 7, 19, 0.45)"),
+    radialTexture("rgba(192, 39, 47, 0.4)")
   ], []);
 
   return (
