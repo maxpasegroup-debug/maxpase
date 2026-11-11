@@ -44,7 +44,7 @@ export default async function PortalLanding({ params }: { params: Promise<{ site
     <AiraLanding
       home={paths.home}
       login={paths.login}
-      contact={local ? "/sites/labs" : "https://airalabs.online"}
+      contact={local ? "/sites/skillcity/contact" : "/contact"}
       ventures={venturesFor({
         startup: local ? "/sites/startup" : "https://airastartupskool.com",
         labs: local ? "/sites/labs" : "https://airalabs.online",

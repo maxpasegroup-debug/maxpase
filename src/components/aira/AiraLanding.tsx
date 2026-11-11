@@ -11,6 +11,7 @@ import { airaDestinations, type Venture } from "./ventures";
 import { roomOpacity, smoothstep } from "./journey";
 import { SiaGuide } from "@/components/sia/sia-guide";
 import { SkillCityLogo } from "@/components/skillcity-logo";
+import { airaPublicLegalLinks } from "@/server/portals/aira-public-legal";
 import "lenis/dist/lenis.css";
 import "./aira.css";
 
@@ -213,6 +214,9 @@ export function AiraLanding({
           <nav aria-label="AIRA">
             <a href="#faq">About</a>
             <a href={contact}>Contact</a>
+            {airaPublicLegalLinks.filter(link => link.href !== "/contact").map(link => (
+              <a key={link.href} href={home === "/" ? link.href : `${home}${link.href}`}>{link.label}</a>
+            ))}
             {airaDestinations.social.map(link => (
               <a key={link.href} href={link.href} target="_blank" rel="noreferrer">{link.label}</a>
             ))}
