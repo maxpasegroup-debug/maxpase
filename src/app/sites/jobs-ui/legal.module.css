@@ -1,0 +1,9 @@
+.page { min-height: 100svh; padding: 28px clamp(18px, 5vw, 70px); color: #f5f1ed; background: radial-gradient(ellipse at 80% 0%, rgba(139,16,37,.22), transparent 42%), #111013; }
+.brand { display: inline-flex; min-height: 44px; align-items: center; color: #e5bd70; font-weight: 800; text-decoration: none; }
+.article { width: min(100%, 780px); margin: 40px auto; padding: clamp(22px, 5vw, 48px); border: 1px solid rgba(255,255,255,.12); border-radius: 16px; background: rgba(27,24,29,.88); line-height: 1.7; }
+.article h1 { margin: 4px 0 12px; font-size: clamp(30px, 6vw, 42px); line-height: 1.15; }
+.article h2 { margin: 28px 0 8px; font-size: 19px; }
+.article p { color: #d7d1d4; }
+.eyebrow { margin: 0; color: #e5bd70 !important; font-size: 12px; font-weight: 800; letter-spacing: .06em; }
+.article a { color: #f2cf83; }
+.article :focus-visible, .brand:focus-visible { outline: 3px solid #f2cf83; outline-offset: 3px; }
