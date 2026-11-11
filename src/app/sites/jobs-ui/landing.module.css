@@ -276,7 +276,23 @@
 .footer a { color: var(--aira-ivory); }
 .footerLegal { border-color: rgba(255,255,255,.12); }
 
+.nav .primaryButton { border: 0; cursor: pointer; background: var(--aira-burgundy); color: #fff; white-space: nowrap; }
+.nav .primaryButton:hover { background: var(--aira-ruby); }
+.introDialog { width: min(760px, calc(100% - 24px)); max-width: 760px; max-height: min(92svh, 820px); padding: clamp(16px, 3vw, 28px); border: 1px solid rgba(255,255,255,.15); border-radius: 16px; color: #f8f6f2; background: #171518; box-shadow: 0 24px 90px rgba(0,0,0,.55); }
+.introDialog::backdrop { background: rgba(8,6,7,.78); backdrop-filter: blur(4px); }
+.introDialog header { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 18px; }
+.introDialog h2 { margin: 4px 0 0; font-size: clamp(21px, 4vw, 30px); }
+.introDialog header button { display: grid; place-items: center; flex: none; width: 42px; height: 42px; border: 1px solid rgba(255,255,255,.2); border-radius: 50%; color: inherit; background: #29262a; cursor: pointer; }
+.introDialog video { display: block; width: 100%; max-height: 65svh; border-radius: 10px; background: #080808; object-fit: contain; }
+.videoHint { color: #d4cdd1; font-size: 14px; }
+.videoToggle, .introContinue { display: inline-flex; align-items: center; justify-content: center; gap: 10px; min-height: 46px; margin-top: 16px; padding: 10px 18px; border: 0; border-radius: 6px; font-weight: 800; color: #181318; background: #e5bd70; cursor: pointer; }
+.introContinue { text-decoration: none; }
+.introDialog :focus-visible { outline: 3px solid #e5bd70; outline-offset: 3px; }
+
 @media (max-width: 600px) {
   .hero { height: calc(100svh - 68px); min-height: 0; }
   .finalCta { margin-inline: 18px; padding: 35px 24px; }
+  .nav { gap: 12px; }
+  .nav .navHow, .nav .navOpportunities, .nav .navFaq { display: none; }
+  .introDialog { border-radius: 12px; }
 }

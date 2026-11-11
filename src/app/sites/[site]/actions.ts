@@ -12,7 +12,6 @@ import { ZodError } from "zod";
 import { jobsEmailAuth } from "@/server/auth/jobs-email-auth";
 import { EmailAuthUnavailable } from "@/server/auth/resend-otp";
 import { labsPin } from "@/server/labs/pin";
-import { jobsPhoneInput } from "@/server/auth/jobs-phone";
 import { getPortalSession } from "@/server/portals/session";
 import { prisma } from "@/server/db";
 import { jobsPinActivation, jobsRegistrationPin } from "@/server/auth/jobs-pin-activation";
@@ -131,10 +130,10 @@ export async function jobsFinishSignupAction(_state: PortalLoginState, form: For
   if (!session?.needsJobsPinActivation) return { error: "Verify your email again to finish setting up your account." };
   let phone: string;
   try {
-    phone = await jobsRegistrationPin(session.userId, session.sessionId, { pin: form.get("pin"), confirmPin: form.get("confirmPin") });
+    phone = await jobsRegistrationPin(session.userId, session.sessionId, { pin: form.get("pin"), confirmPin: form.get("confirmPin"), acceptLegal: form.get("acceptLegal") === "on" });
   } catch (error) {
     if (!(error instanceof ZodError)) safeDiagnostic("operation_failed");
-    return { error: "Could not set your PIN. Check both entries or verify your email again." };
+    return { error: "Create matching six-digit PINs and accept the Terms & Conditions and Privacy Policy to finish registration." };
   }
   const parsed = parsePhoneNumberFromString(phone);
   if (!parsed?.country) redirect(paths.login);
@@ -146,7 +145,7 @@ export async function jobsFinishSignupAction(_state: PortalLoginState, form: For
     if (!(error instanceof RateLimitError)) safeDiagnostic("authentication_failed");
   }
   if (!signedIn) redirect(paths.login);
-  redirect(paths.gateway);
+  redirect(`${paths.signup}/complete`);
 }
 export async function jobsActivatePinAction(_state: PortalLoginState, form: FormData): Promise<PortalLoginState> {
   const { site, paths } = await requestPortal("jobs", true);
@@ -165,15 +164,14 @@ export async function jobsPinResetAction(_state: PortalLoginState, form: FormDat
   await requestPortal("jobs", true);
   try {
     if (form.get("step") !== "VERIFY") {
-      jobsPhoneInput.parse({ country: form.get("country"), nationalNumber: form.get("nationalNumber") });
-      const result = await jobsEmailAuth.beginPinReset({ country: form.get("country"), nationalNumber: form.get("nationalNumber") });
+      const result = await jobsEmailAuth.beginPinReset({ email: form.get("email") });
       return { ...result, message: "If the account is eligible, a code will arrive at its registered email. It expires in 10 minutes." };
     }
     await jobsEmailAuth.completePinReset({ challengeId: form.get("challengeId"), code: form.get("code"), pin: form.get("pin"), confirmPin: form.get("confirmPin") });
     return { complete: true, message: "PIN changed. Existing sessions have been signed out. Sign in with your new PIN." };
   } catch (error) {
     if (error instanceof RateLimitError) return { error: error.message };
-    if (error instanceof ZodError && form.get("step") !== "VERIFY") return { error: "Enter a valid phone number." };
+    if (error instanceof ZodError && form.get("step") !== "VERIFY") return { error: "Enter a valid registered email address." };
     if (!(error instanceof ZodError)) safeDiagnostic("operation_failed");
     return { challengeId: form.get("step") === "VERIFY" ? String(form.get("challengeId") ?? "") : undefined, error: "Could not complete recovery. Check the code and matching PINs, or request a new code." };
   }

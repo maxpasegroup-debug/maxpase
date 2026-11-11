@@ -84,6 +84,16 @@ export function createContentFiles(client: PrismaClient = prisma, storage: Conte
       return { file, bytes };
     }, { timeout: 20000 });
   }
-  return { upload, authorizeIn, download, storage, async preflight(userId: string, organizationId: string) { return client.$transaction(db => authority(db, userId, organizationId)); }, async authorize(userId: string, organizationId: string, id: string) { const file = await client.$transaction(db => authorizeIn(db, userId, organizationId, id)); return { privateHandle: file.id, mimeType: file.mime, filename: file.filename }; } };
+  async function publicIntroVideo() {
+    const setting = await client.niceJobsPortalSetting.findFirst({
+      where: { id: "nice-jobs", company: { slug: "aira-skill-city" } },
+      include: { introVideoFile: { include: { organization: { select: { slug: true, parent: { select: { slug: true } } } } } } }
+    });
+    const file = setting?.introVideoFile;
+    if (!setting || !file || file.companyId !== setting.companyId || file.mediaType !== "VIDEO" || file.organization.slug !== "aira-career-hub" || file.organization.parent?.slug !== "aira-skill-city") return null;
+    const bytes = await readData(file);
+    return { file, bytes };
+  }
+  return { upload, authorizeIn, download, publicIntroVideo, storage, async preflight(userId: string, organizationId: string) { return client.$transaction(db => authority(db, userId, organizationId)); }, async authorize(userId: string, organizationId: string, id: string) { const file = await client.$transaction(db => authorizeIn(db, userId, organizationId, id)); return { privateHandle: file.id, mimeType: file.mime, filename: file.filename }; } };
 }
 export const contentFiles = createContentFiles();

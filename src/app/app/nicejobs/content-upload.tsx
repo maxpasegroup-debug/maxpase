@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { Upload, RotateCcw, X } from "lucide-react";
 
 type Uploaded = { id: string; filename: string; mime: string; mediaType: string; bytes: number };
-export function ContentUpload({ realm, base, organizationId, onUpload, onBusy }: { realm: string; base: string; organizationId: string; onUpload: (file: Uploaded) => void; onBusy: (busy: boolean) => void }) {
+export function ContentUpload({ realm, base, organizationId, onUpload, onBusy, onSelected, accept, label = "Video, audio, PDF or image", legend = "Upload private file", successMessage = "File uploaded. Save the resource draft to attach it." }: { realm: string; base: string; organizationId: string; onUpload: (file: Uploaded) => void; onBusy: (busy: boolean) => void; onSelected?: (file: File | null) => void; accept?: string; label?: string; legend?: string; successMessage?: string }) {
   const xhr = useRef<XMLHttpRequest | null>(null), key = useRef<string>(""), [file, setFile] = useState<File | null>(null), [status, setStatus] = useState("IDLE"), [progress, setProgress] = useState(0), [error, setError] = useState("");
   useEffect(() => () => { xhr.current?.abort(); }, []);
   const busy = status === "UPLOADING" || status === "VALIDATING";
@@ -21,9 +21,9 @@ export function ContentUpload({ realm, base, organizationId, onUpload, onBusy }:
     request.onerror = () => fail("Connection lost. Retry the same upload."); request.ontimeout = () => fail("Upload timed out. Retry to check its result."); request.onabort = () => fail("Upload cancelled. You can retry.");
     request.send(file);
   }
-  return <fieldset className="nj-content-upload"><legend>Upload private file</legend><label>Video, audio, PDF or image<input type="file" accept=".mp4,.webm,.mp3,.wav,.m4a,.pdf,.png,.jpg,.jpeg,.webp" disabled={busy} onChange={event => { setFile(event.target.files?.[0] ?? null); key.current = ""; setStatus("IDLE"); setError(""); setProgress(0); }} /></label>
+  return <fieldset className="nj-content-upload"><legend>{legend}</legend><label>{label}<input type="file" accept={accept ?? ".mp4,.webm,.mp3,.wav,.m4a,.pdf,.png,.jpg,.jpeg,.webp"} disabled={busy} onChange={event => { const selected = event.target.files?.[0] ?? null; setFile(selected); onSelected?.(selected); key.current = ""; setStatus("IDLE"); setError(""); setProgress(0); }} /></label>
     {busy && <><progress max={100} value={progress} aria-label="File upload progress" /><p role="status">{status === "VALIDATING" ? "Validating file..." : `Uploading ${progress}%`}</p><button type="button" title="Cancel upload" onClick={() => xhr.current?.abort()}><X size={16} aria-hidden="true" />Cancel</button></>}
     {!busy && status !== "SUCCEEDED" && <button className="button" type="button" disabled={!file || !organizationId} onClick={upload}>{status === "FAILED" ? <RotateCcw size={16} aria-hidden="true" /> : <Upload size={16} aria-hidden="true" />}{status === "FAILED" ? "Retry upload" : "Upload file"}</button>}
-    {error && <p role="alert">{error}</p>}{status === "SUCCEEDED" && <p role="status">File uploaded. Save the resource draft to attach it.</p>}
+    {error && <p role="alert">{error}</p>}{status === "SUCCEEDED" && <p role="status">{successMessage}</p>}
   </fieldset>;
 }

@@ -461,8 +461,21 @@ model NiceJobsContentFile {
   bytes Int
   digest String
   createdAt DateTime @default(now())
+  introVideoSetting NiceJobsPortalSetting? @relation("NiceJobsIntroVideo")
   @@unique([uploaderUserId, idempotencyKey])
   @@index([companyId, organizationId, id])
+}
+
+model NiceJobsPortalSetting {
+  id                String       @id @default("nice-jobs")
+  companyId         String
+  company           Organization @relation("NiceJobsPortalSettingsCompany", fields: [companyId], references: [id], onDelete: Restrict)
+  introVideoTitle   String       @default("What is NICEJOBS?")
+  introVideoFileId  String?      @unique
+  introVideoFile    NiceJobsContentFile? @relation("NiceJobsIntroVideo", fields: [introVideoFileId], references: [id], onDelete: Restrict)
+  updatedByUserId   String?
+  updatedAt         DateTime     @updatedAt
+  createdAt         DateTime     @default(now())
 }
 
 model NiceJobsSopStep {
@@ -1695,6 +1708,7 @@ model NiceJobsSourceConnection {
 }
 
 model Organization {
+  niceJobsPortalSettings NiceJobsPortalSetting[] @relation("NiceJobsPortalSettingsCompany")
   niceJobsReferralLinks NiceJobsReferralLink[]
   niceJobsAdmissions NiceJobsAdmission[]
   niceJobsSourceEvents NiceJobsSourceEvent[]

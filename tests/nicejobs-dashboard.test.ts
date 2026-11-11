@@ -166,6 +166,7 @@ describe("Nice Jobs participant dashboard", () => {
       "../jobs-ui/landing": { JobsLanding: ({ paths: landingPaths }: { paths: typeof paths }) => createElement("a", { href: landingPaths.opportunities }, "Explore Opportunities") },
       "@/server/nicejobs/applications": { applicationService: { publicOpportunities: landingOpportunities } },
       "@/server/nicejobs/input": { NiceJobsUnavailable },
+      "@/server/nicejobs/portal-settings": { niceJobsPortalSettings: { introVideo: async () => null } },
     });
     const landing = renderToStaticMarkup(await PortalLanding({ params: Promise.resolve({ site: "jobs" }) }));
     expect(landing).toContain("Explore Opportunities");

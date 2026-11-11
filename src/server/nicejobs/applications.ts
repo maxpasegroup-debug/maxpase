@@ -17,7 +17,7 @@ const mutationInput = z.object({ reference: z.string().uuid(), revision: z.numbe
 const parseConfig = (raw: string | null) => raw ? configuration.parse(JSON.parse(raw)) : null;
 export function createApplicationService(client: PrismaClient = prisma) {
   async function publicOpportunities(raw: unknown = {}) {
-    const q = z.object({ kind: z.enum(["jobs", "internships"]), after: z.string().max(200).optional(), limit: z.number().int().min(1).max(50).default(12) }).strict().parse(raw);
+    const q = z.object({ kind: z.enum(["jobs", "internships"]), code: z.string().trim().min(1).max(40).optional(), after: z.string().max(200).optional(), limit: z.number().int().min(1).max(50).default(12) }).strict().parse(raw);
     const company = await client.organization.findUnique({ where: { slug: "aira-skill-city" }, select: { id: true, status: true, type: true, company: { select: { status: true } } } });
     if (!company || company.status !== "ACTIVE" || company.type !== "COMPANY" || company.company?.status !== "ACTIVE") throw new NiceJobsUnavailable("Opportunities are unavailable");
     const product = await client.product.findUnique({ where: { organizationId_slug: { organizationId: company.id, slug: "nice-jobs" } }, select: { id: true, status: true, division: { select: { parentId: true, status: true, slug: true } } } });
@@ -26,6 +26,7 @@ export function createApplicationService(client: PrismaClient = prisma) {
       status: "PUBLISHED", publishedAt: { not: null },
       engagement: q.kind === "internships" ? "INTERNSHIP" : { not: "INTERNSHIP" },
       publishedFor: { is: { companyId: company.id, productId: product.id, status: "PUBLISHED", visibility: "PUBLIC" } },
+      ...(q.code ? { template: { code: q.code } } : {}),
       areas: { some: { division: { parentId: company.id, type: "DIVISION", status: "ACTIVE" } }, every: { division: { parentId: company.id, type: "DIVISION", status: "ACTIVE" } } },
       ...(q.after ? { id: { gt: q.after } } : {})
     }, select: { id: true, templateId: true, title: true, description: true, engagement: true, configuration: true, template: { select: { code: true, company: { select: { name: true } } } }, areas: { select: { divisionId: true, division: { select: { name: true } } }, take: 12 } }, orderBy: { id: "asc" }, take: q.limit + 1 });

@@ -183,11 +183,10 @@ export function createJobsEmailAuth(client: PrismaClient = prisma, options: { no
   }
   async function beginPinReset(raw: unknown) {
     ready();
-    const input = z.object({ country: z.string(), nationalNumber: z.string() }).strict().parse(raw);
-    const phone = jobsPhoneInput.parse(input);
+    const input = z.object({ email: emailInput }).strict().parse(raw);
     await consume("nicejobs:pin-reset:global", 30, 60);
-    await consume(securityKey("nicejobs:pin-reset:phone", phone), 3, 3600);
-    const user = await client.user.findUnique({ where: { jobsPhone: phone }, include: { person: { select: { metadata: true, status: true } } } });
+    await consume(securityKey("nicejobs:pin-reset:email", input.email), 3, 3600);
+    const user = await client.user.findUnique({ where: { email: input.email }, include: { person: { select: { metadata: true, status: true } } } });
     if (!user || !user.jobsPinHash || !user.emailVerifiedAt || user.status !== "ACTIVE" || user.person?.status !== "ACTIVE" || accountPortalRealm(user.person?.metadata) !== "jobs") return { challengeId: randomUUID() };
     try { await requirePortalAccess(client, user.id, "jobs"); return await dispatch(user, "RESET_PIN"); }
     catch (error) { if (error instanceof AccessError || error instanceof EmailAuthUnavailable) return { challengeId: randomUUID() }; throw error; }

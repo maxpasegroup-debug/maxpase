@@ -4,6 +4,7 @@ import { ArrowDown, ArrowRight, BookOpenCheck, BriefcaseBusiness, Compass, Gradu
 import type { portalPaths } from "@/server/portals/sites";
 import { opportunityPreview, type LandingOpportunity } from "./landing-data";
 import styles from "./landing.module.css";
+import { StartNow } from "./start-now";
 
 type Paths = ReturnType<typeof portalPaths>;
 
@@ -35,13 +36,13 @@ const copy = {
   ]
 } as const;
 
-export function JobsLanding({ paths, opportunities, availability }: { paths: Paths; opportunities: LandingOpportunity[]; availability: "ready" | "unavailable" }) {
+export function JobsLanding({ paths, opportunities, availability, introVideo }: { paths: Paths; opportunities: LandingOpportunity[]; availability: "ready" | "unavailable"; introVideo: { title: string; url: string | null } }) {
   const preview = opportunityPreview(availability, opportunities);
   return <main className={styles.page} data-motion="">
     <header className={styles.header}>
       <div className={styles.headerInner}>
         <Link className={styles.brand} href={paths.home} aria-label="Nice Jobs home"><span className={styles.brandMark}><BriefcaseBusiness size={22} strokeWidth={2.2}/></span><span>Nice Jobs<small>AIRA Career Hub</small></span></Link>
-        <nav className={styles.nav} aria-label="Main navigation"><Link className={styles.navHow} href="#how-it-works">How it works</Link><Link className={styles.navOpportunities} href={paths.opportunities}>Opportunities</Link><Link className={styles.navFaq} href="#faq">FAQ</Link><Link className={styles.signIn} href={paths.login}>Sign in</Link><Link className={styles.headerCta} href={paths.signup}>Get started <ArrowRight size={17}/></Link></nav>
+        <nav className={styles.nav} aria-label="Main navigation"><Link className={styles.navHow} href="#how-it-works">How it works</Link><Link className={styles.navOpportunities} href={paths.opportunities}>Opportunities</Link><Link className={styles.navFaq} href="#faq">FAQ</Link><Link className={styles.signIn} href={paths.login}>Sign in</Link><StartNow signup={paths.signup} title={introVideo.title} videoUrl={introVideo.url}/></nav>
       </div>
     </header>
 
@@ -53,7 +54,7 @@ export function JobsLanding({ paths, opportunities, availability }: { paths: Pat
           <h1 id="jobs-title">{copy.hero.headline}<span>.</span></h1>
           <p className={styles.heroPromise}>{copy.hero.promise}</p>
           <p className={styles.heroDescription}>{copy.hero.description}</p>
-          <div className={styles.heroActions}><Link className={styles.primaryButton} href={paths.opportunities}>Explore Opportunities <ArrowRight size={19}/></Link><Link className={styles.heroSecondary} href={paths.signup}>Get started <ArrowRight size={17}/></Link></div>
+          <div className={styles.heroActions}><StartNow signup={paths.signup} title={introVideo.title} videoUrl={introVideo.url}/><Link className={styles.heroSecondary} href={paths.opportunities}>Explore Opportunities <ArrowRight size={17}/></Link></div>
           <p className={styles.heroNote}>{copy.hero.note}</p>
         </div>
         <a className={styles.scrollHint} href="#how-it-works" aria-label="See how Nice Jobs works"><ArrowDown size={20}/></a>

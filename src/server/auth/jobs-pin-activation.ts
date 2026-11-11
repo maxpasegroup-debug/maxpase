@@ -7,6 +7,7 @@ import { hashJobsPin } from "./jobs-pin";
 import { jobsPhoneInput, jobsPinInput } from "./jobs-phone";
 import { AccessError } from "@/server/authorization/engine";
 import { requirePortalAccess } from "@/server/portals/policy";
+import { NICEJOBS_TERMS_VERSION, NICEJOBS_PRIVACY_VERSION } from "@/server/nicejobs/legal-versions";
 
 const activationInput = z.object({ country: z.string(), nationalNumber: z.string(), pin: jobsPinInput, confirmPin: jobsPinInput }).strict().refine(value => value.pin === value.confirmPin);
 
@@ -30,7 +31,7 @@ export const jobsPinActivation = createJobsPinActivation();
 
 export function createJobsRegistrationPin(client: PrismaClient = prisma, now = () => new Date()) {
   return async function finish(userId: string, sessionId: string, raw: unknown) {
-    const input = z.object({ pin: jobsPinInput, confirmPin: jobsPinInput }).strict().refine(value => value.pin === value.confirmPin).parse(raw);
+    const input = z.object({ pin: jobsPinInput, confirmPin: jobsPinInput, acceptLegal: z.literal(true) }).strict().refine(value => value.pin === value.confirmPin).parse(raw);
     const jobsPinHash = await hashJobsPin(input.pin);
     return client.$transaction(async db => {
       const session = await db.session.findUnique({ where: { id: sessionId }, include: { user: { include: { person: true } } } });
@@ -39,8 +40,12 @@ export function createJobsRegistrationPin(client: PrismaClient = prisma, now = (
       const scope = await requirePortalAccess(db, userId, "jobs");
       const updated = await db.user.updateMany({ where: { id: userId, jobsPinHash: null, emailVerifiedAt: { not: null } }, data: { jobsPinHash } });
       if (updated.count !== 1) throw new AccessError("PIN setup unavailable");
+      const acceptedAt = now();
+      const personMetadata = JSON.parse(user.person.metadata ?? "{}");
+      personMetadata.legalAcceptance = { termsVersion: NICEJOBS_TERMS_VERSION, privacyVersion: NICEJOBS_PRIVACY_VERSION, acceptedAt: acceptedAt.toISOString() };
+      await db.person.update({ where: { id: user.person.id }, data: { metadata: JSON.stringify(personMetadata) } });
       await db.session.deleteMany({ where: { userId } });
-      await db.auditEvent.create({ data: buildAuditEventData({ actorUserId: userId, actorPersonId: user.personId, organizationId: scope.divisionId, action: "auth.jobs_registration_pin_set", entityType: "User", entityId: userId, result: "SUCCESS", metadata: { portal: "jobs", phoneVerified: false } }) });
+      await db.auditEvent.create({ data: buildAuditEventData({ actorUserId: userId, actorPersonId: user.personId, organizationId: scope.divisionId, action: "nicejobs.registration.completed", entityType: "User", entityId: userId, result: "SUCCESS", metadata: { portal: "jobs", phoneVerified: false, termsVersion: NICEJOBS_TERMS_VERSION, privacyVersion: NICEJOBS_PRIVACY_VERSION, acceptedAt: acceptedAt.toISOString() } }) });
       return user.jobsPhone;
     });
   };

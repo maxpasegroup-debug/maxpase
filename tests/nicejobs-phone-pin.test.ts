@@ -41,11 +41,15 @@ describe("Nice Jobs phone and PIN candidate authentication", () => {
     const session = await service.completeRegistration({ ...proof, code: messages.at(-1)!.code }, secret);
     expect(await auth.validate(session.token, secret, "jobs")).toMatchObject({ userId, needsJobsPinActivation: true });
     expect(await auth.loginJobsPin({ country: "IN", nationalNumber: raw.nationalNumber, pin: raw.pin }, secret)).toBeNull();
-    await expect(createJobsRegistrationPin(db, () => now)(userId, session.session.id, { pin: "123456", confirmPin: "654321" })).rejects.toThrow();
-    await createJobsRegistrationPin(db, () => now)(userId, session.session.id, { pin: "123456", confirmPin: "123456" });
+    await expect(createJobsRegistrationPin(db, () => now)(userId, session.session.id, { pin: "123456", confirmPin: "123456" })).rejects.toThrow();
+    await expect(createJobsRegistrationPin(db, () => now)(userId, session.session.id, { pin: "123456", confirmPin: "654321", acceptLegal: true })).rejects.toThrow();
+    await createJobsRegistrationPin(db, () => now)(userId, session.session.id, { pin: "123456", confirmPin: "123456", acceptLegal: true });
+    const acceptance = await db.auditEvent.findFirstOrThrow({ where: { actorUserId: userId, action: "nicejobs.registration.completed" } });
+    expect(acceptance.metadata).toContain("nicejobs-terms-2026-11-09");
+    expect(acceptance.metadata).toContain("nicejobs-privacy-2026-11-09");
     expect(await auth.validate(session.token, secret, "jobs")).toBeNull();
     expect(await auth.loginJobsPin({ country: "IN", nationalNumber: raw.nationalNumber, pin: raw.pin }, secret)).not.toBeNull();
-    await expect(createJobsRegistrationPin(db, () => now)(userId, session.session.id, { pin: "654321", confirmPin: "654321" })).rejects.toThrow();
+    await expect(createJobsRegistrationPin(db, () => now)(userId, session.session.id, { pin: "654321", confirmPin: "654321", acceptLegal: true })).rejects.toThrow();
   });
   it("lets an email-verified candidate resume PIN setup with a fresh code", async () => {
     await db.user.update({ where: { id: userId }, data: { jobsPinHash: null } });
@@ -53,10 +57,10 @@ describe("Nice Jobs phone and PIN candidate authentication", () => {
     const session = await service.completeRegistration({ ...initial, code: messages.at(-1)!.code }, secret);
     await db.session.update({ where: { id: session.session.id }, data: { createdAt: now } });
     now = new Date(now.getTime() + 11 * 60000);
-    await expect(createJobsRegistrationPin(db, () => now)(userId, session.session.id, { pin: raw.pin, confirmPin: raw.pin })).rejects.toThrow();
+    await expect(createJobsRegistrationPin(db, () => now)(userId, session.session.id, { pin: raw.pin, confirmPin: raw.pin, acceptLegal: true })).rejects.toThrow();
     const resumed = await service.resendRegistration({ country: "IN", nationalNumber: raw.nationalNumber, email: raw.email });
     const next = await service.completeRegistration({ ...resumed, code: messages.at(-1)!.code }, secret);
-    await createJobsRegistrationPin(db, () => now)(userId, next.session.id, { pin: raw.pin, confirmPin: raw.pin });
+    await createJobsRegistrationPin(db, () => now)(userId, next.session.id, { pin: raw.pin, confirmPin: raw.pin, acceptLegal: true });
     expect(await auth.validate(next.token, secret, "jobs")).toBeNull();
     expect(await auth.loginJobsPin({ country: "IN", nationalNumber: raw.nationalNumber, pin: raw.pin }, secret)).not.toBeNull();
   });
@@ -64,9 +68,9 @@ describe("Nice Jobs phone and PIN candidate authentication", () => {
     await db.user.update({ where: { id: userId }, data: { jobsPinHash: null } });
     const proof = await service.beginRegistration(userId);
     const session = await service.completeRegistration({ ...proof, code: messages.at(-1)!.code }, secret);
-    const restore = await postgres.rejectInsert("AuditEvent", "auth.jobs_registration_pin_set");
+    const restore = await postgres.rejectInsert("AuditEvent", "nicejobs.registration.completed");
     try {
-      await expect(createJobsRegistrationPin(db, () => now)(userId, session.session.id, { pin: raw.pin, confirmPin: raw.pin })).rejects.toThrow();
+      await expect(createJobsRegistrationPin(db, () => now)(userId, session.session.id, { pin: raw.pin, confirmPin: raw.pin, acceptLegal: true })).rejects.toThrow();
       expect((await db.user.findUniqueOrThrow({ where: { id: userId } })).jobsPinHash).toBeNull();
       expect(await auth.validate(session.token, secret, "jobs")).toMatchObject({ needsJobsPinActivation: true });
     } finally { await restore(); }
@@ -116,7 +120,7 @@ describe("Nice Jobs phone and PIN candidate authentication", () => {
     const proof = await service.beginRegistration(userId);
     const session = await service.completeRegistration({ ...proof, code: messages.at(-1)!.code }, secret);
     now = new Date(now.getTime() + 61000);
-    const reset = await service.beginPinReset({ country: "IN", nationalNumber: raw.nationalNumber });
+    const reset = await service.beginPinReset({ email: raw.email });
     expect(messages.at(-1)?.purpose).toBe("RESET_PIN");
     const wrong = messages.at(-1)!.code === "000000" ? "111111" : "000000";
     await expect(service.completePinReset({ ...reset, code: wrong, pin: "654321", confirmPin: "654321" })).rejects.toThrow();
@@ -126,8 +130,8 @@ describe("Nice Jobs phone and PIN candidate authentication", () => {
     await expect(service.completePinReset({ ...reset, code: messages.at(-1)!.code, pin: "123456", confirmPin: "123456" })).rejects.toThrow();
     expect(await auth.loginJobsPin({ country: "IN", nationalNumber: raw.nationalNumber, pin: "654321" }, secret)).not.toBeNull();
   });
-  it("returns opaque recovery challenges for unknown phones and throttles guessing", async () => {
-    const result = await service.beginPinReset({ country: "IN", nationalNumber: "9876543219" });
+  it("returns opaque recovery challenges for unknown emails and throttles guessing", async () => {
+    const result = await service.beginPinReset({ email: "unknown@test.invalid" });
     expect(result.challengeId).toMatch(/^[a-f0-9-]{36}$/);
     expect(messages).toHaveLength(0);
     for (let i = 0; i < 3; i++) expect(await auth.loginJobsPin({ country: "IN", nationalNumber: raw.nationalNumber, pin: "999999" }, secret)).toBeNull();
@@ -145,7 +149,7 @@ describe("Nice Jobs phone and PIN candidate authentication", () => {
     const fresh = await service.beginRegistration(userId);
     await service.completeRegistration({ ...fresh, code: messages.at(-1)!.code }, secret);
     now = new Date(now.getTime() + 61000);
-    const reset = await service.beginPinReset({ country: "IN", nationalNumber: raw.nationalNumber });
+    const reset = await service.beginPinReset({ email: raw.email });
     expect(messages.at(-1)?.purpose).toBe("RESET_PIN");
     await expect(service.completeRegistration({ ...reset, code: messages.at(-1)!.code }, secret)).rejects.toThrow();
   });
@@ -204,7 +208,7 @@ describe("Nice Jobs phone and PIN candidate authentication", () => {
     const registration = await service.beginRegistration(userId);
     await service.completeRegistration({ ...registration, code: messages.at(-1)!.code }, secret);
     now = new Date(now.getTime() + 61000);
-    const reset = await service.beginPinReset({ country: "IN", nationalNumber: raw.nationalNumber });
+    const reset = await service.beginPinReset({ email: raw.email });
     const input = { ...reset, code: messages.at(-1)!.code, pin: "654321", confirmPin: "654321" };
     const results = await Promise.allSettled([service.completePinReset(input), service.completePinReset(input)]);
     expect(results.filter(result => result.status === "fulfilled")).toHaveLength(1);
@@ -214,7 +218,7 @@ describe("Nice Jobs phone and PIN candidate authentication", () => {
     const registration = await service.beginRegistration(userId);
     const session = await service.completeRegistration({ ...registration, code: messages.at(-1)!.code }, secret);
     now = new Date(now.getTime() + 61000);
-    const reset = await service.beginPinReset({ country: "IN", nationalNumber: raw.nationalNumber });
+    const reset = await service.beginPinReset({ email: raw.email });
     const code = messages.at(-1)!.code;
     const failing = createJobsEmailAuth(db, { now: () => now, env, send: async () => "mock-receipt", notifyPinChange: async () => { throw new Error("mock notice failure"); } });
     const restore = await postgres.rejectInsert("AuditEvent", "auth.pin_reset_notice_failed");

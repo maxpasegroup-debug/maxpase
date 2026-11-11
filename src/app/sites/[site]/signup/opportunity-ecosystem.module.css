@@ -1,0 +1,16 @@
+.content { display: grid; gap: 14px; }
+.grid { display: grid; grid-template-columns: 1fr; gap: 9px; }
+.card { display: grid; align-content: start; gap: 7px; min-width: 0; padding: 12px; border: 1px solid rgba(255,255,255,.13); border-radius: 9px; background: linear-gradient(145deg, rgba(255,255,255,.075), rgba(255,255,255,.025)); }
+.cardTop { display: flex; justify-content: space-between; align-items: center; color: #e5bd70; }
+.number { font-size: 10px; font-weight: 800; letter-spacing: .09em; }
+.card h2 { margin: 0; color: var(--aira-ivory, #f5f0e8); font-size: clamp(14px, 3vw, 17px); line-height: 1.25; }
+.card p { margin: 0; color: #d4cdd1; font-size: 11px; line-height: 1.45; }
+.supporting { margin: 0; color: var(--aira-ivory, #f5f0e8); font-size: 12px; line-height: 1.5; }
+.notice { margin: 0; color: #c9c1c6; font-size: 10px; line-height: 1.5; }
+.continue { display: inline-flex; align-items: center; justify-content: center; gap: 10px; width: 100%; min-height: 48px; padding: 11px 18px; border: 0; border-radius: 6px; color: #171319; background: #e5bd70; font: inherit; font-size: 14px; font-weight: 800; cursor: pointer; }
+.continue:hover { background: #f0d18f; }
+.continue:focus-visible { outline: 3px solid #fff; outline-offset: 3px; }
+.error { margin: 0; padding: 10px 12px; border-left: 3px solid #dc5968; color: #fff; background: rgba(160,36,51,.24); font-size: 12px; line-height: 1.45; }
+@media (min-width: 340px) { .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (min-width: 541px) { .grid { gap: 11px; } .card { padding: 14px; } .card p { font-size: 12px; } }
+@media (prefers-reduced-motion: reduce) { .continue { transition: none; } }

@@ -32,6 +32,7 @@ export function createSkillCityAdministrativeDesk(client: PrismaClient = prisma)
       ctx.decide("event.read", { organizationId: company.id }).then(row => row.allowed), can("labs.billing.status.read"),
     ]);
     const labsCompany = await client.organization.findUnique({ where: { id: labs.id }, select: { name: true } });
+    const divisions = await client.organization.findMany({ where: { parentId: company.id, type: "DIVISION", status: "ACTIVE" }, select: { id: true, name: true, slug: true }, orderBy: { name: "asc" } });
     const orgIds = [company.id, labs.id];
     const tasks = canTasks ? await client.task.findMany({ where: { organizationId: { in: orgIds }, assigneePersonId: ctx.user!.personId!, status: { notIn: ["COMPLETED", "CANCELLED"] } }, select: { id: true, revision: true, title: true, status: true, dueDate: true, priority: true, organization: { select: { name: true } } }, orderBy: [{ dueDate: "asc" }, { updatedAt: "desc" }], take: 20 }) : [];
     const customers = canCustomers ? await client.labsBillingCustomer.findMany({ where: { companyId: company.id, active: true }, select: { id: true, version: true, legalName: true, businessName: true, contactPerson: true, email: true, phone: true, billingAddress: true, pinCode: true, notes: true }, orderBy: [{ legalName: "asc" }, { id: "asc" }], take: 50 }) : [];
@@ -50,7 +51,7 @@ export function createSkillCityAdministrativeDesk(client: PrismaClient = prisma)
       canReviewDocs ? client.labsBillingProfile.findUnique({ where: { companyId: company.id }, select: { profileStatus: true } }) : null,
       canEvents ? client.operationalEvent.findMany({ where: { organizationId: { in: orgIds } }, select: { id: true, eventType: true, entityType: true, status: true, createdAt: true }, orderBy: { createdAt: "desc" }, take: 12 }) : [],
     ]);
-    return { company: { name: company.company?.legalName ?? company.name, status: company.company?.status ?? "NOT_RECORDED", region: company.company?.region ?? null }, labsName: labsCompany?.name ?? "AIRA Labs", tasks, customers, quotations, invoices, documents: { profileStatus: pendingCompanyProfile?.profileStatus ?? "NOT_CONFIGURED", awaitingIndependentReview: pendingCompanyEvidence }, recentActivity, permissions: { canTasks, canUpdateTasks: (await ctx.decide("skillcity.administrative.task.perform", { organizationId: company.id })).allowed, canCustomers, canCommercial, canEvents, canReviewDocs, canEditCustomers: (await can("labs.billing.customer.manage")) } };
+    return { company: { name: company.company?.legalName ?? company.name, status: company.company?.status ?? "NOT_RECORDED", region: company.company?.region ?? null }, labsName: labsCompany?.name ?? "AIRA Labs", divisions, tasks, customers, quotations, invoices, documents: { profileStatus: pendingCompanyProfile?.profileStatus ?? "NOT_CONFIGURED", awaitingIndependentReview: pendingCompanyEvidence }, recentActivity, permissions: { canTasks, canUpdateTasks: (await ctx.decide("skillcity.administrative.task.perform", { organizationId: company.id })).allowed, canCustomers, canCommercial, canEvents, canReviewDocs, canEditCustomers: (await can("labs.billing.customer.manage")) } };
   }
 
   async function updateOwnTask(userId: string, raw: unknown) {
