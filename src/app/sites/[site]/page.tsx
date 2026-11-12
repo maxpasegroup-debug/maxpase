@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Prisma } from "@prisma/client";
 import { requestPortal } from "@/server/portals/request";
 import { AiraLanding } from "@/components/aira/AiraLanding";
 import { venturesFor } from "@/components/aira/ventures";
@@ -36,7 +37,7 @@ export default async function PortalLanding({ params }: { params: Promise<{ site
     try { preview = await applicationService.publicOpportunities({ kind: "jobs", limit: 3 }); }
     catch (error) { if (!(error instanceof NiceJobsUnavailable)) console.error("nicejobs_landing_catalogue_unavailable", error instanceof Error ? error.name : "Unknown"); }
     try { introVideo = await niceJobsPortalSettings.introVideo(); }
-    catch (error) { console.error("nicejobs_intro_video_unavailable", error instanceof Error ? error.name : "Unknown"); }
+    catch (error) { console.error("nicejobs_intro_video_unavailable", error instanceof Prisma.PrismaClientKnownRequestError ? error.code : error instanceof Error ? error.name : "Unknown"); }
     const videoUrl = introVideo?.fileId ? `${process.env.NODE_ENV === "production" ? "https://nicejobs.online/intro-video" : "/sites/jobs/intro-video"}?v=${encodeURIComponent(introVideo.fileId)}` : null;
     return <JobsLanding paths={paths} introVideo={{ title: introVideo?.title ?? "What is NICEJOBS?", url: videoUrl }} opportunities={preview?.records.map(record => ({ id: record.id, title: record.title, employer: record.disclosure?.legalEmployer ?? "Employer details on listing", areas: record.areas.map(area => area.division.name) })) ?? []} availability={preview ? "ready" : "unavailable"}/>;
   }
