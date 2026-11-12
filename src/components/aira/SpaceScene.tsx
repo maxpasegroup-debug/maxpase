@@ -2,7 +2,7 @@
 
 import { AdaptiveDpr } from "@react-three/drei";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { Suspense, useLayoutEffect, useRef, type MutableRefObject } from "react";
+import { Suspense, useEffect, useLayoutEffect, useRef, type MutableRefObject } from "react";
 import { Color, DirectionalLight, PMREMGenerator, Scene, Vector3 } from "three";
 import { AiraBuilding } from "./AiraBuilding";
 import { poseAt } from "./journey";
@@ -49,9 +49,20 @@ function JourneyRig({ progress }: { progress: MutableRefObject<{ t: number }> })
   return null;
 }
 
-function SceneContents({ progress, mobile, shadows }: { progress: MutableRefObject<{ t: number }>; mobile: boolean; shadows: boolean }) {
+function SceneReady({ onReady }: { onReady: () => void }) {
+  useEffect(() => { onReady(); }, [onReady]);
+  return null;
+}
+
+function SceneUnavailable({ onUnavailable, onSkip }: { onUnavailable: () => void; onSkip: () => void }) {
+  useEffect(() => { onUnavailable(); }, [onUnavailable]);
+  return <div className="aira-scene-fallback" role="status"><p>The 3D scene is unavailable in this browser.</p><button type="button" onClick={onSkip}>Explore the brand choices</button></div>;
+}
+
+function SceneContents({ progress, mobile, shadows, onReady }: { progress: MutableRefObject<{ t: number }>; mobile: boolean; shadows: boolean; onReady: () => void }) {
   return (
     <>
+      <SceneReady onReady={onReady} />
       <color attach="background" args={["#21050B"]} />
       <fog attach="fog" args={["#21050B", 120, 420]} />
       <SpaceEnvironment />
@@ -83,11 +94,17 @@ function SceneContents({ progress, mobile, shadows }: { progress: MutableRefObje
 export function SpaceScene({
   progress,
   mobile,
-  shadows
+  shadows,
+  onReady,
+  onUnavailable,
+  onSkip
 }: {
   progress: MutableRefObject<{ t: number }>;
   mobile: boolean;
   shadows: boolean;
+  onReady: () => void;
+  onUnavailable: () => void;
+  onSkip: () => void;
 }) {
   return (
     <Canvas
@@ -101,9 +118,10 @@ export function SpaceScene({
         if (gl.domElement.parentElement) gl.domElement.parentElement.style.pointerEvents = "none";
       }}
       shadows={shadows}
+      fallback={<SceneUnavailable onUnavailable={onUnavailable} onSkip={onSkip} />}
     >
       <Suspense fallback={null}>
-        <SceneContents progress={progress} mobile={mobile} shadows={shadows} />
+        <SceneContents progress={progress} mobile={mobile} shadows={shadows} onReady={onReady} />
       </Suspense>
     </Canvas>
   );

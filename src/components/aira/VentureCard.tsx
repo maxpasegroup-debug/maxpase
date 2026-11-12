@@ -10,7 +10,7 @@ const ventureIcons = {
   jobs: BriefcaseBusiness
 } satisfies Record<Venture["id"], typeof Rocket>;
 
-export function VentureCard({ venture, index }: { venture: Venture; index: number }) {
+export function VentureCard({ venture, index, overlay = false, onSelect }: { venture: Venture; index: number; overlay?: boolean; onSelect?: (brand: Venture["id"]) => void }) {
   function tilt(event: MouseEvent<HTMLAnchorElement>) {
     const bounds = event.currentTarget.getBoundingClientRect();
     const x = (event.clientX - bounds.left) / bounds.width - 0.5;
@@ -31,11 +31,15 @@ export function VentureCard({ venture, index }: { venture: Venture; index: numbe
       className={`aira-card aira-card-${venture.id}`}
       data-venture-card=""
       href={venture.href}
+      aria-hidden={overlay ? true : undefined}
+      tabIndex={overlay ? -1 : undefined}
+      inert={overlay || undefined}
       target={external ? "_blank" : undefined}
       rel={external ? "noreferrer" : undefined}
-      style={{ "--accent": venture.accent, transitionDelay: `${index * 80}ms` } as CSSProperties}
+      style={{ "--accent": venture.accent, transitionDelay: `${index * 80}ms`, opacity: overlay ? 0 : undefined, pointerEvents: overlay ? "none" : undefined, translate: overlay ? "0 14px" : undefined } as CSSProperties}
       onMouseMove={tilt}
       onMouseLeave={reset}
+      onClick={() => onSelect?.(venture.id)}
     >
       <span className="aira-card-index">0{index + 1}</span>
       <span className={`aira-card-visual aira-card-visual-${venture.id}`} aria-hidden="true" />

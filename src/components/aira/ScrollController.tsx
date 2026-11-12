@@ -5,7 +5,16 @@ import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import Lenis from "lenis";
 
-export type ScrollHandle = { explore: () => void };
+const MOBILE_TRAVEL_VIEWPORTS = 4.5;
+const DESKTOP_TRAVEL_VIEWPORTS = 11;
+const EXPLORE_PROGRESS = 0.736;
+const BRANDS_PROGRESS = 0.995;
+
+function travelDistance(mobile: boolean) {
+  return window.innerHeight * (mobile ? MOBILE_TRAVEL_VIEWPORTS : DESKTOP_TRAVEL_VIEWPORTS);
+}
+
+export type ScrollHandle = { explore: () => void; skipToBrands: () => void };
 
 export const ScrollController = forwardRef<ScrollHandle, {
   progress: MutableRefObject<{ t: number }>;
@@ -23,7 +32,16 @@ export const ScrollController = forwardRef<ScrollHandle, {
         document.getElementById("ventures")?.scrollIntoView({ behavior: "auto", block: "start" });
         return;
       }
-      const top = window.innerHeight * (mobile ? 5.1 : 8.1);
+      const top = travelDistance(mobile) * EXPLORE_PROGRESS;
+      if (lenis.current) lenis.current.scrollTo(top);
+      else window.scrollTo({ top, behavior: "smooth" });
+    },
+    skipToBrands() {
+      if (mobile || reduced) {
+        document.getElementById("ventures")?.scrollIntoView({ behavior: reduced ? "auto" : "smooth", block: "start" });
+        return;
+      }
+      const top = travelDistance(false) * BRANDS_PROGRESS;
       if (lenis.current) lenis.current.scrollTo(top);
       else window.scrollTo({ top, behavior: "smooth" });
     }
@@ -48,7 +66,7 @@ export const ScrollController = forwardRef<ScrollHandle, {
       gsap.ticker.add(ticker);
       gsap.ticker.lagSmoothing(0);
     }
-    const travel = () => window.innerHeight * (mobile ? 7 : 11);
+    const travel = () => travelDistance(mobile);
     let frame = 0;
     let shown = -1;
     let target = 0;

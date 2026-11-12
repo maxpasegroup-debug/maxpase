@@ -1060,6 +1060,18 @@ model SecurityRateBucket {
   @@index([expiresAt])
 }
 
+model AiraJourneyDailyMetric {
+  id        String   @id @default(cuid())
+  day       DateTime @db.Date
+  eventType String
+  brand     String   @default("")
+  count     Int      @default(0)
+  updatedAt DateTime @updatedAt
+
+  @@unique([day, eventType, brand])
+  @@index([day])
+}
+
 model Integration {
   id                  String                 @id @default(cuid())
   organizationId      String

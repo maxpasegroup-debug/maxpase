@@ -28,7 +28,7 @@ const returnKey = (key: string) => "boss" + key[0].toUpperCase() + key.slice(1);
 const filterValue = (query: URLSearchParams, key: string) => query.get(query.has("returnView") ? returnKey(key) : key);
 export const workspaceReturnKeys = ["returnView", "bossCompanyId", ...filterKeys.map(returnKey)];
 export function isBossView(value: string): value is BossView { return Object.hasOwn(bossViews, value); }
-const supplementaryBossViews = ["finance", "growth", "ai-office", "search"] as const;
+const supplementaryBossViews = ["finance", "growth", "ai-office", "search", "aira-journey"] as const;
 export function isBossDestination(value: string) { return isBossView(value) || isPrimaryBossView(value) || supplementaryBossViews.some(view => view === value); }
 export function groupForView(view: string) { return workspaceGroups.find(g => g.views.some(v => v === view)) ?? workspaceGroups[0]; }
 export function groupForPath(path: string, view?: string) {
@@ -40,7 +40,7 @@ export function groupForPath(path: string, view?: string) {
     ?? (path.startsWith("/app/executive") ? workspaceGroups[0] : workspaceGroups[2]);
 }
 export function workspacePageLabel(path: string, view?: string) {
-  if (path === "/app/boss") return ({ finance: "Finance", growth: "Growth", "ai-office": "AI Office", search: "Search" } as Record<string, string>)[view ?? ""] ?? (isPrimaryBossView(view ?? "") ? primaryBossViews[view as PrimaryBossView] : bossViews[isBossView(view ?? "") ? view as BossView : "overview"]);
+  if (path === "/app/boss") return ({ finance: "Finance", growth: "Growth", "ai-office": "AI Office", search: "Search", "aira-journey": "AIRA Journey Metrics" } as Record<string, string>)[view ?? ""] ?? (isPrimaryBossView(view ?? "") ? primaryBossViews[view as PrimaryBossView] : bossViews[isBossView(view ?? "") ? view as BossView : "overview"]);
   if (path === "/app/executive") return "Executive Command Center";
   const detail = path.split("/")[3];
   if (path.startsWith("/app/executive/") && isBossView(detail)) return bossViews[detail];

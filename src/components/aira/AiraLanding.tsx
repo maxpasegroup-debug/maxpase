@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
+import { Component, useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { AiraNavigation } from "./AiraNavigation";
@@ -15,6 +15,15 @@ import { airaPublicLegalLinks } from "@/server/portals/aira-public-legal";
 import "lenis/dist/lenis.css";
 import "./aira.css";
 
+function trackAiraJourney(event: "journey_view" | "skip_to_brands" | "portals_reached" | "brand_selected", brand?: Venture["id"]) {
+  const body = JSON.stringify(brand ? { event, brand } : { event });
+  if (navigator.sendBeacon) {
+    navigator.sendBeacon("/api/analytics/aira-journey", new Blob([body], { type: "application/json" }));
+    return;
+  }
+  void fetch("/api/analytics/aira-journey", { method: "POST", headers: { "Content-Type": "application/json" }, body, keepalive: true, credentials: "same-origin" }).catch(() => {});
+}
+
 const purposePillars = [
   { title: "Skills and learning", copy: "Build practical capability through learning that connects to real work.", accent: "#D4AF62" },
   { title: "Enterprise and innovation", copy: "A home for ideas, products and the work that makes them useful.", accent: "#B89552" },
@@ -25,6 +34,22 @@ const SpaceScene = dynamic(() => import("./SpaceScene").then(module => module.Sp
   ssr: false,
   loading: () => <div className="aira-loader">Entering the AIRA universe</div>
 });
+
+class SceneErrorBoundary extends Component<{ children: ReactNode; fallback: ReactNode; onError: () => void }, { failed: boolean }> {
+  state = { failed: false };
+
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+
+  componentDidCatch() {
+    this.props.onError();
+  }
+
+  render() {
+    return this.state.failed ? this.props.fallback : this.props.children;
+  }
+}
 
 export function AiraLanding({
   home,
@@ -43,14 +68,50 @@ export function AiraLanding({
   const scroll = useRef<ScrollHandle>(null);
   const hero = useRef<HTMLDivElement>(null);
   const hint = useRef<HTMLParagraphElement>(null);
+  const journeyFill = useRef<HTMLSpanElement>(null);
+  const journeySteps = useRef<HTMLElement[]>([]);
+  const journeyChapter = useRef(-1);
+  const portalReached = useRef(false);
+  const viewTracked = useRef(false);
   const overlay = useRef<HTMLDivElement>(null);
   const welcome = useRef<HTMLDivElement>(null);
   const innovation = useRef<HTMLDivElement>(null);
   const purpose = useRef<HTMLElement>(null);
   const painted = useRef(-1);
   const ventureCards = useRef<HTMLElement[]>([]);
+  const portalTrails = useRef<SVGPathElement[]>([]);
   const [mobile, setMobile] = useState(false);
   const [reduced, setReduced] = useState(false);
+  const [sceneReady, setSceneReady] = useState(false);
+  const [sceneUnavailable, setSceneUnavailable] = useState(false);
+  const [sceneSlow, setSceneSlow] = useState(false);
+
+  const skipToBrands = useCallback(() => {
+    trackAiraJourney("skip_to_brands");
+    setSceneSlow(false);
+    scroll.current?.skipToBrands();
+  }, []);
+  const selectBrand = useCallback((brand: Venture["id"]) => trackAiraJourney("brand_selected", brand), []);
+
+  useEffect(() => {
+    if (viewTracked.current) return;
+    viewTracked.current = true;
+    trackAiraJourney("journey_view");
+  }, []);
+  const markSceneReady = useCallback(() => {
+    setSceneReady(true);
+    setSceneSlow(false);
+  }, []);
+  const markSceneUnavailable = useCallback(() => {
+    setSceneUnavailable(true);
+    setSceneSlow(false);
+  }, []);
+
+  useEffect(() => {
+    if (sceneReady || sceneUnavailable) return;
+    const timeout = window.setTimeout(() => setSceneSlow(true), 2800);
+    return () => window.clearTimeout(timeout);
+  }, [sceneReady, sceneUnavailable]);
 
   useEffect(() => {
     const mobileQuery = window.matchMedia("(max-width: 760px)");
@@ -78,6 +139,16 @@ export function AiraLanding({
       hero.current.style.transform = `translateY(calc(-50% - ${reduced ? 0 : amount * 48}px))`;
     }
     if (hint.current) hint.current.style.opacity = reduced ? "0" : String(1 - smoothstep(0.02, 0.12, amount));
+    if (journeyFill.current) journeyFill.current.style.transform = `scaleX(${reduced ? 0 : amount})`;
+    const chapter = amount < 0.66 ? 0 : amount < 0.875 ? 1 : amount < 0.955 ? 2 : 3;
+    if (chapter !== journeyChapter.current) {
+      journeyChapter.current = chapter;
+      journeySteps.current.forEach((step, index) => {
+        if (index === chapter) step.setAttribute("aria-current", "step");
+        else step.removeAttribute("aria-current");
+        step.dataset.state = index < chapter ? "complete" : index === chapter ? "current" : "upcoming";
+      });
+    }
     const showRoom = (node: HTMLDivElement | null, room: "welcome" | "innovation") => {
       if (!node) return;
       const shown = reduced ? 0 : roomOpacity(amount, room);
@@ -87,16 +158,29 @@ export function AiraLanding({
     showRoom(welcome.current, "welcome");
     showRoom(innovation.current, "innovation");
     const portal = smoothstep(0.955, 1, amount);
+    if (portal >= 0.12 && !portalReached.current) {
+      portalReached.current = true;
+      trackAiraJourney("portals_reached");
+    }
     if (overlay.current) {
-      overlay.current.style.opacity = reduced ? "0" : String(portal);
-      overlay.current.style.pointerEvents = !reduced && portal > 0.7 ? "auto" : "none";
+      overlay.current.style.opacity = !reduced && portal > 0 ? "1" : "0";
     }
     if (overlay.current && ventureCards.current.length === 0) {
       ventureCards.current = [...overlay.current.querySelectorAll<HTMLElement>("[data-venture-card]")];
+      portalTrails.current = [...overlay.current.querySelectorAll<SVGPathElement>("[data-venture-trail]")];
     }
     ventureCards.current.forEach((card, index) => {
-      const local = smoothstep(0.04 + index * 0.16, 0.46 + index * 0.14, portal);
+      const local = smoothstep(0.08 + index * 0.29, 0.4 + index * 0.29, portal);
+      const interactive = !reduced && local >= 0.12;
       card.style.opacity = String(local);
+      card.style.translate = `0 ${14 * (1 - local)}px`;
+      card.style.pointerEvents = interactive ? "auto" : "none";
+      if (!interactive && document.activeElement === card) card.blur();
+      card.tabIndex = interactive ? 0 : -1;
+      card.setAttribute("aria-hidden", String(!interactive));
+      card.inert = !interactive;
+      const trail = portalTrails.current[index];
+      if (trail) trail.style.strokeDashoffset = String(1 - local);
     });
   }, [reduced]);
 
@@ -106,13 +190,10 @@ export function AiraLanding({
     const grid = section.querySelector<HTMLElement>(".aira-purpose-grid");
     const cards = [...section.querySelectorAll<HTMLElement>(".aira-purpose-grid article")];
     if (!grid || cards.length < 2) return;
-    const copy = (card: HTMLElement) => card.querySelectorAll<HTMLElement>("h3, p, .aira-purpose-index");
-    const clear = () => cards.forEach(card => {
-      card.style.transform = "";
-      copy(card).forEach(node => { node.style.opacity = ""; });
-    });
+    const clear = () => cards.forEach(card => { card.style.transform = ""; });
     if (reduced) {
       section.classList.add("is-shown");
+      section.classList.add("is-settled");
       clear();
       return;
     }
@@ -128,12 +209,11 @@ export function AiraLanding({
       }
       const gap = Number.parseFloat(getComputedStyle(grid).columnGap) || 0;
       const width = cards[0].getBoundingClientRect().width;
-      const peek = 28;
+      const step = gap + width * 0.22;
+      const centerOffset = ((cards.length - 1) * step * (1 - spread)) / 2;
       cards.forEach((card, index) => {
-        const travel = index * (width + gap - peek) * (1 - spread);
-        const revealed = index === cards.length - 1 ? 1 : Math.min(1, Math.max(0, (spread - 0.12) / 0.4));
+        const travel = index * step * (1 - spread) - centerOffset;
         card.style.transform = `translate3d(${-travel}px, 0, 0)`;
-        copy(card).forEach(node => { node.style.opacity = String(revealed); });
       });
     };
     const trigger = ScrollTrigger.create({
@@ -158,9 +238,20 @@ export function AiraLanding({
 
   return (
     <main className={`aira-root${reduced ? " is-reduced" : ""}`}>
-      <AiraNavigation home={home} login={login} onExplore={() => scroll.current?.explore()} />
+      <AiraNavigation home={home} login={login} onExplore={() => scroll.current?.explore()} onSkipToBrands={skipToBrands} />
       <ScrollController ref={scroll} progress={progress} mobile={mobile} reduced={reduced} onProgress={paint}>
-        <SpaceScene progress={progress} mobile={mobile} shadows={!mobile && !reduced} />
+        <SceneErrorBoundary onError={markSceneUnavailable} fallback={<div className="aira-scene-fallback aira-scene-error" role="status"><p>The 3D scene could not be loaded.</p><button type="button" onClick={skipToBrands}>Explore the brand choices</button></div>}>
+          <SpaceScene progress={progress} mobile={mobile} shadows={!mobile && !reduced} onReady={markSceneReady} onUnavailable={markSceneUnavailable} onSkip={skipToBrands} />
+        </SceneErrorBoundary>
+        {sceneSlow && !sceneReady && !sceneUnavailable && <div className="aira-loader-action" role="status"><span>The AIRA scene is taking a while.</span><button type="button" onClick={skipToBrands}>Explore the brand choices</button></div>}
+        <nav className="aira-journey-progress" aria-label="AIRA journey chapters">
+          <div className="aira-journey-track" aria-hidden="true"><span ref={journeyFill} /></div>
+          <ol>
+            {["AIRA Universe", "Welcome", "Innovation", "Choose your path"].map((label, index) => (
+              <li key={label} ref={node => { if (node) journeySteps.current[index] = node; }} data-state={index === 0 ? "current" : "upcoming"} aria-current={index === 0 ? "step" : undefined}>{label}</li>
+            ))}
+          </ol>
+        </nav>
         <div className="aira-hero" ref={hero}>
           <p className="aira-brand">AIRA</p>
           <h1>BEYOND THE<br />ORDINARY.</h1>
@@ -181,9 +272,9 @@ export function AiraLanding({
           <p>AIRA</p>
           <h2>Future of<br />innovation</h2>
         </div>
-        <VenturePortals ref={overlay} variant="overlay" ventures={ventures} />
+        <VenturePortals ref={overlay} variant="overlay" ventures={ventures} onBrandSelect={selectBrand} />
       </ScrollController>
-      <VenturePortals variant="flow" ventures={ventures} />
+      <VenturePortals variant="flow" ventures={ventures} onBrandSelect={selectBrand} />
       <section className="aira-purpose" id="purpose" ref={purpose} aria-labelledby="aira-purpose-title">
         <div className="aira-purpose-head">
           <p>MOVE FORWARD WITH PURPOSE</p>
