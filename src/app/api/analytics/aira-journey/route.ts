@@ -16,7 +16,7 @@ const eventSchema = z.object({
 export async function POST(request: NextRequest) {
   const origin = request.headers.get("origin");
   let originHost = "";
-  try { originHost = origin ? new URL(origin).host : ""; } catch {}
+  try { originHost = origin ? new URL(origin).host : ""; } catch { originHost = ""; }
   if (!originHost || originHost !== request.nextUrl.host) return Response.json({ error: "Invalid origin." }, { status: 403 });
   if (!request.headers.get("content-type")?.toLowerCase().startsWith("application/json")) return Response.json({ error: "JSON required." }, { status: 415 });
   const length = Number(request.headers.get("content-length") ?? 0);
