@@ -1,5 +1,7 @@
 "use server";
 import { getSession } from "@/server/auth/session";
+import { getPortalSession } from "@/server/portals/session";
+import { requestPortal } from "@/server/portals/request";
 import { AccessError } from "@/server/authorization/engine";
 import { niceJobsIntroMedia } from "@/server/nicejobs/intro-media";
 import { safeDiagnostic } from "@/server/security/diagnostics";
@@ -7,8 +9,12 @@ import { ZodError } from "zod";
 
 export type IntroMediaState = { message?: string; error?: string };
 export async function manageNiceJobsIntroMedia(_state: IntroMediaState, form: FormData): Promise<IntroMediaState> {
-  const user = await getSession();
-  if (!user) return { error: "Sign in with an authorized Boss account." };
+  const realm = String(form.get("realm") ?? "corporate");
+  if (realm !== "corporate" && realm !== "jobs") return { error: "Sign in with an authorized NICEJOBS account." };
+  const user = realm === "jobs"
+    ? await (async () => { const { site } = await requestPortal("jobs", true); return getPortalSession(site); })()
+    : await getSession();
+  if (!user) return { error: "Sign in with an authorized NICEJOBS account." };
   try {
     const operation = String(form.get("operation") ?? "");
     if (operation === "add-language") { await niceJobsIntroMedia.addLanguage(user.userId, { code: form.get("languageCode"), name: form.get("languageName") }); return { message: "Language added. Upload its introduction when ready." }; }
