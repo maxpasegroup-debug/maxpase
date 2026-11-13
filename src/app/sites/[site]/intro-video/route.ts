@@ -9,7 +9,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ site
     const current = await contentFiles.publicIntroVideo();
     if (!current) return new NextResponse(null, { status: 404, headers: { "Cache-Control": "no-store" } });
     const { file, bytes } = current;
-    const headers = new Headers({ "Content-Type": file.mime, "Content-Length": String(bytes.length), "Content-Disposition": "inline", "Cache-Control": "public, max-age=300", "X-Content-Type-Options": "nosniff", "Cross-Origin-Resource-Policy": "cross-origin", "Accept-Ranges": "bytes" });
+    const headers = new Headers({ "Content-Type": file.mime, "Content-Length": String(bytes.length), "Content-Disposition": "inline", "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff", "Cross-Origin-Resource-Policy": "cross-origin", "Accept-Ranges": "bytes" });
     const range = request.headers.get("range");
     if (range) {
       const match = /^bytes=(\d+)-(\d*)$/.exec(range), start = match ? Number(match[1]) : -1, end = match?.[2] ? Number(match[2]) : bytes.length - 1;

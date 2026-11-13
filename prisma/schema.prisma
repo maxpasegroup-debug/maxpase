@@ -478,6 +478,48 @@ model NiceJobsPortalSetting {
   createdAt         DateTime     @default(now())
 }
 
+model NiceJobsPortalIntroduction {
+  id String @id @default(uuid())
+  companyId String
+  languageCode String
+  languageName String
+  title String @default("Introduction to NICEJOBS")
+  draftAudioFileId String?
+  draftAudioThumbnailFileId String?
+  draftAudioDurationSeconds Int?
+  draftVideoFileId String?
+  draftVideoThumbnailFileId String?
+  draftVideoDurationSeconds Int?
+  publishedMediaFileId String?
+  publishedMediaType String?
+  publishedThumbnailFileId String?
+  publishedDurationSeconds Int?
+  publishedAt DateTime?
+  updatedByUserId String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@unique([companyId, languageCode])
+  @@unique([companyId, languageName])
+  @@index([companyId, publishedAt, languageCode])
+}
+
+model NiceJobsIntroPlaybackSession {
+  id String @id @default(uuid())
+  tokenHash String @unique
+  languageCode String
+  mediaFileId String
+  durationSeconds Int
+  status String @default("PLAYING")
+  creditedSeconds Int @default(0)
+  lastPositionSeconds Float @default(0)
+  lastHeartbeatAt DateTime @default(now())
+  expiresAt DateTime
+  completedAt DateTime?
+  consumedAt DateTime?
+  createdAt DateTime @default(now())
+  @@index([status, expiresAt])
+}
+
 model NiceJobsSopStep {
   id String @id @default(cuid())
   versionId String

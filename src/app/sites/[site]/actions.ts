@@ -19,6 +19,7 @@ import { assertJobsPinReady } from "@/server/auth/jobs-pin";
 import { parsePhoneNumberFromString } from "libphonenumber-js";
 import { clearJobsRegistrationProof, hasJobsRegistrationProof, setJobsRegistrationProof } from "@/server/auth/jobs-registration-proof";
 import { staffInvite } from "@/server/skillcity/staff-invite";
+import { clearJobsIntroCompletion, hasJobsIntroCompletion } from "@/server/auth/jobs-intro-proof";
 
 export type PortalLoginState = { error?: string; challengeId?: string; message?: string; complete?: boolean; pendingVerification?: boolean; deliveryPending?: boolean };
 export async function staffPasswordResetRequestAction(_state: PortalLoginState, form: FormData): Promise<PortalLoginState> {
@@ -49,6 +50,7 @@ export async function staffPasswordResetCompleteAction(_state: PortalLoginState,
 }
 export async function jobsPhoneSignupAction(_state: PortalLoginState, form: FormData): Promise<PortalLoginState> {
   await requestPortal("jobs", true);
+  if (!await hasJobsIntroCompletion()) return { error: "Please complete the NICEJOBS introduction before creating an account." };
   let registeredUserId: string | undefined;
   try {
     jobsEmailAuth.ready();
@@ -56,10 +58,12 @@ export async function jobsPhoneSignupAction(_state: PortalLoginState, form: Form
     const registered = await applicantAccess.register({ displayName: form.get("displayName"), country: form.get("country"), nationalNumber: form.get("nationalNumber"), email: form.get("email"), acknowledge: form.get("acknowledge") === "on" });
     registeredUserId = registered.userId;
     const result = await jobsEmailAuth.beginRegistration(registered.userId);
+    await clearJobsIntroCompletion();
     await setJobsRegistrationProof(result.challengeId);
     return { ...result, pendingVerification: true, message: "Check your email for a six-digit verification code. It expires in 10 minutes." };
   } catch (error) {
     if (registeredUserId) {
+      await clearJobsIntroCompletion();
       let challengeId: string | undefined;
       try { challengeId = (await prisma.emailAuthChallenge.findFirst({ where: { userId: registeredUserId, purpose: "REGISTER" }, orderBy: { createdAt: "desc" }, select: { id: true } }))?.id; }
       catch { safeDiagnostic("operation_failed"); }

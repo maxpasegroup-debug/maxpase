@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { Prisma } from "@prisma/client";
 import { requestPortal } from "@/server/portals/request";
 import { AiraLanding } from "@/components/aira/AiraLanding";
 import { venturesFor } from "@/components/aira/ventures";
@@ -9,7 +8,6 @@ import { JobsLanding } from "../jobs-ui/landing";
 import { StartupLanding } from "../startup-ui/landing";
 import { applicationService } from "@/server/nicejobs/applications";
 import { NiceJobsUnavailable } from "@/server/nicejobs/input";
-import { niceJobsPortalSettings } from "@/server/nicejobs/portal-settings";
 const display = localFont({ src: "../fonts/syne-latin.woff2", weight: "700 800", variable: "--aira-display", display: "swap" });
 const text = localFont({ src: "../fonts/manrope-latin.woff2", weight: "400 600", variable: "--aira-text", display: "swap" });
 const startupFaqs = [
@@ -33,13 +31,9 @@ export default async function PortalLanding({ params }: { params: Promise<{ site
   if(site.id === "labs")return <LabsLanding home={paths.home} login={paths.login}/>;
   if (site.id === "jobs") {
     let preview: Awaited<ReturnType<typeof applicationService.publicOpportunities>> | null = null;
-    let introVideo: Awaited<ReturnType<typeof niceJobsPortalSettings.introVideo>> = null;
     try { preview = await applicationService.publicOpportunities({ kind: "jobs", limit: 3 }); }
     catch (error) { if (!(error instanceof NiceJobsUnavailable)) console.error("nicejobs_landing_catalogue_unavailable", error instanceof Error ? error.name : "Unknown"); }
-    try { introVideo = await niceJobsPortalSettings.introVideo(); }
-    catch (error) { console.error("nicejobs_intro_video_unavailable", error instanceof Prisma.PrismaClientKnownRequestError ? error.code : error instanceof Error ? error.name : "Unknown"); }
-    const videoUrl = introVideo?.fileId ? `${process.env.NODE_ENV === "production" ? "https://nicejobs.online/intro-video" : "/sites/jobs/intro-video"}?v=${encodeURIComponent(introVideo.fileId)}` : null;
-    return <JobsLanding paths={paths} introVideo={{ title: introVideo?.title ?? "What is NICEJOBS?", url: videoUrl }} opportunities={preview?.records.map(record => ({ id: record.id, title: record.title, employer: record.disclosure?.legalEmployer ?? "Employer details on listing", areas: record.areas.map(area => area.division.name) })) ?? []} availability={preview ? "ready" : "unavailable"}/>;
+    return <JobsLanding paths={paths} opportunities={preview?.records.map(record => ({ id: record.id, title: record.title, employer: record.disclosure?.legalEmployer ?? "Employer details on listing", areas: record.areas.map(area => area.division.name) })) ?? []} availability={preview ? "ready" : "unavailable"}/>;
   }
   if (site.id === "startup") {
     const local = paths.home.startsWith("/sites/");

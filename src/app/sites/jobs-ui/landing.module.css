@@ -288,6 +288,20 @@
 .videoToggle, .introContinue { display: inline-flex; align-items: center; justify-content: center; gap: 10px; min-height: 46px; margin-top: 16px; padding: 10px 18px; border: 0; border-radius: 6px; font-weight: 800; color: #181318; background: #e5bd70; cursor: pointer; }
 .introContinue { text-decoration: none; }
 .introDialog :focus-visible { outline: 3px solid #e5bd70; outline-offset: 3px; }
+.introLanguageGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 14px; }
+.introLanguage { display: grid; gap: 8px; padding: 10px; text-align: left; color: #f8f6f2; background: #222027; border: 1px solid rgba(229,189,112,.28); border-radius: 12px; cursor: pointer; }
+.introLanguage:hover { border-color: #e5bd70; background: #2b2728; }
+.introLanguage img { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 7px; background: #0d0c0e; }
+.introLanguage span { font-weight: 800; font-size: 17px; }
+.introLanguage small { color: #d4cdd1; }
+.introMediaHeading { display: flex; align-items: center; gap: 12px; margin: 0 0 12px; }
+.introMediaHeading p { margin: 0; font-weight: 700; }
+.introBack { display: inline-flex; align-items: center; gap: 5px; padding: 8px 10px; border: 1px solid rgba(255,255,255,.2); border-radius: 7px; color: inherit; background: #29262a; cursor: pointer; }
+.introAudioThumb { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 10px; background: #080808; }
+.introDialog audio { display: block; width: 100%; margin-top: 14px; }
+.introProgress { display: flex; align-items: center; gap: 10px; margin-top: 12px; color: #d4cdd1; font-size: 12px; }
+.introProgress progress { flex: 1; height: 7px; accent-color: #e5bd70; }
+.videoError { padding: 10px 12px; border-radius: 8px; color: #ffd4ce; background: #51221f; }
 
 @media (max-width: 600px) {
   .hero { height: calc(100svh - 68px); min-height: 0; }

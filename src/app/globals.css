@@ -2002,6 +2002,30 @@ progress { width: 120px; accent-color: var(--accent); }
 .nj-content-preview video, .nj-content-preview img { display: block; width: 100%; max-width: 960px; height: auto; max-height: 600px; object-fit: contain; margin-block: 1rem; }
 .nj-content-preview audio { display: block; width: 100%; max-width: 640px; margin-block: 1rem; }
 .nj-content-upload progress { width: 100%; max-width: 480px; }
+.nj-intro-status-list { max-width: 760px; padding: 16px; margin: 18px 0; border: 1px solid #ddd5c7; border-radius: 12px; background: #fffdfa; }
+.nj-intro-status-list h2 { margin-top: 0 !important; }
+.nj-intro-status-list > div { display: grid; grid-template-columns: minmax(120px, 1fr) auto minmax(150px, auto); gap: 10px; align-items: center; padding: 10px 0; border-top: 1px solid #eee8de; }
+.nj-intro-status-list code { color: #635c54; }
+.nj-intro-select { display: grid; gap: 6px; max-width: 480px; margin: 18px 0; }
+.nj-intro-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.nj-intro-thumbnail, .nj-intro-preview { display: block; width: min(100%, 720px); margin: 12px 0; border-radius: 10px; background: #111; }
+.nj-intro-thumbnail { aspect-ratio: 16 / 9; object-fit: cover; }
+.nj-intro-preview { max-height: 480px; }
+@media (max-width: 560px) { .nj-intro-status-list > div { grid-template-columns: 1fr auto; } .nj-intro-status-list > div span { grid-column: 1 / -1; } }
+.nj-office-admin { max-width: 1180px; }
+.nj-office-admin-header { padding: clamp(20px, 4vw, 34px); margin-bottom: 20px; border: 1px solid #e3d6bc; border-radius: 18px; background: linear-gradient(130deg, #fffdf8, #f7f1e5); }
+.nj-office-admin-header h1 { margin: 4px 0 8px; font-size: clamp(28px, 5vw, 40px) !important; }
+.nj-office-admin-header p { margin: 0; max-width: 700px; }
+.nj-office-kicker { color: #80601c; font-size: 12px; font-weight: 800; letter-spacing: .1em; }
+.nj-office-admin-groups { display: grid; gap: 18px; }
+.nj-office-admin-group { padding: 16px; border: 1px solid #e7e1d6; border-radius: 16px; background: white; }
+.nj-office-admin-group h2 { margin: 0 0 12px !important; font-size: 17px !important; }
+.nj-office-admin-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 10px; }
+.nj-office-admin-card { display: flex; justify-content: space-between; align-items: center; min-height: 56px; gap: 12px; padding: 14px; border: 1px solid #e9e5dd; border-radius: 12px; color: #231d1b; text-decoration: none; font-weight: 700; background: #fffefa; }
+.nj-office-admin-card:hover { border-color: #c99b48; background: #fbf4e5; }
+.nj-office-admin-card span:last-child { color: #956c25; font-size: 20px; }
+.nj-office-admin-note { padding: 12px 14px; margin-top: 18px; border-left: 3px solid #bc8e3d; color: #5f574d; background: #faf7f0; font-size: 13px; }
+@media (max-width: 600px) { .nj-office-admin { padding: 4px !important; } .nj-office-admin-grid { grid-template-columns: 1fr; } .nj-office-admin-card { min-height: 52px; } }
 .nj-curriculum { min-width: 0; }
 .nj-curriculum-toolbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
 .nj-curriculum-policy { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 16px; }

@@ -85,15 +85,21 @@ export function createContentFiles(client: PrismaClient = prisma, storage: Conte
     }, { timeout: 20000 });
   }
   async function publicIntroVideo() {
-    const setting = await client.niceJobsPortalSetting.findFirst({
-      where: { id: "nice-jobs", company: { slug: "aira-skill-city" } },
-      include: { introVideoFile: { include: { organization: { select: { slug: true, parent: { select: { slug: true } } } } } } }
-    });
-    const file = setting?.introVideoFile;
-    if (!setting || !file || file.companyId !== setting.companyId || file.mediaType !== "VIDEO" || file.organization.slug !== "aira-career-hub" || file.organization.parent?.slug !== "aira-skill-city") return null;
+    const company = await client.organization.findUnique({ where: { slug: "aira-skill-city" }, select: { id: true } });
+    const career = await client.organization.findUnique({ where: { slug: "aira-career-hub" }, select: { id: true, parentId: true } });
+    if (!company || career?.parentId !== company.id) return null;
+    const introduction = await client.niceJobsPortalIntroduction.findUnique({ where: { companyId_languageCode: { companyId: company.id, languageCode: "en" } } });
+    if (!introduction?.publishedAt || introduction.publishedMediaType !== "VIDEO" || !introduction.publishedMediaFileId || (introduction.publishedDurationSeconds ?? 0) < 3) return null;
+    const file = await client.niceJobsContentFile.findFirst({ where: { id: introduction.publishedMediaFileId, companyId: company.id, organizationId: career.id, mediaType: "VIDEO" } });
+    if (!file) return null;
     const bytes = await readData(file);
     return { file, bytes };
   }
-  return { upload, authorizeIn, download, publicIntroVideo, storage, async preflight(userId: string, organizationId: string) { return client.$transaction(db => authority(db, userId, organizationId)); }, async authorize(userId: string, organizationId: string, id: string) { const file = await client.$transaction(db => authorizeIn(db, userId, organizationId, id)); return { privateHandle: file.id, mimeType: file.mime, filename: file.filename }; } };
+  async function readStoredFile(id: string) {
+    const file = await client.niceJobsContentFile.findUnique({ where: { id } });
+    if (!file) throw new AccessError("Content unavailable");
+    return { file, bytes: await readData(file) };
+  }
+  return { upload, authorizeIn, download, publicIntroVideo, readStoredFile, storage, async preflight(userId: string, organizationId: string) { return client.$transaction(db => authority(db, userId, organizationId)); }, async authorize(userId: string, organizationId: string, id: string) { const file = await client.$transaction(db => authorizeIn(db, userId, organizationId, id)); return { privateHandle: file.id, mimeType: file.mime, filename: file.filename, mediaType: file.mediaType }; } };
 }
 export const contentFiles = createContentFiles();
