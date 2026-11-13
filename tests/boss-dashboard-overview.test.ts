@@ -13,7 +13,7 @@ const Link = ({ href, children, ...props }: { href: string; children: ReactNode 
 const Icon = () => createElement("span", null);
 const mocks: Record<string, unknown> = {
   "next/link": { __esModule: true, default: Link },
-  "lucide-react": { ArrowRight: Icon, Bot: Icon, BriefcaseBusiness: Icon, Building2: Icon, ClipboardCheck: Icon, FolderKanban: Icon, Users: Icon },
+  "lucide-react": { ArrowRight: Icon, BriefcaseBusiness: Icon, Building2: Icon, Users: Icon, Wallet: Icon },
   "@/components/ui/status": { Status: ({ value }: { value: string }) => createElement("span", null, value) },
   "@/components/ui/user-time": { UserTime: () => createElement("span", null, "Not recorded") },
   "@/server/group/boss-reliability": { bossHref: (view: string) => `/app/boss?view=${view}` },
@@ -35,20 +35,22 @@ function render(overrides: Record<string, unknown> = {}) {
 }
 
 describe("Boss dashboard overview", () => {
-  it("shows actual zeroes, qualified preview labels, and no invented progress or NEXA analysis", () => {
+  it("shows a simple group home with honest counts and no invented progress", () => {
     const html = render();
-    expect(html).toContain("Group dashboard");
-    expect(html).toContain("0</strong>");
-    expect(html).toContain("No urgent items in the accessible preview");
-    expect(html).toContain("Departments");
+    expect(html).toContain("Your group at a glance");
+    expect(html).toContain("Companies");
+    expect(html).toContain("Priority items");
+    expect(html).toContain("Nothing urgent was found");
+    expect(html).toContain("Open a workspace");
+    expect(html).toContain("AIRA SKILL CITY PRIVATE LIMITED");
     expect(html).not.toContain("78%");
   });
   it("keeps restricted metrics unavailable and links an authorized decision", () => {
     const row = { id: "decision", title: "Review assignment", organizationId: "company", priority: "HIGH", dueAt: null };
-    const html = render({ headline: { activeProjects: null, activePeople: null }, overview: { queues: { decisions: [row], approvals: [] }, coverage: { decisions: true, approvals: true }, urgent: [{ queue: "decisions", row }], canAct: () => true, nextAction: () => "Record the decision" } });
-    expect(html).toContain("Unavailable");
+    const html = render({ readable: { brand: false }, overview: { queues: { decisions: [row], approvals: [] }, coverage: { decisions: true, approvals: true }, urgent: [{ queue: "decisions", row }], canAct: () => true, nextAction: () => "Record the decision" } });
+    expect(html).toContain("Not available");
     expect(html).toContain("Review assignment");
     expect(html).toContain("/app/boss?view=overview&amp;queue=decisions");
-    expect(html).toContain("Pending decisions");
+    expect(html).toContain("Priority items");
   });
 });

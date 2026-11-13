@@ -2,24 +2,30 @@
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { ArrowLeft, BarChart3, Bell, Building2, ChevronDown, ChevronRight, ClipboardList, Gavel, Grid2X2, LayoutDashboard, Menu, Search, Settings, Users, Wallet, X } from "lucide-react";
-import { bossViews, groupForPath, isBossDestination, navigationBossHref, workspaceGroups, workspaceHref, workspacePageLabel } from "@/lib/workspace-navigation";
+import { ArrowLeft, BarChart3, Bell, BriefcaseBusiness, Building2, ChevronDown, ChevronRight, ClipboardList, Gavel, Grid2X2, LayoutDashboard, Menu, Search, Settings, TrendingUp, Users, Wallet, X } from "lucide-react";
+import { groupForPath, isBossDestination, navigationBossHref, workspaceGroups, workspaceHref, workspacePageLabel } from "@/lib/workspace-navigation";
 import { bossDepartments, departmentHref, type BossDepartment } from "@/lib/boss-departments";
 import { timezoneLabel } from "@/lib/timezone";
 import { TimezoneContext } from "./ui/user-time";
 
 const icons = [LayoutDashboard, Building2, ClipboardList, Gavel, Users, Settings];
 const bossDestinations = [
-  { label: "Dashboard", icon: LayoutDashboard, view: "overview" },
-  { label: "Marketing", icon: BarChart3, department: "marketing" },
-  { label: "HR", icon: Users, department: "hr" },
-  { label: "Sales", icon: ClipboardList, department: "sales" },
-  { label: "Finance", icon: Wallet, department: "finance" },
-  { label: "Operations", icon: ClipboardList, department: "operations" },
+  { label: "Home", icon: LayoutDashboard, view: "overview" },
   { label: "Companies & Brands", icon: Building2, view: "companies" },
+  { label: "Growth", icon: TrendingUp, view: "growth" },
+  { label: "People & HR", icon: Users, department: "hr" },
+  { label: "Money", icon: Wallet, department: "finance" },
+  { label: "Work & Delivery", icon: BriefcaseBusiness, department: "operations" },
+  { label: "Decisions", icon: Gavel, view: "approvals" },
   { label: "Reports", icon: BarChart3, view: "performance" },
-  { label: "Approvals", icon: ClipboardList, view: "approvals" },
-  { label: "Settings", icon: Settings, view: "settings" },
+] as const;
+const bossMoreTools = [
+  { label: "NICEJOBS management", href: () => "/app/boss/nicejobs?view=workforce-command" },
+  { label: "NEXA command", href: (companyId?: string) => `/app/boss?view=nexa${companyId ? `&companyId=${encodeURIComponent(companyId)}` : ""}` },
+  { label: "AIRA journey report", href: (companyId?: string) => `/app/boss?view=aira-journey${companyId ? `&companyId=${encodeURIComponent(companyId)}` : ""}` },
+  { label: "System health", href: (companyId?: string) => `/app/boss?view=system${companyId ? `&companyId=${encodeURIComponent(companyId)}` : ""}` },
+  { label: "Settings & access", href: (companyId?: string) => `/app/boss?view=settings${companyId ? `&companyId=${encodeURIComponent(companyId)}` : ""}` },
+  { label: "Audit & security", href: (companyId?: string) => `/app/boss?view=audit${companyId ? `&companyId=${encodeURIComponent(companyId)}` : ""}` },
 ] as const;
 type Props = { boss: boolean; email: string; name: string; timezone: string; unread: number | null; companies: { id: string; name: string }[]; brands: { id: string; name: string; organizationId: string }[]; children: React.ReactNode; logout: React.ReactNode };
 export function WorkspaceShell({ boss, email, name, timezone, unread, companies, brands, children, logout }: Props) {
@@ -50,9 +56,12 @@ export function WorkspaceShell({ boss, email, name, timezone, unread, companies,
   function Navigation({ mobile = false }: { mobile?: boolean }) {
     return <nav aria-label={mobile ? "Mobile navigation" : "Main navigation"}>
       <div className="workspace-primary">{boss ? bossDestinations.map(({label,icon:Icon,...target}) => { const destination = "department" in target ? departmentHref(target.department, companyId, brandId) : navigationBossHref(target.view, new URLSearchParams(query.toString())); const active = "department" in target ? department === target.department : path === "/app/boss" && view === target.view; return <Link prefetch={false} key={label} href={destination} aria-current={active ? "page" : undefined} onClick={mobile?close:undefined}><Icon size={19}/>{label}</Link>; }) : workspaceGroups.map((g, i) => { const Icon = icons[i]; return <Link prefetch={false} key={g.key} href={groupHref(g.key)} aria-current={g.key === group.key ? "true" : undefined} onClick={mobile ? close : undefined}><Icon size={19}/>{g.label}</Link>; })}</div>
-      {!onBossPage && !department && <div className="workspace-secondary"><p>{group.label}</p>{boss && group.views.map(v => <Link prefetch={false} key={v} href={navigationBossHref(v, new URLSearchParams(query.toString()))} aria-current={path === "/app/boss" && view === v ? "page" : undefined} onClick={mobile ? close : undefined}>{bossViews[v]}</Link>)}
-        <details key={group.key} open={!boss}><summary>Detailed modules<ChevronDown size={16} aria-hidden="true"/></summary>{group.modules.map(m => <Link prefetch={false} key={m.href} href={workspaceHref(m.href, companyId, path === "/app/boss" ? view : returnView ?? group.views[0], new URLSearchParams(query.toString()))} aria-current={path === m.href ? "page" : undefined} onClick={mobile ? close : undefined}>{m.label}</Link>)}</details>
-      </div>}
+      {boss ? <div className="workspace-secondary boss-more-tools"><details><summary>More tools<ChevronDown size={16} aria-hidden="true"/></summary>{bossMoreTools.map(tool => {
+        const href = tool.href(companyId);
+        const activeView = href.includes("?view=") ? new URL(href, "https://maxpase.local").searchParams.get("view") : null;
+        const active = activeView ? path === "/app/boss" && view === activeView : href.startsWith("/app/boss/nicejobs") ? path.startsWith("/app/boss/nicejobs") : path === href.split("?")[0];
+        return <Link prefetch={false} key={tool.label} href={href} aria-current={active ? "page" : undefined} onClick={mobile ? close : undefined}>{tool.label}</Link>;
+      })}</details></div> : !onBossPage && !department && <div className="workspace-secondary"><p>{group.label}</p><details key={group.key} open><summary>Detailed modules<ChevronDown size={16} aria-hidden="true"/></summary>{group.modules.map(m => <Link prefetch={false} key={m.href} href={workspaceHref(m.href, companyId, returnView ?? group.views[0], new URLSearchParams(query.toString()))} aria-current={path === m.href ? "page" : undefined} onClick={mobile ? close : undefined}>{m.label}</Link>)}</details></div>}
     </nav>;
   }
   return <TimezoneContext.Provider value={timezone}><div className={`app-shell workspace-shell${boss ? " boss-shell" : ""}`}><a className="skip-link" href="#main-content">Skip to content</a>

@@ -1,8 +1,9 @@
 import Link from "next/link";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, Building2, BriefcaseBusiness, Users, Wallet } from "lucide-react";
+import { Status } from "@/components/ui/status";
 import { bossHref } from "@/server/group/boss-reliability";
 import { overviewHref, overviewKey } from "@/server/group/boss-overview";
-import { bossDepartments, departmentHref, type BossDepartment } from "@/lib/boss-departments";
+import { departmentHref } from "@/lib/boss-departments";
 import type { bossService } from "@/server/group/boss-service";
 
 type Data = Awaited<ReturnType<typeof bossService.dashboard>>;
@@ -10,21 +11,57 @@ type Query = Record<string, string | string[] | undefined>;
 
 export function BossDashboardOverview({ data, query }: { data: Data; query: Query }) {
   const scope = data.selectedCompanyId;
-  const pending = [...data.overview.queues.decisions, ...data.overview.queues.approvals].filter(row => data.overview.canAct(row));
-  const pendingCount = data.overview.coverage.decisions && data.overview.coverage.approvals ? new Set(pending.map(overviewKey)).size : null;
   const brands = data.brands.filter(row => "organizationId" in row && (!scope || row.organizationId === scope));
-  const summaries = [
-    { label: "Companies", value: data.companies.length, href: bossHref("companies", scope, query), note: "Authorized registry" },
-    { label: "Brands", value: data.readable.brand ? brands.length : null, href: bossHref("companies", scope, query), note: "Accessible records" },
-    { label: "Active people", value: data.headline.activePeople, href: departmentHref("hr", scope), note: "Active members; not employee headcount" },
-    { label: "Pending decisions", value: pendingCount, href: bossHref("approvals", scope, query), note: "Actionable in current preview" },
+  const urgent = data.overview.urgent.slice(0, 4);
+  const metrics = [
+    { label: "Companies", value: data.companies.length, note: "In your current view", href: bossHref("companies", scope, query), icon: Building2 },
+    { label: "Brands", value: data.readable.brand ? brands.length : null, note: data.readable.brand ? "In your current view" : "Access not available", href: bossHref("companies", scope, query), icon: BriefcaseBusiness },
+    { label: "Priority items", value: data.overview.coverage.approvals || data.overview.coverage.decisions ? data.overview.urgent.length : null, note: "Items needing attention", href: bossHref("approvals", scope, query), icon: Wallet },
   ];
-  const shortcuts: BossDepartment[] = ["marketing", "hr", "sales", "finance", "operations"];
+  const workspaces = [
+    { label: "Growth", description: "Marketing, sales and opportunities", href: bossHref("growth", scope, query), icon: BriefcaseBusiness },
+    { label: "People & HR", description: "Employees and hiring", href: departmentHref("hr", scope), icon: Users },
+    { label: "Money", description: "Finance and company records", href: departmentHref("finance", scope), icon: Wallet },
+    { label: "Work & Delivery", description: "Projects and daily operations", href: departmentHref("operations", scope), icon: Building2 },
+  ];
+
   return <div className="boss-simple-dashboard">
-    <header><h2>Group dashboard</h2><p>Choose a department, then a company and brand to manage its work.</p></header>
-    <section className="boss-simple-metrics" aria-label="Recorded group summary">{summaries.map(item => <Link key={item.label} href={item.href}><span>{item.label}</span><strong>{item.value ?? "Unavailable"}</strong><small>{item.note}</small></Link>)}</section>
-    <div className="boss-simple-columns"><section className="executive-band"><header><h2>Needs your attention</h2><Link href={bossHref("approvals", scope, query)}>All approvals <ArrowRight size={16}/></Link></header>{data.overview.urgent.length ? <ul className="executive-list">{data.overview.urgent.slice(0, 4).map(({ queue, row }) => <li key={overviewKey(row)}><Link href={overviewHref(queue, scope, overviewKey(row), query)}>{row.title}</Link><small>{data.overview.nextAction(row)}</small></li>)}</ul> : <p>No urgent items in the accessible preview. This does not establish company health.</p>}</section>
-      <section className="executive-band"><h2>Departments</h2><nav className="boss-simple-shortcuts" aria-label="Department workspaces">{shortcuts.map(key => <Link key={key} href={departmentHref(key, scope)}>{bossDepartments[key].label}<ArrowRight size={16}/></Link>)}</nav><p className="muted">Sales pipeline, campaign performance and financial totals are unavailable until their scoped reporting sources are connected.</p></section></div>
-    <nav className="boss-simple-bottom" aria-label="Group tools"><Link href={bossHref("companies", scope, query)}>Companies &amp; Brands</Link><Link href={bossHref("performance", scope, query)}>Reports</Link><Link href={bossHref("aira-journey", scope, query)}>AIRA Journey Metrics</Link><Link href={bossHref("nexa", scope, query)}>NEXA Command</Link></nav>
+    <header className="boss-home-heading">
+      <p className="eyebrow">MAXPASE GROUP</p>
+      <h1>Your group at a glance</h1>
+      <p>See what needs your attention, then open the workspace for the job.</p>
+    </header>
+
+    <section className="boss-simple-metrics" aria-label="Group summary">
+      {metrics.map(({ label, value, note, href, icon: Icon }) => <Link key={label} href={href}>
+        <span className="boss-home-metric-icon"><Icon size={18} aria-hidden="true"/></span>
+        <span>{label}</span>
+        <strong>{value === null ? "Not available" : value}</strong>
+        <small>{note}</small>
+      </Link>)}
+    </section>
+
+    <section className="executive-band boss-home-attention">
+      <header><div><h2>Needs your attention</h2><p>Start with these items.</p></div><Link href={bossHref("approvals", scope, query)}>View decisions <ArrowRight size={16}/></Link></header>
+      {urgent.length ? <ul className="executive-list">{urgent.map(({ queue, row }) => <li key={overviewKey(row)}>
+        <div><Link href={overviewHref(queue, scope, overviewKey(row), query)}>{row.title}</Link><small>{data.overview.nextAction(row)}</small></div>
+      </li>)}</ul> : <p className="boss-home-empty">Nothing urgent was found in the records available to your account.</p>}
+    </section>
+
+    <section className="executive-band boss-home-companies">
+      <header><div><h2>Your companies</h2><p>Open a company to manage its brands and work.</p></div><Link href={bossHref("companies", scope, query)}>View all <ArrowRight size={16}/></Link></header>
+      {data.cards.length ? <div className="boss-home-company-grid">{data.cards.slice(0, 4).map(company => <article key={company.organizationId}>
+        <div className="boss-home-company-mark"><Building2 size={18} aria-hidden="true"/></div>
+        <div className="boss-home-company-copy"><h3>{company.legalName ?? company.displayName}</h3><p>Company record status: <Status value={company.status}/></p></div>
+        <Link aria-label={`Open ${company.legalName ?? company.displayName}`} href={bossHref("companies", company.organizationId, query)}><ArrowRight size={18}/></Link>
+      </article>)}</div> : <p className="boss-home-empty">Company records are unavailable in this view.</p>}
+    </section>
+
+    <section className="executive-band boss-home-workspaces">
+      <header><div><h2>Open a workspace</h2><p>Choose the area you want to manage.</p></div></header>
+      <nav aria-label="Business workspaces">{workspaces.map(({ label, description, href, icon: Icon }) => <Link key={label} href={href}>
+        <span className="boss-home-workspace-icon"><Icon size={19} aria-hidden="true"/></span><span><strong>{label}</strong><small>{description}</small></span><ArrowRight size={17} aria-hidden="true"/>
+      </Link>)}</nav>
+    </section>
   </div>;
 }
