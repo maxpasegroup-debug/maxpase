@@ -8,6 +8,7 @@ import { createBossService } from "@/server/group/boss-service";
 const advisor = ["organization.read", "product.read", "aira.crm.self", "aira.crm.perform"];
 const director = ["organization.read", "executive.read", "decision.read", "decision.decide", "approval.read", "approval.decide", "person.read", "person.create", "person.update", "user.read", "user.create", "user.update", "membership.read", "membership.manage", "membership.assign_role", "membership.scope.manage", "role.read", "product.read", "program.manage", "project.read", "task.read", "task.manage", "aira.crm.self", "aira.crm.perform", "aira.crm.manage", "labs.sales.self", "labs.sales.perform", "labs.sales.read", "labs.sales.manage", "labs.delivery.assignee", "sia.access.read"];
 const divisionDirector = ["organization.read", "executive.read", "decision.read", "decision.decide", "approval.read", "approval.decide", "person.read", "person.create", "person.update", "user.read", "user.create", "user.update", "membership.read", "membership.manage", "membership.assign_role", "role.read", "project.read", "task.read", "task.manage"];
+const niceJobsDirector = ["organization.read", "nicejobs.command.read", "nicejobs.job.read", "nicejobs.job.create", "nicejobs.job.edit", "nicejobs.job.publish", "nicejobs.job.pause", "nicejobs.job.archive", "nicejobs.worker.read", "nicejobs.worker.assign", "nicejobs.worker.transition", "nicejobs.workspace.read", "nicejobs.application.read", "nicejobs.application.evaluate", "nicejobs.application.shortlist", "nicejobs.application.reject", "nicejobs.application.close", "nicejobs.onboarding.read", "nicejobs.onboarding.manage", "nicejobs.orientation.manage", "nicejobs.ojt.configure", "nicejobs.ojt.assign", "nicejobs.ojt.review", "nicejobs.readiness.review", "nicejobs.knowledge.read", "nicejobs.knowledge.manage", "nicejobs.knowledge.review", "nicejobs.knowledge.publish", "nicejobs.resource.read", "nicejobs.finance.policy.read", "nicejobs.finance.incentive.read", "nicejobs.finance.wallet.read", "nicejobs.finance.settlement.read", "nicejobs.finance.payout.read", "nicejobs.performance.read", "nicejobs.exception.read"] as const;
 export const administrativeOfficerRolePermissions = ["organization.read", "company.read", "skillcity.administrative.read", "skillcity.administrative.task.perform", "task.read", "event.read", "labs.billing.status.read", "labs.billing.customer.read", "labs.billing.customer.manage"] as const;
 export const labsDeveloperRolePermissions = ["organization.read", "labs.delivery.assignee", "project.read", "task.read", "task.manage", "blocker.manage"] as const;
 const templates = [
@@ -18,6 +19,7 @@ const templates = [
   { scope: "aira-startup-school", key: "startup-division-director", name: "Division Director", permissions: [...divisionDirector, "program.manage", "aira.crm.self", "aira.crm.perform", "aira.crm.manage"] },
   { scope: "aira-skill-studio", key: "studio-division-director", name: "Division Director", permissions: [...divisionDirector, "aira.crm.self", "aira.crm.perform", "aira.crm.manage"] },
   { scope: "aira-career-hub", key: "career-division-director", name: "Division Director", permissions: divisionDirector },
+  { scope: "aira-career-hub", key: "nicejobs-director", name: "NICEJOBS Director", permissions: niceJobsDirector },
   { scope: "aira-labs", key: "labs-junior-academic-advisor", name: "Junior Academic Advisor", permissions: ["organization.read", "labs.sales.self", "labs.sales.perform"] },
   { scope: "aira-startup-school", key: "startup-junior-academic-advisor", name: "Junior Academic Advisor", permissions: ["organization.read", "aira.crm.self", "aira.crm.perform"] },
   { scope: "aira-skill-studio", key: "studio-junior-academic-advisor", name: "Junior Academic Advisor", permissions: ["organization.read", "aira.crm.self", "aira.crm.perform"] },
@@ -34,7 +36,7 @@ export function createSkillCityRoleTemplates(client: PrismaClient = prisma) {
       const company = await db.organization.findUnique({ where: { slug: "aira-skill-city" }, select: { id: true, parentId: true, type: true, status: true } });
       if (!company || company.parentId !== root.id || company.type !== "COMPANY" || company.status !== "ACTIVE") throw new AccessError("AIRA company unavailable");
       const directorScopes = await db.organization.findMany({ where: { OR: [{ id: company.id }, { parentId: company.id, type: "DIVISION" }] }, select: { id: true } });
-      const existingDirectors = await db.role.findMany({ where: { organizationId: { in: directorScopes.map(scope => scope.id) }, key: { in: ["aira-03", "labs-division-director", "startup-division-director", "studio-division-director", "career-division-director"] } }, select: { id: true } });
+      const existingDirectors = await db.role.findMany({ where: { organizationId: { in: directorScopes.map(scope => scope.id) }, key: { in: ["aira-03", "labs-division-director", "startup-division-director", "studio-division-director", "career-division-director", "nicejobs-director"] } }, select: { id: true } });
       const appointed = await db.membershipRole.count({ where: { roleId: { in: existingDirectors.map(role => role.id) }, membership: { status: "ACTIVE" } } });
       if (appointed && !reviewedExistingDirectors) throw new AccessError("Review existing director appointments before changing this shared role");
       const definitions = new Map(workforcePermissions.map(permission => [permission.key, permission]));
@@ -54,7 +56,7 @@ export function createSkillCityRoleTemplates(client: PrismaClient = prisma) {
           await ctx.requireDelegation(permission, { organizationId: target.id }, saved.organizationId === company.id);
           await db.rolePermission.upsert({ where: { roleId_permissionId: { roleId: saved.id, permissionId: permission.id } }, create: { roleId: saved.id, permissionId: permission.id }, update: {} });
         }
-        if (template.key === "aira-administrative-officer" || template.key.startsWith("labs-") && template.key.endsWith("-developer")) {
+        if (template.key === "aira-administrative-officer" || template.key === "nicejobs-director" || template.key.startsWith("labs-") && template.key.endsWith("-developer")) {
           const allowed = new Set<string>(template.permissions);
           const assigned = await db.rolePermission.findMany({ where: { roleId: saved.id }, select: { permissionId: true, permission: { select: { key: true } } } });
           const revoked = assigned.filter(grant => !allowed.has(grant.permission.key)).map(grant => grant.permissionId);

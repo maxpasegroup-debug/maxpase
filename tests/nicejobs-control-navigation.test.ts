@@ -4,8 +4,8 @@ import { workforcePermissions } from "@/server/authorization/registry";
 import { automationProvenance } from "@/server/nicejobs/automation-provenance";
 
 describe("Nice Jobs focused management navigation", () => {
-  it("groups existing lifecycle work in eight founder sections without manufacturing capabilities", () => {
-    expect(niceJobsControlGroups.map(g => g.label)).toEqual(["Companies", "Products & Programmes", "Resources", "Opportunities", "Incentives", "Participants", "Admissions", "Reports"]);
+  it("groups existing lifecycle work in nine sections without manufacturing capabilities", () => {
+    expect(niceJobsControlGroups.map(g => g.label)).toEqual(["Office Admin", "Companies", "Products & Programmes", "Resources", "Opportunities", "Incentives", "Participants", "Admissions", "Reports"]);
     for (const g of niceJobsControlGroups) for (const [, , permission] of g.entries) expect(workforcePermissions.some(p => p.key === permission)).toBe(true);
     expect(niceJobsControlGroup("founder-companies")).toBe("companies");
     expect(niceJobsControlGroup("founder-programmes")).toBe("programmes");

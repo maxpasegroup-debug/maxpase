@@ -5,18 +5,19 @@ import { accessAction, type AccessState } from "./actions";
 import { StaffInvitePanel } from "@/components/staff-invite-panel";
 import { bossStaffInviteAction, bossStaffReviewAction } from "@/app/app/boss/command/staff-actions";
 
-type Scope = { organizationId: string; name: string; roleId: string; roleName: string; managers: { id: string; email: string }[] };
+type Scope = { organizationId: string; name: string; roleId: string; roleName: string; phone?: string | null; managers: { id: string; email: string }[] };
 type Draft = { id: string; email: string; role: string; reviewable: boolean; decisionsRecorded: boolean };
 
 function AppointmentForm({ employmentId, scope }: { employmentId: string; scope: Scope }) {
   const [state, action, pending] = useActionState(accessAction, {} as AccessState);
   const [manager, setManager] = useState("");
+  const isNiceJobsDirector = scope.roleName === "NICEJOBS Director";
   return <form action={action} className="boss-hr-action-form"><input type="hidden" name="intent" value="prepare-staff"/><input type="hidden" name="employmentId" value={employmentId}/><input type="hidden" name="organizationId" value={scope.organizationId}/><input type="hidden" name="roleId" value={scope.roleId}/>
     <h3>{scope.roleName} · {scope.name}</h3>
     <label>Role and scope decision reference <input name="scopeDecisionReference" required minLength={8} maxLength={200}/></label>
-    <label>Reviewed manager <select name="managerUserId" value={manager} onChange={event => setManager(event.target.value)}><option value="">Assign during review</option>{scope.managers.map(item => <option key={item.id} value={item.id}>{item.email}</option>)}</select></label>
-    {manager && <label>Manager decision reference <input name="managerDecisionReference" required minLength={8} maxLength={200}/></label>}
-    <p>This reuses the employee record and creates an inactive account draft. It does not send an invitation or grant login access.</p>
+    {isNiceJobsDirector ? <><label>Country <select name="country" defaultValue="IN"><option value="IN">India (+91)</option><option value="US">United States (+1)</option><option value="GB">United Kingdom (+44)</option><option value="CA">Canada (+1)</option><option value="AU">Australia (+61)</option></select></label><label>Mobile number <input name="nationalNumber" type="tel" inputMode="tel" autoComplete="tel-national" defaultValue={scope.phone ?? ""} required/></label></> : <label>Reviewed manager <select name="managerUserId" value={manager} onChange={event => setManager(event.target.value)}><option value="">Assign during review</option>{scope.managers.map(item => <option key={item.id} value={item.id}>{item.email}</option>)}</select></label>}
+    {!isNiceJobsDirector && manager && <label>Manager decision reference <input name="managerDecisionReference" required minLength={8} maxLength={200}/></label>}
+    <p>{isNiceJobsDirector ? "Creates a pending appointment only. The appointee must verify email and mobile access and set their own NICEJOBS PIN before Director permissions activate." : "This reuses the employee record and creates an inactive account draft. It does not send an invitation or grant login access."}</p>
     <button className="button" disabled={pending}>{pending ? "Saving…" : "Prepare staff account"}</button>{state.error && <p role="alert">{state.error}</p>}{state.message && <p role="status">{state.message}</p>}
   </form>;
 }

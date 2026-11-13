@@ -31,15 +31,15 @@ export default async function EmployeeProfilePage({ params, searchParams }: { pa
     const activeAssignments = employee.assignments.filter(row => row.status === "ACTIVE");
     const canLogIn = employee.status === "ACTIVE" && access.account?.status === "ACTIVE" && access.account.verified && access.memberships.some(row => row.status === "ACTIVE");
     const profileCompleteness = hrProfileCompleteness({ ...employee, displayName: employee.person.displayName, email: employee.person.email });
-    const staffScopes: { organizationId: string; name: string; roleId: string; roleName: string; managers: { id: string; email: string }[] }[] = [];
+    const staffScopes: { organizationId: string; name: string; roleId: string; roleName: string; phone: string | null; managers: { id: string; email: string }[] }[] = [];
     const staffDrafts: { scopeId: string; rows: { id: string; email: string; role: string; reviewable: boolean; decisionsRecorded: boolean }[]; managers: { id: string; email: string }[] }[] = [];
     if (tab === "access" && employee.status === "ACTIVE" && employee.person.email && (!access.account || access.account.status === "INACTIVE")) {
       for (const target of access.targets) {
-        const desiredRole = target.brandId ? "Full Stack Developer" : "Administrative Officer";
+        const desiredRole = target.name === "NICEJOBS Director workspace" ? "NICEJOBS Director" : target.brandId ? "Full Stack Developer" : "Administrative Officer";
         const options = await staffOnboardingService.options(session.userId, target.id).catch(error => { if (error instanceof AccessError) return null; throw error; });
         if (!options?.canPrepare) continue;
         const role = options.roles.find(item => item.name === desiredRole);
-        if (!access.account && role) staffScopes.push({ organizationId: target.id, name: target.name, roleId: role.id, roleName: desiredRole, managers: options.managers });
+        if ((!access.account || access.account.status === "INACTIVE" && access.account.realm === "jobs") && role) staffScopes.push({ organizationId: target.id, name: target.name, roleId: role.id, roleName: desiredRole, phone: employee.person.phone, managers: options.managers });
         if (access.account?.status === "INACTIVE") {
           const rows = await staffInvite.drafts(session.userId, target.id).catch(error => { if (error instanceof AccessError) return []; throw error; });
           const own = rows.filter(row => row.id === access.account?.id);

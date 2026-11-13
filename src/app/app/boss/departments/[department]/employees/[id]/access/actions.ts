@@ -7,6 +7,7 @@ import { hrAccess } from "@/server/group/hr-access";
 import { hrEmploymentService } from "@/server/group/hr-employment";
 import { staffOnboardingService } from "@/server/skillcity/staff-onboarding";
 import { staffInvite } from "@/server/skillcity/staff-invite";
+import { niceJobsDirectorInvite } from "@/server/auth/nicejobs-director-invite";
 import { safeDiagnostic } from "@/server/security/diagnostics";
 
 export type AccessState = { message?: string; error?: string };
@@ -23,28 +24,32 @@ export async function accessAction(_previous: AccessState, form: FormData): Prom
       case "resume-account": await hrAccess.resumeAccount(session.userId, { employmentId, decisionReference: value("decisionReference") }); break;
       case "send-invite": {
         const overview = await hrAccess.overview(session.userId, employmentId);
-        if (!["AIRA Skill City", "AIRA Labs"].includes(overview.portal) || !overview.account || overview.account.id !== value("userId")) throw new AccessError("Invitation unavailable");
-        await staffInvite.send(session.userId, { userId: value("userId"), verificationEvidence: value("verificationEvidence") });
+        if (!overview.account || overview.account.id !== value("userId")) throw new AccessError("Invitation unavailable");
+        if (overview.portal === "NICEJOBS") await niceJobsDirectorInvite.send(session.userId, { userId: value("userId") });
+        else if (["AIRA Skill City", "AIRA Labs"].includes(overview.portal)) await staffInvite.send(session.userId, { userId: value("userId"), verificationEvidence: value("verificationEvidence") });
+        else throw new AccessError("Invitation unavailable");
         break;
       }
       case "prepare-staff": {
         const employee = await hrEmploymentService.get(session.userId, employmentId);
         const overview = await hrAccess.overview(session.userId, employmentId);
         const organizationId = value("organizationId");
-        if (employee.status !== "ACTIVE" || !employee.person.email || overview.account) throw new AccessError("Active employment without an existing account is required");
         const target = overview.targets.find(item => item.id === organizationId);
         if (!target) throw new AccessError("Employee has no active assignment in this scope");
+        if (employee.status !== "ACTIVE" || !employee.person.email || overview.account && !(target.name === "NICEJOBS Director workspace" && overview.account.status === "INACTIVE" && overview.account.realm === "jobs")) throw new AccessError("Active employment without an existing account is required");
         const options = await staffOnboardingService.options(session.userId, organizationId);
         const role = options.roles.find(item => item.id === value("roleId"));
-        if (!options.canPrepare || !role || role.name !== (target.brandId ? "Full Stack Developer" : "Administrative Officer")) throw new AccessError("Prepared role unavailable in this employee scope");
-        await staffOnboardingService.prepare(session.userId, { organizationId, existingPersonId: employee.person.id, roleId: role.id, scopeDecisionReference: value("scopeDecisionReference"), ...(value("managerUserId") ? { managerUserId: value("managerUserId"), managerDecisionReference: value("managerDecisionReference") } : {}) });
+        const expectedRole = target.name === "NICEJOBS Director workspace" ? "NICEJOBS Director" : target.brandId ? "Full Stack Developer" : "Administrative Officer";
+        if (!options.canPrepare || !role || role.name !== expectedRole) throw new AccessError("Prepared role unavailable in this employee scope");
+        if (role.name === "NICEJOBS Director") await hrAccess.prepareNiceJobsDirector(session.userId, { employmentId, organizationId, roleId: role.id, country: value("country"), nationalNumber: value("nationalNumber"), decisionReference: value("scopeDecisionReference") });
+        else await staffOnboardingService.prepare(session.userId, { organizationId, existingPersonId: employee.person.id, roleId: role.id, scopeDecisionReference: value("scopeDecisionReference"), ...(value("managerUserId") ? { managerUserId: value("managerUserId"), managerDecisionReference: value("managerDecisionReference") } : {}) });
         break;
       }
       default: throw new AccessError("Unknown access action");
     }
     revalidatePath(`/app/boss/departments/hr/employees/${employmentId}/access`);
     revalidatePath(`/app/boss/departments/hr/employees/${employmentId}`);
-    return { message: value("intent") === "prepare-staff" ? "Staff appointment saved as an inactive draft. Review the manager decision before invitation." : "Access record updated." };
+    return { message: value("intent") === "prepare-staff" ? "Staff appointment saved as a pending, inactive account. Send the invitation when ready." : value("intent") === "send-invite" ? "Activation instructions sent to the employee's registered email." : "Access record updated." };
   } catch (error) {
     if (error instanceof AccessError) return { error: error.message };
     if (error instanceof ZodError) return { error: "Check the required fields." };

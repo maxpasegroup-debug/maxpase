@@ -28,6 +28,14 @@ describe("Nice Jobs OTP email", () => {
     expect(transport).not.toHaveBeenCalled();
   });
 
+  it("includes the invite route for a Director activation code", () => {
+    const invite = niceJobsOtpEmail({ ...message, purpose: "STAFF_INVITE" });
+    expect(invite.subject).toContain("Director");
+    expect(invite.text).toContain("https://nicejobs.online/activate?challenge=isolated-otp");
+    expect(invite.html).toContain("https://nicejobs.online/activate?challenge=isolated-otp");
+    expect(invite.text).toContain(message.code);
+  });
+
   it("sends HTML and text through the existing bounded Resend transport", async () => {
     const transport = vi.fn(async () => new Response(JSON.stringify({ id: "isolated-receipt" }), { status: 200 }));
     expect(await createResendOtpSender(env, transport as typeof fetch)(message)).toBe("isolated-receipt");

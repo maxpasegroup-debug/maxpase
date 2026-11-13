@@ -9,8 +9,10 @@ import { opportunityProfile, publicationIssues } from "./opportunity-configurati
 import { programmeChecklist } from "./programme-checklist";
 import { opportunityCapacity } from "./capacity";
 import { partnerProgrammeIssues } from "./partner-programme";
+import { isPublicInHouseOpportunity } from "./in-house-opportunity";
 
 const include = { candidate: { select: { displayName: true } }, company: { select: { name: true } }, area: { include: { division: { select: { name: true, parentId: true, status: true } }, version: { include: { template: true, areas: { take: 13, select: { divisionId: true } } } } } } } satisfies Prisma.NiceJobsApplicationInclude;
+
 const pageInput = z.object({ companyId: z.string().max(200).optional(), divisionId: z.string().max(200).optional(), versionId: z.string().max(200).optional(), status: z.enum(applicationStates).optional(), interviewFrom: z.string().date().optional(), interviewTo: z.string().date().optional(), search: z.string().trim().max(120).default(""), after: z.string().max(200).optional(), recent: z.boolean().optional(), limit: z.number().int().min(1).max(100).default(25) }).strict();
 const createInput = z.object({ versionId: z.string().min(1).max(200), divisionId: z.string().min(1).max(200), answers: z.unknown().default({}) }).strict();
 const mutationInput = z.object({ reference: z.string().uuid(), revision: z.number().int().min(0), action: z.enum(["SAVE", "START", "COMPLETE_DETAILS", "SUBMIT", "WITHDRAW", "ELIGIBILITY", "SCREENING", "ELIGIBILITY_REVIEW", "SCREENING_REVIEW", "SHORTLIST", "REJECT", "CLOSE"]), answers: z.unknown().optional(), reason: z.string().trim().max(1000).optional(), candidateMessage: z.string().trim().max(1000).optional(), category: z.string().trim().max(120).optional(), reviewResult: z.enum(["ELIGIBLE", "INELIGIBLE", "PASSED", "FAILED"]).optional() }).strict();
@@ -33,7 +35,7 @@ export function createApplicationService(client: PrismaClient = prisma) {
     const ready = [];
     for (const row of rows.slice(0, q.limit)) {
       const profile = opportunityProfile(row.configuration);
-      if (publicationIssues(profile, row.description, row.engagement).length || !(await programmeChecklist(client, company.id, row)).ready || row.engagement === "INDEPENDENT_PARTNER" && (await partnerProgrammeIssues(client, company.id, profile)).length) continue;
+      if (!isPublicInHouseOpportunity(row.engagement) || publicationIssues(profile, row.description, row.engagement).length || !(await programmeChecklist(client, company.id, row)).ready) continue;
       const capacity = await opportunityCapacity(client, company.id, row.id, profile);
       if (!capacity || capacity.available) ready.push(row);
     }
@@ -78,11 +80,11 @@ export function createApplicationService(client: PrismaClient = prisma) {
     return client.$transaction(async db => {
       const b = await boundary(db, userId, true);
       if (q.companyId && q.companyId !== b.company.id) throw new AccessError("Access denied");
-      const records = await db.niceJobsVersion.findMany({ where: { status: "PUBLISHED", publishedAt: { not: null }, engagement: { not: "INTERNSHIP" }, publishedFor: { is: { companyId: b.company.id, productId: b.product.id, status: "PUBLISHED", visibility: "PUBLIC" } }, ...(q.versionId ? { id: q.versionId } : q.after ? { id: { gt: q.after } } : {}), title: { contains: q.search }, areas: { some: { ...(q.divisionId ? { divisionId: q.divisionId } : {}), division: { parentId: b.company.id, type: "DIVISION", status: "ACTIVE" } }, every: { division: { parentId: b.company.id, type: "DIVISION", status: "ACTIVE" } } } }, select: { id: true, templateId: true, title: true, description: true, engagement: true, configuration: true, template: { select: { code: true, company: { select: { name: true } } } }, areas: { take: 12, select: { divisionId: true, division: { select: { name: true } } } } }, orderBy: { id: "asc" }, take: q.limit + 1 });
+      const records = await db.niceJobsVersion.findMany({ where: { status: "PUBLISHED", publishedAt: { not: null }, engagement: { notIn: ["INTERNSHIP", "INDEPENDENT_PARTNER", "NOT_CONFIRMED"] }, publishedFor: { is: { companyId: b.company.id, productId: b.product.id, status: "PUBLISHED", visibility: "PUBLIC" } }, ...(q.versionId ? { id: q.versionId } : q.after ? { id: { gt: q.after } } : {}), title: { contains: q.search }, areas: { some: { ...(q.divisionId ? { divisionId: q.divisionId } : {}), division: { parentId: b.company.id, type: "DIVISION", status: "ACTIVE" } }, every: { division: { parentId: b.company.id, type: "DIVISION", status: "ACTIVE" } } } }, select: { id: true, templateId: true, title: true, description: true, engagement: true, configuration: true, template: { select: { code: true, company: { select: { name: true } } } }, areas: { take: 12, select: { divisionId: true, division: { select: { name: true } } } } }, orderBy: { id: "asc" }, take: q.limit + 1 });
       const ready = [];
       for (const v of records.slice(0, q.limit)) {
         const profile = opportunityProfile(v.configuration);
-        if (publicationIssues(profile, v.description, v.engagement).length || !(await programmeChecklist(db, b.company.id, v)).ready || v.engagement === "INDEPENDENT_PARTNER" && (await partnerProgrammeIssues(db, b.company.id, profile)).length) continue;
+        if (!isPublicInHouseOpportunity(v.engagement) || publicationIssues(profile, v.description, v.engagement).length || !(await programmeChecklist(db, b.company.id, v)).ready) continue;
         const capacity = await opportunityCapacity(db, b.company.id, v.id, profile);
         if (!capacity || capacity.available) ready.push(v);
       }
@@ -95,6 +97,7 @@ export function createApplicationService(client: PrismaClient = prisma) {
       const b = await boundary(db, userId, true);
       const area = await db.niceJobsVersionArea.findFirst({ where: { versionId: data.versionId, divisionId: data.divisionId, division: { parentId: b.company.id, type: "DIVISION", status: "ACTIVE" }, version: { status: "PUBLISHED", publishedAt: { not: null }, publishedFor: { is: { companyId: b.company.id, productId: b.product.id, status: "PUBLISHED", visibility: "PUBLIC" } } } }, include: { version: { include: { template: true, areas: { take: 13, select: { divisionId: true } } } } } });
       if (!area) throw new NiceJobsError("This job is not receiving applications");
+      if (!isPublicInHouseOpportunity(area.version.engagement)) throw new NiceJobsError("This in-house opportunity is not available for applications");
       if (publicationIssues(opportunityProfile(area.version.configuration), area.version.description, area.version.engagement).length) throw new NiceJobsError("This job's publication details are incomplete. Applications are unavailable.");
       if (area.version.engagement === "INDEPENDENT_PARTNER" && (await partnerProgrammeIssues(db, b.company.id, opportunityProfile(area.version.configuration))).length) throw new NiceJobsError("This programme is paused, closed, or its approved commercial terms have changed. New applications are unavailable.");
       if (!(await programmeChecklist(db, b.company.id, area.version)).ready) throw new NiceJobsError("This job's programme setup is incomplete. Applications are unavailable.");

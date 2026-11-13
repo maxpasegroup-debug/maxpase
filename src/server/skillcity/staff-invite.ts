@@ -49,7 +49,7 @@ export function createStaffInvite(client: PrismaClient = prisma, env: Record<str
       const ctx = await createAccessContext(actorUserId, db, undefined, { organizationId: membership.organizationId });
       for (const permission of ["user.update", "person.update", "membership.manage", "membership.assign_role"]) await ctx.requireAccess(permission, { organizationId: membership.organizationId });
       const role = membership.roles[0]?.role;
-      if (!role || !memberScope || !isPreparedStaffRole(role.key, memberScope.slug) || metadata.authenticationRealm !== staffPortalForRole(role.key) || metadata.credentialKind !== "STAFF_PASSWORD" || role.organizationId !== membership.organizationId || !hasStaffWorkspaceCapabilities(role.key, role.permissions.map(item => item.permission.key))) throw new AccessError("Role permissions are not prepared");
+      if (!role || !memberScope || role.key === "nicejobs-director" || !isPreparedStaffRole(role.key, memberScope.slug) || metadata.authenticationRealm !== staffPortalForRole(role.key) || metadata.credentialKind !== "STAFF_PASSWORD" || role.organizationId !== membership.organizationId || !hasStaffWorkspaceCapabilities(role.key, role.permissions.map(item => item.permission.key))) throw new AccessError("Role permissions are not prepared");
       if (role.name === "Director" || role.name === "Division Director") {
         await createBossService(client).authority(actorUserId, db);
         if (membership.scope !== (role.name === "Director" ? "DESCENDANTS" : "ORGANIZATION") || !role.permissions.some(item => item.permission.key === "decision.decide")) throw new AccessError("Director authority is not prepared");
@@ -111,7 +111,7 @@ export function createStaffInvite(client: PrismaClient = prisma, env: Record<str
       const memberScope = await db.organization.findUnique({ where: { id: membership.organizationId }, select: { parentId: true, slug: true } });
       if (!company || !(membership.organizationId === company.id || memberScope?.parentId === company.id)) throw new AccessError("Staff scope unavailable");
       if (!(await db.employment.findFirst({ where: { personId: user.personId!, companyId: company.id, status: "ACTIVE" } }))) throw new AccessError("Active company employment required for activation");
-      if (!memberScope || !isPreparedStaffRole(membership.roles[0].role.key, memberScope.slug) || staffPortalForRole(membership.roles[0].role.key) !== data.portal || !hasStaffWorkspaceCapabilities(membership.roles[0].role.key, membership.roles[0].role.permissions.map(item => item.permission.key))) throw new AccessError("Role appointment unavailable");
+      if (!memberScope || membership.roles[0].role.key === "nicejobs-director" || !isPreparedStaffRole(membership.roles[0].role.key, memberScope.slug) || staffPortalForRole(membership.roles[0].role.key) !== data.portal || !hasStaffWorkspaceCapabilities(membership.roles[0].role.key, membership.roles[0].role.permissions.map(item => item.permission.key))) throw new AccessError("Role appointment unavailable");
       const pendingManager = !["Director", "Division Director"].includes(membership.roles[0]?.role.name ?? "") ? await db.reportingRelationship.findFirst({
         where: {
           personId: user.personId!, organizationId: membership.organizationId, status: "INACTIVE",
