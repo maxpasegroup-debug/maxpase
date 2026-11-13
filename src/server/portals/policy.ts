@@ -3,6 +3,7 @@ import { AccessError, createAccessContext } from "@/server/authorization/engine"
 import { siteById, type PortalId } from "./sites";
 import { accountPortalRealm } from "@/server/auth/account-realm";
 import { labsStaffRoleKeys, hasStaffWorkspaceCapabilities } from "@/server/skillcity/staff-roles";
+import { hasActiveNiceJobsDirectorRole, isActiveNiceJobsDirectorIdentity } from "./nicejobs-director-access";
 
 const skillCityStaffRoles = new Set(["Director", "Division Director", "Business Development & Operations Manager", "Senior Academic Advisor", "Junior Academic Advisor", "Administrative Officer", "Software Developer", "Full Stack Developer", "Junior Developer"]);
 
@@ -31,6 +32,32 @@ export async function requirePortalAccess(db: Prisma.TransactionClient, userId: 
   if (id === "jobs") {
     const product = await db.product.findUnique({ where: { organizationId_slug: { organizationId: division.parent.id, slug: "nice-jobs" } }, select: { divisionId: true, status: true } });
     if (!product || product.divisionId !== division.id || product.status !== "ACTIVE") throw new AccessError("Gateway unavailable");
+    const account = await db.user.findUnique({ where: { id: userId }, select: { personId: true, status: true, emailVerifiedAt: true, jobsPhoneVerifiedAt: true, person: { select: { status: true, metadata: true } } } });
+    let metadata: Record<string, unknown> = {};
+    try { metadata = JSON.parse(account?.person?.metadata ?? "{}"); } catch { throw new AccessError("NICEJOBS account needs review"); }
+    if (metadata.identitySource === "HR_APPOINTMENT") {
+      if (!isActiveNiceJobsDirectorIdentity({ personStatus: account?.person?.status, userStatus: account?.status, emailVerifiedAt: account?.emailVerifiedAt, phoneVerifiedAt: account?.jobsPhoneVerifiedAt, personMetadata: account?.person?.metadata }) || account?.personId == null) throw new AccessError("Active NICEJOBS Director appointment required");
+      const employment = await db.employment.findFirst({ where: { personId: account.personId, companyId: division.parent.id, status: "ACTIVE" }, select: { id: true } });
+      if (!employment || !await db.hrAssignment.findFirst({ where: { employmentId: employment.id, status: "ACTIVE", startDate: { lte: new Date() }, OR: [{ endDate: null }, { endDate: { gte: new Date() } }], brand: { slug: "nice-jobs", organizationId: division.parent.id, parentBrandId: null, status: "ACTIVE" } }, select: { id: true } })) throw new AccessError("Active NICEJOBS employment and brand assignment required");
+      const memberships = await db.membership.findMany({
+        where: { personId: account.personId, organizationId: division.id, scopeKey: "hr-nicejobs-director", status: "ACTIVE" },
+        include: {
+          roles: {
+            include: {
+              role: {
+                include: {
+                  permissions: { include: { permission: { select: { key: true } } } }
+                }
+              }
+            }
+          }
+        },
+        take: 2
+      });
+      if (memberships.length !== 1 || memberships[0].roles.length !== 1) throw new AccessError("Active NICEJOBS Director role required");
+      const role = memberships[0].roles[0].role;
+      if (!hasActiveNiceJobsDirectorRole({ key: role.key, status: role.status, principalType: role.principalType, organizationId: role.organizationId ?? "", permissions: role.permissions.map(item => item.permission.key) }, division.id)) throw new AccessError("Active NICEJOBS Director role required");
+    }
   }
   const scope = { organizationId: division.id };
   const ctx = await createAccessContext(userId, db, undefined, scope);

@@ -52,7 +52,7 @@ export function createNiceJobsDirectorInvite(client: PrismaClient = prisma, opti
     const employments = await db.employment.findMany({ where: { personId: user.personId!, status: "ACTIVE" }, include: { company: { select: { slug: true, status: true } } }, take: 10 });
     const employment = employments.find(item => item.company.slug === "aira-skill-city" && item.company.status === "ACTIVE");
     const companyId = employment?.companyId;
-    if (!employment || !companyId || !await db.hrAssignment.findFirst({ where: { employmentId: employment.id, status: "ACTIVE", brand: { organizationId: companyId, slug: "nice-jobs", parentBrandId: null, status: "ACTIVE" } }, select: { id: true } })) throw new AccessError("Active NICEJOBS employment and brand assignment required");
+    if (!employment || !companyId || !await db.hrAssignment.findFirst({ where: { employmentId: employment.id, status: "ACTIVE", startDate: { lte: now() }, OR: [{ endDate: null }, { endDate: { gte: now() } }], brand: { organizationId: companyId, slug: "nice-jobs", parentBrandId: null, status: "ACTIVE" } }, select: { id: true } })) throw new AccessError("Active NICEJOBS employment and brand assignment required");
     if (user.jobsPhone !== user.person.phone) throw new AccessError("Appointment phone identity requires review");
     return { user, person: user.person, employment, membership, metadata };
   }
