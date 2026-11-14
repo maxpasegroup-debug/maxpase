@@ -22,6 +22,6 @@ export function JobsPhoneAuthForm({ paths, reset = false }: { paths: JobsAuthPat
       </fieldset>
       {state.error && <p role="alert" className={styles.alert}>{state.error}</p>}
     </form>}
-    {reset ? <p className={styles.switch}><Link href={paths.login}>{state.complete ? "Sign in with your new PIN" : "Back to sign in"}</Link>{verifying && <Link href={resetPath}>Request a new code</Link>}</p> : <><p className={styles.supportLink}><Link href={resetPath}>Forgot PIN?</Link></p><p className={styles.switch}>New to Nice Jobs? <Link href={paths.signup}>Create an account</Link></p><p className={styles.switch}>Have an older email/password account? <Link href={paths.login.replace(/\/login$/, "/activate-pin")}>Activate phone sign-in</Link></p></>}
+    {reset ? <p className={styles.switch}><Link href={paths.login}>{state.complete ? "Sign in with your new PIN" : "Back to sign in"}</Link>{verifying && <Link href={resetPath}>Request a new code</Link>}</p> : <><p className={styles.supportLink}><Link href={resetPath}>Forgot PIN?</Link></p><p className={styles.switch}>New to Nice Jobs? <Link href={paths.signup}>Create an account</Link></p></>}
   </JobsAuthShell>;
 }
