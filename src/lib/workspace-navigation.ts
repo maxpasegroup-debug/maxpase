@@ -40,6 +40,7 @@ export function groupForPath(path: string, view?: string) {
     ?? (path.startsWith("/app/executive") ? workspaceGroups[0] : workspaceGroups[2]);
 }
 export function workspacePageLabel(path: string, view?: string) {
+  if (path === "/app/boss/money") return "My Money";
   if (path === "/app/boss") return ({ finance: "Finance", growth: "Growth", "ai-office": "AI Office", search: "Search", "aira-journey": "AIRA Journey Metrics" } as Record<string, string>)[view ?? ""] ?? (isPrimaryBossView(view ?? "") ? primaryBossViews[view as PrimaryBossView] : bossViews[isBossView(view ?? "") ? view as BossView : "overview"]);
   if (path === "/app/executive") return "Executive Command Center";
   const detail = path.split("/")[3];

@@ -19,7 +19,8 @@ export const migrationManifest = [
     ["20261108030000_hr_payroll", "69c470c0cb833998c9dcb2a478729784b9995ca1236bf1d792e0664541b33e81"],
   ["20261109000000_nicejobs_portal_intro_video", "44c0daa4d83b1237d19f14ff1a370bad0436edca81e9e2a67e2b4af82d616af7"],
   ["20261112090000_aira_journey_metrics", "c8404e8f0f4f1108d822e01b7f8d1976893096bf6d6bef5392747ea661814a9e"],
-  ["20261113000000_nicejobs_multilingual_intro", "401a2e69065d2c91951f6e0f21e00f657bb1de808621428920983e844d0b1b13"]
+  ["20261113000000_nicejobs_multilingual_intro", "401a2e69065d2c91951f6e0f21e00f657bb1de808621428920983e844d0b1b13"],
+  ["20261114110000_boss_money_tracker", "63240bc5b0baa0c40ac12a9a3795ef846ee7fb61b4dec3b8059b98bb7c8b492a"]
 ] as const;
 
 export async function verifyDatabaseReadiness(db: Prisma.TransactionClient) {
@@ -41,7 +42,8 @@ export async function verifyDatabaseReadiness(db: Prisma.TransactionClient) {
     LabsBillingProfile: ["companyId", "legalName", "gstin", "profileStatus", "taxReviewStatus", "eInvoiceStatus"], LabsBillingEvidence: ["companyId", "profileId", "storageKey", "fileName"],
     LabsBillingCustomer: ["companyId", "legalName", "gstRegistrationStatus", "placeOfSupply"], LabsBillingService: ["companyId", "sacCode", "gstBasisPoints", "taxApprovalStatus"],
     LabsBillingInvoice: ["companyId", "divisionId", "quoteId", "invoiceNumber", "supplierSnapshot", "customerSnapshot", "calculationSnapshot"], LabsBillingPayment: ["invoiceId", "verificationStatus", "reconciliationEvidence"], LabsVendorBill: ["companyId", "approvalStatus", "paymentStatus", "paymentEvidence"],
-    NiceJobsAutomationVersion: ["ruleId", "status", "definition", "publishedAt"], NiceJobsOperationalException: ["companyId", "divisionId", "sourceKey", "status", "revision"]
+    NiceJobsAutomationVersion: ["ruleId", "status", "definition", "publishedAt"], NiceJobsOperationalException: ["companyId", "divisionId", "sourceKey", "status", "revision"],
+    BossMoneyRecord: ["ownerUserId", "recordKey", "kind", "payload", "amountPaise", "dailyBudgetPaise", "investmentPaise", "salesPaise", "otherReceiptsPaise", "historicalExpensesPaise", "adjustmentPaise", "revision"]
   };
   const columns = await db.$queryRaw<{ table_name: string; column_name: string }[]>`SELECT table_name, column_name FROM information_schema.columns WHERE table_schema = current_schema()`;
   const present = new Set(columns.map(row => `${row.table_name}.${row.column_name}`));
