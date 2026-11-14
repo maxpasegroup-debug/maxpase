@@ -94,6 +94,23 @@ export function createNiceJobsIntroMedia(client: PrismaClient = prisma) {
     }
     return valid;
   }
+  async function publicLanguageOptions(activeItems?: Awaited<ReturnType<typeof published>>) {
+    const s = await scope();
+    const [configured, active] = await Promise.all([
+      client.niceJobsPortalIntroduction.findMany({
+        where: { companyId: s.companyId },
+        orderBy: [{ languageName: "asc" }],
+        select: { languageCode: true, languageName: true }
+      }),
+      activeItems ? Promise.resolve(activeItems) : published()
+    ]);
+    const available = new Set(active.map(item => item.languageCode.toLowerCase()));
+    return configured.map(item => ({
+      languageCode: item.languageCode,
+      languageName: item.languageName,
+      available: available.has(item.languageCode.toLowerCase())
+    }));
+  }
   async function publicFile(codeRaw: string, asset: "media" | "thumbnail") {
     const code = languageCode.parse(codeRaw).toLowerCase(), s = await scope();
     const row = await client.niceJobsPortalIntroduction.findFirst({ where: { companyId: s.companyId, languageCode: code, publishedAt: { not: null } } });
@@ -144,6 +161,6 @@ export function createNiceJobsIntroMedia(client: PrismaClient = prisma) {
       return { complete: false };
     });
   }
-  return { listForBoss, addLanguage, saveDraft, publish, unpublish, published, publicFile, draftFile, startSession, playbackHeartbeat, hash };
+  return { listForBoss, addLanguage, saveDraft, publish, unpublish, published, publicLanguageOptions, publicFile, draftFile, startSession, playbackHeartbeat, hash };
 }
 export const niceJobsIntroMedia = createNiceJobsIntroMedia();
