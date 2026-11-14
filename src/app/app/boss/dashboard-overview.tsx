@@ -19,6 +19,7 @@ export function BossDashboardOverview({ data, query }: { data: Data; query: Quer
     { label: "Priority items", value: data.overview.coverage.approvals || data.overview.coverage.decisions ? data.overview.urgent.length : null, note: "Items needing attention", href: bossHref("approvals", scope, query), icon: Wallet },
   ];
   const workspaces = [
+    { label: "My Money", description: "Private personal money tracker", href: "/app/boss/money", icon: Wallet },
     { label: "Growth", description: "Marketing, sales and opportunities", href: bossHref("growth", scope, query), icon: BriefcaseBusiness },
     { label: "People & HR", description: "Employees and hiring", href: departmentHref("hr", scope), icon: Users },
     { label: "Money", description: "Finance and company records", href: departmentHref("finance", scope), icon: Wallet },

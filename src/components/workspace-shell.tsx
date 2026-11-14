@@ -15,6 +15,7 @@ const bossDestinations = [
   { label: "Growth", icon: TrendingUp, view: "growth" },
   { label: "People & HR", icon: Users, department: "hr" },
   { label: "Money", icon: Wallet, department: "finance" },
+  { label: "My Money", icon: Wallet, href: "/app/boss/money" },
   { label: "Work & Delivery", icon: BriefcaseBusiness, department: "operations" },
   { label: "Decisions", icon: Gavel, view: "approvals" },
   { label: "Reports", icon: BarChart3, view: "performance" },
@@ -36,7 +37,7 @@ export function WorkspaceShell({ boss, email, name, timezone, unread, companies,
   const department = path.startsWith("/app/boss/departments/") ? path.split("/")[4] as BossDepartment : undefined;
   const brandId = query.get("brandId") ?? undefined;
   const brand = brands.find(row => row.id === brandId && row.organizationId === companyId);
-  const onBossPage = boss && (path === "/app/boss" || path.startsWith("/app/boss/departments/"));
+  const onBossPage = boss && (path === "/app/boss" || path === "/app/boss/money" || path.startsWith("/app/boss/departments/"));
   const page = department && Object.hasOwn(bossDepartments, department) ? bossDepartments[department].label : workspacePageLabel(path, view);
   const dialog = useRef<HTMLDialogElement>(null), menu = useRef<HTMLButtonElement>(null);
   const [open, setOpen] = useState(false);
@@ -55,7 +56,7 @@ export function WorkspaceShell({ boss, email, name, timezone, unread, companies,
   const backHref = boss ? navigationBossHref(returnView && isBossDestination(returnView) ? returnView : group.views[0], new URLSearchParams(query.toString())) : workspaceHref(group.href, companyId);
   function Navigation({ mobile = false }: { mobile?: boolean }) {
     return <nav aria-label={mobile ? "Mobile navigation" : "Main navigation"}>
-      <div className="workspace-primary">{boss ? bossDestinations.map(({label,icon:Icon,...target}) => { const destination = "department" in target ? departmentHref(target.department, companyId, brandId) : navigationBossHref(target.view, new URLSearchParams(query.toString())); const active = "department" in target ? department === target.department : path === "/app/boss" && view === target.view; return <Link prefetch={false} key={label} href={destination} aria-current={active ? "page" : undefined} onClick={mobile?close:undefined}><Icon size={19}/>{label}</Link>; }) : workspaceGroups.map((g, i) => { const Icon = icons[i]; return <Link prefetch={false} key={g.key} href={groupHref(g.key)} aria-current={g.key === group.key ? "true" : undefined} onClick={mobile ? close : undefined}><Icon size={19}/>{g.label}</Link>; })}</div>
+      <div className="workspace-primary">{boss ? bossDestinations.map(({label,icon:Icon,...target}) => { const destination = "href" in target ? target.href : "department" in target ? departmentHref(target.department, companyId, brandId) : navigationBossHref(target.view, new URLSearchParams(query.toString())); const active = "href" in target ? path === target.href : "department" in target ? department === target.department : path === "/app/boss" && view === target.view; return <Link prefetch={false} key={label} href={destination} aria-current={active ? "page" : undefined} onClick={mobile?close:undefined}><Icon size={19}/>{label}</Link>; }) : workspaceGroups.map((g, i) => { const Icon = icons[i]; return <Link prefetch={false} key={g.key} href={groupHref(g.key)} aria-current={g.key === group.key ? "true" : undefined} onClick={mobile ? close : undefined}><Icon size={19}/>{g.label}</Link>; })}</div>
       {boss ? <div className="workspace-secondary boss-more-tools"><details><summary>More tools<ChevronDown size={16} aria-hidden="true"/></summary>{bossMoreTools.map(tool => {
         const href = tool.href(companyId);
         const activeView = href.includes("?view=") ? new URL(href, "https://maxpase.local").searchParams.get("view") : null;

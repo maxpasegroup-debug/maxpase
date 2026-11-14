@@ -1508,6 +1508,7 @@ enum GoalStatus {
 }
 
 model User {
+  bossMoneyRecords BossMoneyRecord[] @relation("BossMoneyOwner")
   niceJobsAdmissionsRecorded NiceJobsAdmission[] @relation("NiceJobsAdmissionRecorder")
   niceJobsAdmissionsVerified NiceJobsAdmission[] @relation("NiceJobsAdmissionVerifier")
   niceJobsSourceEventsReviewed NiceJobsSourceEvent[] @relation("NiceJobsSourceEventReviewer")
@@ -1585,6 +1586,30 @@ model User {
   controlChecks           ControlCheck[]
   createdAt               DateTime                 @default(now())
   updatedAt               DateTime                 @updatedAt
+}
+
+// Private, owner-scoped personal money tracking. Payloads are deliberately
+// separate from company finance models and never feed official accounting.
+model BossMoneyRecord {
+  id           String   @id @default(cuid())
+  ownerUserId  String
+  owner        User     @relation("BossMoneyOwner", fields: [ownerUserId], references: [id], onDelete: Restrict)
+  recordKey    String
+  kind         String
+  payload      String
+  amountPaise  BigInt?
+  dailyBudgetPaise BigInt?
+  investmentPaise BigInt?
+  salesPaise   BigInt?
+  otherReceiptsPaise BigInt?
+  historicalExpensesPaise BigInt?
+  adjustmentPaise BigInt?
+  revision     Int      @default(1)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([ownerUserId, recordKey])
+  @@index([ownerUserId, kind, updatedAt])
 }
 
 model EmailAuthChallenge {
