@@ -132,9 +132,13 @@
 .introLanguageGrid { display: grid; grid-template-columns: repeat(auto-fit,minmax(190px,1fr)); gap: 14px; }
 .introLanguage { display: grid; gap: 8px; padding: 10px; border: 1px solid rgba(174,154,255,.28); border-radius: 14px; text-align: left; color: #f8f7ff; background: #222038; cursor: pointer; }
 .introLanguage:hover { border-color: #ae9aff; background: #2b2850; }
+.introLanguageUnavailable, .introLanguageUnavailable:hover { border-color: rgba(174,154,255,.15); color: #d7d5e4; background: #1d1b30; cursor: pointer; }
+.introLanguageSelected, .introLanguageSelected:hover { border-color: #ae9aff; background: #292543; box-shadow: 0 0 0 1px rgba(174,154,255,.25); }
 .introLanguage img { width: 100%; aspect-ratio: 16/9; border-radius: 9px; background: #0d0c1a; object-fit: cover; }
+.introLanguage .languagePlaceholder { display: grid; place-items: center; width: 100%; aspect-ratio: 16/9; border-radius: 9px; color: #d6b9ff; background: radial-gradient(ellipse at 50% 120%,rgba(116,39,245,.34),transparent 62%),linear-gradient(135deg,#29233e,#171529); font-size: 38px; font-weight: 780; }
 .introLanguage span { font-size: 17px; font-weight: 800; }
 .introLanguage small { color: #d7d5e4; }
+.introLanguageUnavailable small { color: #aaa5bd; }
 .introMediaHeading { display: flex; align-items: center; gap: 12px; margin: 0 0 12px; }
 .introMediaHeading p { margin: 0; font-weight: 720; }
 .introBack { display: inline-flex; align-items: center; gap: 5px; padding: 8px 10px; border: 1px solid rgba(255,255,255,.2); border-radius: 9px; color: inherit; background: #29263d; cursor: pointer; }
@@ -175,6 +179,10 @@
   .closingBenefits li { width: 115px; }
 }
 @media (max-width: 600px) {
+  .introLanguageGrid { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 9px; }
+  .introLanguage { gap: 5px; padding: 8px; }
+  .introLanguage span { font-size: 14px; }
+  .introLanguage small { font-size: 10px; line-height: 1.35; }
   .brand { gap: 8px; }
   .brandMark { width: 31px; height: 31px; border-radius: 10px 10px 10px 3px; font-size: 20px; }
   .brandName { font-size: 17px; }

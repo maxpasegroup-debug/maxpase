@@ -7,12 +7,18 @@ import styles from "./landing.module.css";
 
 type Introduction = { languageCode: string; languageName: string; title: string; mediaType: "AUDIO" | "VIDEO"; durationSeconds: number; hasThumbnail: boolean; mediaUrl: string; thumbnailUrl: string };
 type SessionResponse = { durationSeconds: number; error?: string };
+const languageChoices = [
+  { code: "en", name: "English", glyph: "EN" },
+  { code: "ml", name: "Malayalam", glyph: "മ" },
+  { code: "ta", name: "Tamil", glyph: "த" },
+  { code: "hi", name: "Hindi", glyph: "हि" },
+];
 const apiBase = (signup: string) => signup.startsWith("/sites/jobs") ? "/sites/jobs" : "";
 
 export function StartNow({ signup }: { signup: string }) {
   const dialog = useRef<HTMLDialogElement>(null), video = useRef<HTMLVideoElement>(null), audio = useRef<HTMLAudioElement>(null), lastTime = useRef(0), sessionOpen = useRef(false);
   const titleId = useId();
-  const [isOpen, setIsOpen] = useState(false), [loading, setLoading] = useState(false), [items, setItems] = useState<Introduction[]>([]), [active, setActive] = useState<Introduction | null>(null), [duration, setDuration] = useState(0), [position, setPosition] = useState(0), [playing, setPlaying] = useState(false), [complete, setComplete] = useState(false), [error, setError] = useState("");
+  const [isOpen, setIsOpen] = useState(false), [loading, setLoading] = useState(false), [items, setItems] = useState<Introduction[]>([]), [active, setActive] = useState<Introduction | null>(null), [unavailableLanguage, setUnavailableLanguage] = useState(""), [duration, setDuration] = useState(0), [position, setPosition] = useState(0), [playing, setPlaying] = useState(false), [complete, setComplete] = useState(false), [error, setError] = useState("");
   const base = apiBase(signup);
   const currentMedia = () => active?.mediaType === "VIDEO" ? video.current : audio.current;
   async function report(status: "PLAYING" | "PAUSED" | "ENDED" | "ABANDONED", position = currentMedia()?.currentTime ?? 0) {
@@ -20,7 +26,7 @@ export function StartNow({ signup }: { signup: string }) {
     return response.json() as Promise<{ complete?: boolean; error?: string }>;
   }
   async function open() {
-    setItems([]); setActive(null); setComplete(false); setError(""); setLoading(true); setIsOpen(true); lastTime.current = 0;
+    setItems([]); setActive(null); setUnavailableLanguage(""); setComplete(false); setError(""); setLoading(true); setIsOpen(true); lastTime.current = 0;
     dialog.current?.showModal();
     try { const response = await fetch(`${base}/intro-media`, { cache: "no-store" }); if (!response.ok) throw new Error(); const published = await response.json() as Omit<Introduction, "mediaUrl" | "thumbnailUrl">[]; setItems(published.map(item => ({ ...item, mediaUrl: `${base}/intro-media/${encodeURIComponent(item.languageCode)}/media`, thumbnailUrl: item.hasThumbnail ? `${base}/intro-media/${encodeURIComponent(item.languageCode)}/thumbnail` : "/images/nice-jobs-hero-v2.webp" }))); }
     catch { setError("Language choices are temporarily unavailable. Please try again."); }
@@ -30,10 +36,10 @@ export function StartNow({ signup }: { signup: string }) {
     const media = currentMedia(); media?.pause();
     if (media) media.currentTime = 0;
     if (sessionOpen.current) { void report("ABANDONED", 0); sessionOpen.current = false; }
-    setComplete(false); setPlaying(false); setActive(null); setIsOpen(false); lastTime.current = 0; dialog.current?.close();
+    setComplete(false); setPlaying(false); setActive(null); setUnavailableLanguage(""); setIsOpen(false); lastTime.current = 0; dialog.current?.close();
   }
   async function choose(item: Introduction) {
-    setError(""); setLoading(true);
+    setError(""); setUnavailableLanguage(""); setLoading(true);
     try {
       const response = await fetch(`${base}/intro-session`, { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ languageCode: item.languageCode }) });
       const session = await response.json() as SessionResponse;
@@ -70,15 +76,24 @@ export function StartNow({ signup }: { signup: string }) {
   }
   return <>
     <button type="button" className={styles.primaryButton} onClick={() => void open()}>Start Now <ArrowRight size={19}/></button>
-    <dialog ref={dialog} className={styles.introDialog} aria-labelledby={titleId} onClose={() => { const media = currentMedia(); media?.pause(); if (sessionOpen.current) { void report("ABANDONED", 0); sessionOpen.current = false; } setComplete(false); setPlaying(false); setActive(null); setIsOpen(false); lastTime.current = 0; }}>
+    <dialog ref={dialog} className={styles.introDialog} aria-labelledby={titleId} onClose={() => { const media = currentMedia(); media?.pause(); if (sessionOpen.current) { void report("ABANDONED", 0); sessionOpen.current = false; } setComplete(false); setPlaying(false); setActive(null); setUnavailableLanguage(""); setIsOpen(false); lastTime.current = 0; }}>
       <header><div><p className={styles.eyebrow}>NICEJOBS INTRODUCTION</p><h2 id={titleId}>{active ? active.languageName : "Choose Your Language"}</h2></div><button type="button" aria-label="Close introduction" onClick={close}><X size={20}/></button></header>
       {loading && <p className={styles.videoHint} role="status">Loading introduction…</p>}
       {!loading && !active && <>
         <p className={styles.videoHint}>Choose a language to hear or watch our introduction.</p>
-        {items.length ? <div className={styles.introLanguageGrid}>{items.map(item => <button className={styles.introLanguage} type="button" key={item.languageCode} onClick={() => void choose(item)}><Image src={item.thumbnailUrl} alt="" width={480} height={270} unoptimized /><span>{item.languageName}</span><small>{item.mediaType === "AUDIO" ? "Audio introduction" : "Video introduction"}</small></button>)}</div> : !error && <p className={styles.videoHint}>Our introductions are being prepared. Please check back soon.</p>}
+        <div className={styles.introLanguageGrid}>
+          {languageChoices.map(language => {
+            const item = items.find(introduction => introduction.languageCode.toLowerCase() === language.code);
+            return item
+              ? <button className={styles.introLanguage} type="button" key={language.code} onClick={() => void choose(item)}><Image src={item.thumbnailUrl} alt="" width={480} height={270} unoptimized /><span>{language.name}</span><small>{item.mediaType === "AUDIO" ? "Audio introduction" : "Video introduction"}</small></button>
+              : <button className={`${styles.introLanguage} ${styles.introLanguageUnavailable} ${unavailableLanguage === language.name ? styles.introLanguageSelected : ""}`} type="button" key={language.code} aria-pressed={unavailableLanguage === language.name} aria-label={`${language.name}: ${error ? "temporarily unavailable" : "introduction coming soon"}`} onClick={() => setUnavailableLanguage(language.name)}><span className={styles.languagePlaceholder} aria-hidden="true">{language.glyph}</span><span>{language.name}</span><small>{error ? "Temporarily unavailable" : "Introduction coming soon"}</small></button>;
+          })}
+        </div>
+        {unavailableLanguage && <p className={styles.videoHint} role="status">{error ? "We could not check this introduction right now. Please try again later." : `${unavailableLanguage} introduction is being prepared. It will be available here after publication.`}</p>}
+        {!items.length && !error && !unavailableLanguage && <p className={styles.videoHint} role="status">A language introduction becomes available here once it is published.</p>}
       </>}
       {!loading && active && <>
-        <div className={styles.introMediaHeading}><button type="button" className={styles.introBack} onClick={() => { currentMedia()?.pause(); void report("ABANDONED", 0); sessionOpen.current = false; setActive(null); setPlaying(false); setComplete(false); }} aria-label="Choose another language"><ArrowLeft size={17}/> Languages</button><p>{active.mediaType === "AUDIO" ? "Introduction to NICEJOBS" : active.title}</p></div>
+        <div className={styles.introMediaHeading}><button type="button" className={styles.introBack} onClick={() => { currentMedia()?.pause(); void report("ABANDONED", 0); sessionOpen.current = false; setActive(null); setUnavailableLanguage(""); setPlaying(false); setComplete(false); }} aria-label="Choose another language"><ArrowLeft size={17}/> Languages</button><p>{active.mediaType === "AUDIO" ? "Introduction to NICEJOBS" : active.title}</p></div>
         {active.mediaType === "VIDEO" ? <video ref={video} key={active.mediaUrl} src={active.mediaUrl} playsInline preload="metadata" aria-label={active.title} onLoadedMetadata={e => setDuration(e.currentTarget.duration || duration)} onTimeUpdate={e => { if (!e.currentTarget.seeking) { lastTime.current = e.currentTarget.currentTime; setPosition(e.currentTarget.currentTime); } }} onSeeking={keepPlaybackInOrder} onRateChange={e => { if (e.currentTarget.playbackRate !== 1) e.currentTarget.playbackRate = 1; }} onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onError={() => setError("This video could not be loaded. Check your connection and try again.")} onEnded={() => void finish()} /> : <><Image className={styles.introAudioThumb} src={active.thumbnailUrl} alt="" width={960} height={540} unoptimized /><audio ref={audio} key={active.mediaUrl} src={active.mediaUrl} preload="metadata" aria-label={active.title} onLoadedMetadata={e => setDuration(e.currentTarget.duration || duration)} onTimeUpdate={e => { if (!e.currentTarget.seeking) { lastTime.current = e.currentTarget.currentTime; setPosition(e.currentTarget.currentTime); } }} onSeeking={keepPlaybackInOrder} onRateChange={e => { if (e.currentTarget.playbackRate !== 1) e.currentTarget.playbackRate = 1; }} onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onError={() => setError("This audio could not be loaded. Check your connection and try again.")} onEnded={() => void finish()} /></>}
         <div className={styles.introProgress}><progress max={duration || active.durationSeconds} value={position} aria-label="Introduction playback progress"/><span>{Math.min(Math.floor(position), duration || active.durationSeconds)}s / {Math.round(duration || active.durationSeconds)}s</span></div>
         {!complete && <button type="button" className={styles.videoToggle} onClick={() => void togglePlayback()}>{playing ? <Pause size={18}/> : <Play size={18}/>} {playing ? "Pause" : "Play"}</button>}
