@@ -11,8 +11,10 @@ const initial: HrState = {};
 
 function positions(companySlug: string, brandSlug?: string) {
   if (brandSlug === "nice-jobs") return ["NICEJOBS Director", "Career Hub Operations", "Community Manager", "Other"];
-  if (brandSlug === "aira-labs") return ["Full Stack Developer", "Software Developer", "Project Manager", "Other"];
-  if (companySlug === "aira-skill-city" && !brandSlug) return ["Administrative Officer", "HR Manager", "Office Administrator", "Other"];
+  if (brandSlug === "aira-labs") return ["Director", "Full Stack Developer", "Software Developer", "Project Manager", "Other"];
+  if (brandSlug === "startup-school") return ["Director", "Academic Advisor", "Operations Associate", "Other"];
+  if (brandSlug === "aira-media-company") return ["Digital Marketing Manager", "Graphic Designer", "Video and Audio Editor", "AI Video Expert", "Other"];
+  if (companySlug === "aira-skill-city" && (!brandSlug || brandSlug === "aira-skill-city")) return ["Administrative Officer", "HR Manager", "Office Administrator", "Other"];
   return ["Team Member", "Brand Manager", "Operations Associate", "Other"];
 }
 

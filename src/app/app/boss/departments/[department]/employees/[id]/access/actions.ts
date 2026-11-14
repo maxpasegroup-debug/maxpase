@@ -39,8 +39,9 @@ export async function accessAction(_previous: AccessState, form: FormData): Prom
         if (employee.status !== "ACTIVE" || !employee.person.email || overview.account && !(target.name === "NICEJOBS Director workspace" && overview.account.status === "INACTIVE" && overview.account.realm === "jobs")) throw new AccessError("Active employment without an existing account is required");
         const options = await staffOnboardingService.options(session.userId, organizationId);
         const role = options.roles.find(item => item.id === value("roleId"));
-        const expectedRole = target.name === "NICEJOBS Director workspace" ? "NICEJOBS Director" : target.brandId ? "Full Stack Developer" : "Administrative Officer";
-        if (!options.canPrepare || !role || role.name !== expectedRole) throw new AccessError("Prepared role unavailable in this employee scope");
+        const assignment = target.brandId ? employee.assignments.find(item => item.brand.id === target.brandId && item.status === "ACTIVE") : null;
+        const expectedRole = target.name === "NICEJOBS Director workspace" ? "NICEJOBS Director" : !target.brandId ? "Administrative Officer" : employee.designation === "Director" ? "Division Director" : employee.designation === "Academic Advisor" ? "Junior Academic Advisor" : employee.designation;
+        if (!options.canPrepare || !role || role.name !== expectedRole || target.brandId && !assignment) throw new AccessError("Prepared role unavailable in this employee scope");
         if (role.name === "NICEJOBS Director") await hrAccess.prepareNiceJobsDirector(session.userId, { employmentId, organizationId, roleId: role.id, country: value("country"), nationalNumber: value("nationalNumber"), decisionReference: value("scopeDecisionReference") });
         else await staffOnboardingService.prepare(session.userId, { organizationId, existingPersonId: employee.person.id, roleId: role.id, scopeDecisionReference: value("scopeDecisionReference"), ...(value("managerUserId") ? { managerUserId: value("managerUserId"), managerDecisionReference: value("managerDecisionReference") } : {}) });
         break;

@@ -10,7 +10,7 @@ import { createSkillCityDeveloperDesk } from "./developer-desk";
 import { createLabsService } from "@/server/labs/service";
 import { createSkillCityAdministrativeDesk } from "./administrative-desk";
 
-export const employeeViews = ["advisor", "director", "manager", "administrative-officer", "developer", "business-development"] as const;
+export const employeeViews = ["advisor", "director", "manager", "administrative-officer", "developer", "business-development", "media"] as const;
 export type EmployeeView = typeof employeeViews[number];
 
 export function createSkillCityEmployeeDashboard(client: PrismaClient = prisma) {
@@ -24,7 +24,7 @@ export function createSkillCityEmployeeDashboard(client: PrismaClient = prisma) 
     const { ctx, companyId } = access;
     const personId = ctx.user?.personId;
     if (!personId) throw new AccessError("Employee identity unavailable");
-    const divisions = await client.organization.findMany({ where: { parentId: companyId, type: "DIVISION", status: "ACTIVE", slug: { in: ["aira-labs", "aira-startup-school", "aira-skill-studio", "aira-career-hub"] } }, select: { id: true, slug: true, name: true }, take: 4 });
+    const divisions = await client.organization.findMany({ where: { parentId: companyId, type: "DIVISION", status: "ACTIVE", slug: { in: ["aira-labs", "aira-startup-school", "aira-skill-studio", "aira-career-hub", "aira-media-company"] } }, select: { id: true, slug: true, name: true }, take: 5 });
     const labs = divisions.find(d => d.slug === "aira-labs");
     const hasRole = (scopes: string[], ...names: string[]) => ctx.grants.some(grant => scopes.includes(grant.organizationId ?? "") && names.includes(grant.roleName ?? ""));
     const can = (key: string, organizationId: string) => ctx.decide(key, { organizationId }).then(result => result.allowed);
@@ -34,7 +34,8 @@ export function createSkillCityEmployeeDashboard(client: PrismaClient = prisma) 
       "administrative-officer": hasRole([companyId], "Administrative Officer") && await can("organization.read", companyId) && await can("company.read", companyId) && await can("skillcity.administrative.read", companyId) && await can("skillcity.administrative.task.perform", companyId) && await can("task.read", companyId) && !!labs && await can("labs.billing.status.read", labs.id) && await can("labs.billing.customer.read", labs.id) && await can("labs.billing.customer.manage", labs.id),
       advisor: hasRole([companyId, ...divisions.map(d => d.id)], "Senior Academic Advisor", "Junior Academic Advisor") && (await Promise.all(divisions.map(async d => d.slug === "aira-labs" ? await can("labs.sales.self", d.id) : await can("aira.crm.self", d.id)))).some(Boolean),
       developer: !!labs && hasRole([companyId, labs.id], "Software Developer", "Full Stack Developer", "Junior Developer") && await can("labs.delivery.assignee", labs.id) && await can("organization.read", labs.id),
-      "business-development": !!labs && hasRole([labs.id], "Business Development Manager") && await can("labs.sales.read", labs.id) && await can("organization.read", labs.id)
+      "business-development": !!labs && hasRole([labs.id], "Business Development Manager") && await can("labs.sales.read", labs.id) && await can("organization.read", labs.id),
+      media: !!divisions.find(d => d.slug === "aira-media-company") && hasRole([divisions.find(d => d.slug === "aira-media-company")!.id], "Digital Marketing Manager", "Graphic Designer", "Video and Audio Editor", "AI Video Expert") && await can("task.read", divisions.find(d => d.slug === "aira-media-company")!.id) && await can("organization.read", divisions.find(d => d.slug === "aira-media-company")!.id)
     };
     const available = employeeViews.filter(view => allowed[view]);
     if (requested && !employeeViews.includes(requested as EmployeeView)) throw new AccessError("Employee view unavailable");
@@ -44,6 +45,14 @@ export function createSkillCityEmployeeDashboard(client: PrismaClient = prisma) 
 
     if (view === "manager") return { view, available, companyId, name: "Manager", data: {} };
     if (view === "administrative-officer") return { view, available, companyId, name: "Administrative Officer", data: await administrativeDesk.workspace(userId) };
+    if (view === "media") {
+      const media = divisions.find(d => d.slug === "aira-media-company");
+      if (!media) throw new AccessError("AIRA Media workspace unavailable");
+      const mediaRoles = ctx.grants.filter(grant => grant.organizationId === media.id).map(grant => grant.roleName ?? "");
+      const manager = mediaRoles.includes("Digital Marketing Manager");
+      const tasks = await client.task.findMany({ where: { organizationId: media.id, ...(manager ? {} : { assigneePersonId: personId }), status: { notIn: ["COMPLETED", "CANCELLED"] } }, select: { id: true, title: true, description: true, status: true, priority: true, dueDate: true, assigneePersonId: true }, orderBy: [{ dueDate: "asc" }, { id: "asc" }], take: 100 });
+      return { view, available, companyId, name: manager ? "Digital Marketing Manager" : mediaRoles.find(role => ["Graphic Designer", "Video and Audio Editor", "AI Video Expert"].includes(role)) ?? "AIRA Media", data: { tasks, manager } };
+    }
 
     if (view === "advisor") {
       const labsAccess = !!labs && await can("labs.sales.self", labs.id) && await can("organization.read", labs.id);

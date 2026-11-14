@@ -13,6 +13,7 @@ const brands = [
   { company: "aira-skill-city", slug: "aira-skill-studio", name: "AIRA SKILL STUDIO", parentSlug: null, domain: null },
   { company: "aira-skill-city", slug: "aira-labs", name: "AIRA LABS", parentSlug: null, domain: "airalabs.online" },
   { company: "aira-skill-city", slug: "aira-career-hub", name: "AIRA CAREER HUB", parentSlug: null, domain: null },
+  { company: "aira-skill-city", slug: "aira-media-company", name: "AIRA MEDIA COMPANY", parentSlug: null, domain: null },
   { company: "aira-skill-city", slug: "my-solar-solutions", name: "MY SOLAR SOLUTIONS", parentSlug: "aira-labs", domain: null },
   { company: "aira-skill-city", slug: "nte-naadu", name: "NTE NAADU", parentSlug: "aira-labs", domain: null },
   { company: "aira-skill-city", slug: "happinotes", name: "HAPPINOTES", parentSlug: "aira-labs", domain: null },

@@ -4,7 +4,8 @@ export const airaDivisions = [
   { name: "AIRA Startup Skool", slug: "aira-startup-school" },
   { name: "AIRA Labs", slug: "aira-labs" },
   { name: "AIRA Skill Studio", slug: "aira-skill-studio" },
-  { name: "AIRA Career Hub", slug: "aira-career-hub" }
+  { name: "AIRA Career Hub", slug: "aira-career-hub" },
+  { name: "AIRA Media Company", slug: "aira-media-company" }
 ] as const;
 export async function companyForOrganization(db: Prisma.TransactionClient, organizationId: string) {
   let id: string | null = organizationId;

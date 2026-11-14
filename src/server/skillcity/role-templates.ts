@@ -26,7 +26,11 @@ const templates = [
   { scope: "aira-labs", key: "labs-full-stack-developer", name: "Full Stack Developer", permissions: labsDeveloperRolePermissions },
   { scope: "aira-labs", key: "labs-software-developer", name: "Software Developer", permissions: labsDeveloperRolePermissions },
   { scope: "aira-labs", key: "labs-junior-developer", name: "Junior Developer", permissions: labsDeveloperRolePermissions },
-  { scope: "aira-labs", key: "labs-business-development-manager", name: "Business Development Manager", permissions: ["organization.read", "person.read", "notification.read", "labs.sales.self", "labs.sales.perform", "labs.sales.read", "labs.sales.manage"] }
+  { scope: "aira-labs", key: "labs-business-development-manager", name: "Business Development Manager", permissions: ["organization.read", "person.read", "notification.read", "labs.sales.self", "labs.sales.perform", "labs.sales.read", "labs.sales.manage"] },
+  { scope: "aira-media-company", key: "media-digital-marketing-manager", name: "Digital Marketing Manager", permissions: ["organization.read", "project.read", "task.read", "task.manage", "blocker.manage", "executive.read"] },
+  { scope: "aira-media-company", key: "media-graphic-designer", name: "Graphic Designer", permissions: ["organization.read", "project.read", "task.read", "task.manage", "blocker.manage"] },
+  { scope: "aira-media-company", key: "media-video-audio-editor", name: "Video and Audio Editor", permissions: ["organization.read", "project.read", "task.read", "task.manage", "blocker.manage"] },
+  { scope: "aira-media-company", key: "media-ai-video-expert", name: "AI Video Expert", permissions: ["organization.read", "project.read", "task.read", "task.manage", "blocker.manage"] }
 ] as const;
 
 export function createSkillCityRoleTemplates(client: PrismaClient = prisma) {

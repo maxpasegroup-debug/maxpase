@@ -21,7 +21,11 @@ export const staffRoleScopes: Record<string, string> = {
   "labs-full-stack-developer": "aira-labs",
   "labs-software-developer": "aira-labs",
   "labs-junior-developer": "aira-labs",
-  "labs-business-development-manager": "aira-labs"
+  "labs-business-development-manager": "aira-labs",
+  "media-digital-marketing-manager": "aira-media-company",
+  "media-graphic-designer": "aira-media-company",
+  "media-video-audio-editor": "aira-media-company",
+  "media-ai-video-expert": "aira-media-company"
 };
 
 const requiredCapabilities: Record<string, string[]> = {
@@ -39,7 +43,11 @@ const requiredCapabilities: Record<string, string[]> = {
   "labs-full-stack-developer": ["organization.read", "labs.delivery.assignee", "project.read", "task.read", "task.manage", "blocker.manage"],
   "labs-software-developer": ["organization.read", "labs.delivery.assignee", "project.read", "task.read", "task.manage", "blocker.manage"],
   "labs-junior-developer": ["organization.read", "labs.delivery.assignee", "project.read", "task.read", "task.manage", "blocker.manage"],
-  "labs-business-development-manager": ["organization.read", "notification.read", "labs.sales.self", "labs.sales.read", "labs.sales.manage"]
+  "labs-business-development-manager": ["organization.read", "notification.read", "labs.sales.self", "labs.sales.read", "labs.sales.manage"],
+  "media-digital-marketing-manager": ["organization.read", "project.read", "task.read", "task.manage", "blocker.manage", "executive.read"],
+  "media-graphic-designer": ["organization.read", "project.read", "task.read", "task.manage", "blocker.manage"],
+  "media-video-audio-editor": ["organization.read", "project.read", "task.read", "task.manage", "blocker.manage"],
+  "media-ai-video-expert": ["organization.read", "project.read", "task.read", "task.manage", "blocker.manage"]
 };
 
 export function staffPortalForRole(key: string): "skillcity" | "labs" {

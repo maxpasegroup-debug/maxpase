@@ -21,7 +21,7 @@ import { AdministrativeWorkspace } from "./administrative-workspace";
 import { SkillCityLogo } from "@/components/skillcity-logo";
 
 type Dashboard = Awaited<ReturnType<typeof skillCityEmployeeDashboard.dashboard>>;
-const labels: Record<EmployeeView,string> = { advisor: "Advisory", director: "Director", manager: "Manager desk", "administrative-officer": "Administration", developer: "Labs delivery", "business-development": "Labs business development" };
+const labels: Record<EmployeeView,string> = { advisor: "Advisory", director: "Director", manager: "Manager desk", "administrative-officer": "Administration", developer: "Labs delivery", "business-development": "Labs business development", media: "AIRA Media" };
 const leadNext: Record<string,string[]> = { NEW: ["NEW", "CONTACTED", "LOST"], CONTACTED: ["CONTACTED", "QUALIFIED", "LOST"], QUALIFIED: ["QUALIFIED", "AUDIT", "LOST"], AUDIT: ["AUDIT", "QUOTATION_READY", "LOST"], QUOTATION_READY: ["QUOTATION_READY", "LOST"] };
 const date = (value: Date | string | null | undefined) => value ? new Date(value).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" }) + " IST" : "Not scheduled";
 
@@ -56,6 +56,7 @@ export function SkillCityWorkspace({ data, email, userId, base, home }: { data: 
       </>}
       {data.view==="developer"&&data.data&&"projects" in data.data&&<DeveloperWorkspace desk={data.data}/>}
       {data.view==="business-development"&&data.data&&"records" in data.data&&<LabsBusinessDevelopment desk={data.data}/>}
+      {data.view==="media"&&data.data&&"tasks" in data.data&&<><header className="sc-heading"><p>AIRA Media Company</p><h1>{data.name}</h1><span>{data.data.manager ? "Media team work queue" : "Your assigned creative work"}</span></header><section className="sc-section"><h2>{data.data.manager ? "Open media tasks" : "My assigned tasks"}</h2>{data.data.tasks.length ? <div className="sc-list">{data.data.tasks.map(task=><article key={task.id}><header><h3>{task.title}</h3><span>{task.status.replaceAll("_", " ")}</span></header>{task.description && <p>{task.description}</p>}<p>Priority: {task.priority.replaceAll("_", " ")} · Due: {date(task.dueDate)}</p></article>)}</div> : <p>No open tasks are assigned in this workspace yet.</p>}</section></>}
     </div></div>
   </main>;
 }
