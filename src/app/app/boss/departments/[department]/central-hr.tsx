@@ -25,7 +25,7 @@ export function CentralHrWorkspace({ companies, brands, company, brand, view, se
             <Link href={href("organization")}><span><Landmark size={19}/> BRANDS</span><strong>{brands.length}</strong><small>In the selected company</small></Link>
           </section>
           <section className="executive-band boss-hr-quick-actions"><header><h2>Quick actions</h2><span>Start a common HR task</span></header><div className="boss-hr-action-cards">
-            {canAddEmployee && company ? <Link className="boss-hr-action-primary" href={href("add-employee")}><UserPlus/><strong>Hire employee</strong><small>Create an employment draft and begin onboarding</small><ArrowRight/></Link> : <div><UserPlus/><strong>Hire employee</strong><small>Select a company with employee access to begin</small></div>}
+            {canAddEmployee ? onboardingPanel ?? <Link className="boss-hr-action-primary" href={href("add-employee")}><UserPlus/><strong>Add team member</strong><small>Create an employment draft and begin onboarding</small><ArrowRight/></Link> : <div><UserPlus/><strong>Add team member</strong><small>No company has employee access for this account</small></div>}
             <Link href={href("documents")}><FileText/><strong>Employee documents</strong><small>Open a profile to add and manage documents</small><ArrowRight/></Link>
             <Link href={href("roles-access")}><HeartPulse/><strong>Access &amp; onboarding</strong><small>Review a staff member’s role and account setup</small><ArrowRight/></Link>
             <Link href={href("organization")}><ChartNoAxesColumnIncreasing/><strong>Company structure</strong><small>View brand assignments and team distribution</small><ArrowRight/></Link>

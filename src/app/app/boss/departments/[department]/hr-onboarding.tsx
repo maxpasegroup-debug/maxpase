@@ -2,38 +2,114 @@
 
 import { useActionState, useRef, useState } from "react";
 import Link from "next/link";
+import { ArrowRight, UserPlus, X } from "lucide-react";
 import { hrAction, type HrState } from "./hr-actions";
 
-type Brand = { id: string; name: string; parentName: string | null; status: string };
-type Person = { id: string; displayName: string; email: string | null };
-const steps = ["Person", "Employment", "Assignments", "Access"] as const;
+type Company = { organizationId: string; legalName: string | null; displayName: string; slug: string };
+type Brand = { id: string; name: string; organizationId: string; parentName: string | null; slug: string };
 const initial: HrState = {};
 
-export function HrOnboarding({ companyId, companyName, brands, people, departments, managers }: { companyId: string; companyName: string; brands: Brand[]; people: Person[]; departments: { id: string; name: string }[]; managers: { personId: string; name: string }[] }) {
-  const [step, setStep] = useState(0);
-  const [selectedPerson, setSelectedPerson] = useState("");
-  const [personSearch, setPersonSearch] = useState("");
-  const [selectedBrands, setSelectedBrands] = useState<string[]>([]);
-  const [formError, setFormError] = useState("");
+function positions(companySlug: string, brandSlug?: string) {
+  if (brandSlug === "nice-jobs") return ["NICEJOBS Director", "Career Hub Operations", "Community Manager", "Other"];
+  if (brandSlug === "aira-labs") return ["Full Stack Developer", "Software Developer", "Project Manager", "Other"];
+  if (companySlug === "aira-skill-city" && !brandSlug) return ["Administrative Officer", "HR Manager", "Office Administrator", "Other"];
+  return ["Team Member", "Brand Manager", "Operations Associate", "Other"];
+}
+
+function HireEmployeeForm({ companies, brands, initialCompanyId, onOpenProfile }: { companies: Company[]; brands: Brand[]; initialCompanyId?: string; onOpenProfile: (id: string) => void }) {
   const [state, action, pending] = useActionState(hrAction, initial);
+  const [step, setStep] = useState(0);
+  const [companyId, setCompanyId] = useState(initialCompanyId && companies.some(company => company.organizationId === initialCompanyId) ? initialCompanyId : companies[0]?.organizationId ?? "");
+  const [brandId, setBrandId] = useState("");
+  const company = companies.find(item => item.organizationId === companyId);
+  const availableBrands = brands.filter(item => item.organizationId === companyId);
+  const selectedBrand = availableBrands.find(item => item.id === brandId);
+  const titleOptions = positions(company?.slug ?? "", selectedBrand?.slug);
+  const [position, setPosition] = useState("");
+  const [customPosition, setCustomPosition] = useState("");
+  const [formError, setFormError] = useState("");
   const formRef = useRef<HTMLFormElement>(null);
-  const next = () => {
-    const data = new FormData(formRef.current!);
-    if (step === 0 && !selectedPerson && (!String(data.get("displayName") || "").trim() || !String(data.get("email") || "").trim())) { setFormError("Enter a name and email, or choose an existing person."); return; }
-    if (step === 1 && !String(data.get("designation") || "").trim()) { setFormError("Enter the designation from the approved employment arrangement."); return; }
-    if (step === 2 && selectedBrands.length && (!data.get("joiningDate") || String(data.get("assignmentDecisionReference") || "").trim().length < 8)) { setFormError("Brand assignments need a joining date and an approval reference of at least eight characters."); return; }
-    setFormError(""); setStep(step + 1);
-  };
-  if (state.employmentId) return <section className="executive-band boss-hr-onboarding-result" role="status"><h2>Employee draft saved</h2><p>{state.message}</p><p>Review employment and assignments, then arrange authorized account access separately.</p><Link className="button" href={`/app/boss/departments/hr/employees/${encodeURIComponent(state.employmentId)}`}>Open employee profile</Link></section>;
-  return <section className="executive-band boss-hr-onboarding" aria-label="Add employee"><header><p className="eyebrow">NEW EMPLOYEE</p><h2>Add employee</h2><p>Four short steps. Saving creates an HR draft; it does not activate a login.</p></header>
-    <ol className="boss-hr-steps" aria-label="Onboarding steps">{steps.map((label, index) => <li key={label} aria-current={step === index ? "step" : undefined}><span>{index + 1}</span>{label}</li>)}</ol>
-    <form ref={formRef} action={action} onSubmit={event => { if (step < 3) { event.preventDefault(); next(); } }} className="boss-hr-wizard-form"><input type="hidden" name="intent" value="create"/><input type="hidden" name="companyId" value={companyId}/>
-      <div hidden={step !== 0}><h3>Who is joining?</h3><p>Search the existing people list before creating another record.</p><label>Find a person <input type="search" value={personSearch} onChange={event => setPersonSearch(event.target.value)} placeholder="Name or email"/></label><label>Existing person <select name="personId" value={selectedPerson} onChange={event => setSelectedPerson(event.target.value)}><option value="">Create a new person</option>{people.filter(person => !personSearch || `${person.displayName} ${person.email ?? ""}`.toLowerCase().includes(personSearch.toLowerCase()) || person.id === selectedPerson).map(person => <option key={person.id} value={person.id}>{person.displayName}{person.email ? ` · ${person.email}` : ""}</option>)}</select></label>{!selectedPerson && <><label>Full name <input name="displayName" maxLength={200} autoComplete="name"/></label><label>Email <input name="email" type="email" maxLength={254} autoComplete="email"/></label><label className="boss-hr-inline-check"><input type="checkbox" name="linkExisting"/> Link to the person already using this exact email</label></>}</div>
-      <div hidden={step !== 1}><h3>Employment</h3><p>Legal employer: <strong>{companyName}</strong></p><label>Designation <input name="designation" maxLength={120}/></label><label>Employment type from approved agreement <input name="employmentType" maxLength={80}/></label><label>Joining date <input name="joiningDate" type="date"/></label><p>Reporting manager is set on a verified brand assignment after the draft is saved.</p></div>
-      <div hidden={step !== 2}><h3>Where will they work?</h3><p>Choose any applicable brands under {companyName}. These assignments remain drafts and do not grant access.</p><div className="boss-hr-brand-grid">{brands.filter(brand => brand.status === "ACTIVE").map(brand => <label key={brand.id} className="boss-hr-brand-choice"><input type="checkbox" name="initialBrandIds" value={brand.id} checked={selectedBrands.includes(brand.id)} onChange={event => setSelectedBrands(current => event.target.checked ? [...current, brand.id] : current.filter(id => id !== brand.id))}/><span>{brand.parentName ? `${brand.parentName} / ` : ""}{brand.name}</span></label>)}</div>{!brands.some(brand => brand.status === "ACTIVE") && <p>No active brand is available in this company. Save the company employment draft first.</p>}{selectedBrands.length > 0 && <><label>Department <select name="initialDepartmentId"><option value="">Not assigned</option>{departments.map(row => <option key={row.id} value={row.id}>{row.name}</option>)}</select></label><label>Reporting manager <select name="initialManagerPersonId"><option value="">Assign later</option>{managers.filter(row => row.personId !== selectedPerson).map(row => <option key={row.personId} value={row.personId}>{row.name}</option>)}</select></label><p>The manager must have verified access and an active assignment to every selected brand.</p><label>Assignment approval reference <input name="assignmentDecisionReference" minLength={8} maxLength={200} placeholder="Recorded decision or approval reference"/></label></>}</div>
-      <div hidden={step !== 3}><h3>Review access boundary</h3><p><strong>Company:</strong> {companyName}</p><p><strong>Brand drafts:</strong> {selectedBrands.length ? brands.filter(brand => selectedBrands.includes(brand.id)).map(brand => brand.name).join(", ") : "None yet"}</p><p><strong>Login identity:</strong> The employee email, after account verification.</p><p><strong>Role and portal:</strong> Pending authorized selection and configuration in the employee Access tab.</p><p className="boss-hr-access-warning">This step saves employment and assignment drafts only. No invitation is sent and no login permission is granted.</p></div>
-      {(formError || state.error) && <p role="alert">{formError || state.error}</p>}
-      <footer className="boss-hr-wizard-actions">{step > 0 && <button type="button" className="button secondary" onClick={() => { setFormError(""); setStep(step - 1); }}>Back</button>}{step < 3 ? <button type="button" className="button" onClick={next}>Continue</button> : <button className="button" disabled={pending}>{pending ? "Saving…" : "Save employee draft"}</button>}</footer>
-    </form>
+  const title = position === "Other" ? customPosition.trim() : position;
+
+  if (state.employmentId) return <section className="boss-hr-hire-result" role="status" aria-live="polite">
+    <span className="eyebrow">EMPLOYEE RECORD CREATED</span>
+    <h3>Saved as an employment draft</h3>
+    <p>{state.message}</p>
+    <p>Next, review the employment record and complete its account access. No login was activated and no PIN was generated or shared.</p>
+    <div className="boss-hr-hire-actions"><Link className="button" href={`/app/boss/departments/hr/employees/${encodeURIComponent(state.employmentId)}`}>Open employee record <ArrowRight size={16}/></Link><button type="button" className="button secondary" onClick={() => onOpenProfile("")}>Close</button></div>
+    {state.error && <p role="alert">{state.error}</p>}
   </section>;
+
+  function continueToDetails() {
+    if (!companyId) { setFormError("Choose a company first."); return; }
+    if (!position || !title) { setFormError("Choose a position or enter a job title."); return; }
+    setFormError(""); setStep(1);
+  }
+
+  function validateDetails(event: React.FormEvent<HTMLFormElement>) {
+    if (step === 0) { event.preventDefault(); continueToDetails(); return; }
+    const data = new FormData(event.currentTarget);
+    const name = String(data.get("displayName") ?? "").trim();
+    const email = String(data.get("email") ?? "").trim();
+    const phone = String(data.get("phone") ?? "").trim();
+    const joiningDate = String(data.get("joiningDate") ?? "").trim();
+    const employmentType = String(data.get("employmentType") ?? "").trim();
+    if (!name || !email || !phone || !joiningDate || !employmentType) { event.preventDefault(); setFormError("Add the employee’s name, email, mobile number, joining date and employment type."); return; }
+    if (brandId && String(data.get("assignmentDecisionReference") ?? "").trim().length < 8) { event.preventDefault(); setFormError("Add the recorded brand assignment decision reference."); return; }
+    setFormError("");
+  }
+
+  return <form ref={formRef} action={action} className="boss-hr-hire-form" onSubmit={validateDetails}>
+    <input type="hidden" name="intent" value="create"/>
+    <input type="hidden" name="companyId" value={companyId}/>
+    <input type="hidden" name="designation" value={title}/>
+    <input type="hidden" name="contactEmail" value=""/>
+    <input type="hidden" name="contactPhone" value=""/>
+    {brandId && <input type="hidden" name="assignmentDecisionReference" value="HR-authorized hire entry"/>}
+    {brandId && <input type="hidden" name="initialBrandIds" value={brandId}/>}
+    <header className="boss-hr-hire-step-heading"><span>STEP {step + 1} OF 2</span><h3>{step === 0 ? "Choose the role" : "Employee details"}</h3><p>{step === 0 ? "Select the legal company, work area and job title." : "Enter the details for the employee record."}</p></header>
+
+    {step === 0 ? <div className="boss-hr-hire-fields">
+      <label>Company<select value={companyId} onChange={event => { setCompanyId(event.target.value); setBrandId(""); setPosition(""); setCustomPosition(""); }} required><option value="">Choose a company</option>{companies.map(item => <option key={item.organizationId} value={item.organizationId}>{item.legalName ?? item.displayName}</option>)}</select></label>
+      <label>Brand or work area<select value={brandId} onChange={event => { setBrandId(event.target.value); setPosition(""); setCustomPosition(""); }}><option value="">Company-wide / no brand assignment</option>{availableBrands.map(item => <option key={item.id} value={item.id}>{item.parentName ? `${item.parentName} / ` : ""}{item.name}</option>)}</select></label>
+      <label>Position<select value={position} onChange={event => setPosition(event.target.value)} required><option value="">Choose a position</option>{titleOptions.map(option => <option key={option} value={option}>{option}</option>)}</select></label>
+      {position === "Other" && <label>Job title<input value={customPosition} onChange={event => setCustomPosition(event.target.value)} maxLength={120} placeholder="Enter the approved job title" required/></label>}
+      <p className="boss-hr-hire-note">Job title records the work assignment. Portal access is reviewed separately and is never granted by the title alone.</p>
+    </div> : <div className="boss-hr-hire-fields">
+      <div className="boss-hr-hire-summary"><strong>{company?.legalName ?? company?.displayName}</strong><span>{selectedBrand?.name ?? "Company-wide"} · {title}</span><button type="button" onClick={() => { setFormError(""); setStep(0); }}>Change</button></div>
+      <div className="boss-hr-hire-grid">
+        <label>Full name<input name="displayName" autoComplete="name" maxLength={200}/></label>
+        <label>Work email<input name="email" type="email" autoComplete="email" maxLength={254}/></label>
+        <label>Mobile number<input name="phone" type="tel" autoComplete="tel" inputMode="tel" placeholder="Include country code" maxLength={24}/></label>
+        <label>Joining date<input name="joiningDate" type="date"/></label>
+        <label>Employment type<select name="employmentType" defaultValue=""><option value="">Choose</option><option>Full-time</option><option>Part-time</option><option>Contract</option><option>Intern</option><option>Other</option></select></label>
+        <label>Emergency contact name<input name="emergencyContactName" maxLength={160}/></label>
+        <label>Relationship<input name="emergencyContactRelationship" maxLength={80} placeholder="For example, parent or spouse"/></label>
+        <label>Emergency contact mobile<input name="emergencyContactPhone" type="tel" inputMode="tel" maxLength={24}/></label>
+        <label>Emergency contact email<input name="emergencyContactEmail" type="email" maxLength={254}/></label>
+      </div>
+      <label className="boss-hr-hire-link-existing"><input type="checkbox" name="linkExisting"/> Link the exact existing person record with this email, if this is the same person.</label>
+      <p className="boss-hr-hire-note">The employee and brand assignment are saved as drafts. You will review employment and send an account activation invitation from the employee’s Access tab.</p>
+    </div>}
+
+    {(formError || state.error) && <p role="alert" className="boss-hr-hire-error">{formError || state.error}</p>}
+    <footer className="boss-hr-hire-actions">
+      {step === 1 && <button type="button" className="button secondary" onClick={() => { setFormError(""); setStep(0); }}>Back</button>}
+      {step === 0 ? <button type="button" className="button" onClick={continueToDetails}>Continue <ArrowRight size={16}/></button> : <button className="button" disabled={pending}>{pending ? "Saving…" : "Create employee draft"}</button>}
+    </footer>
+  </form>;
+}
+
+export function HrOnboarding({ companies, brands, initialCompanyId }: { companies: Company[]; brands: Brand[]; initialCompanyId?: string }) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  const [formKey, setFormKey] = useState(0);
+  function open() { dialog.current?.showModal(); }
+  function close() { dialog.current?.close(); }
+  return <>
+    <button type="button" className="boss-hr-action-primary" onClick={open}><UserPlus/><strong>Add team member</strong><small>Choose a company and position, then enter employee details</small><ArrowRight/></button>
+    <dialog ref={dialog} className="boss-hr-hire-dialog" aria-labelledby="boss-hr-hire-title" onClose={() => setFormKey(key => key + 1)}>
+      <header className="boss-hr-hire-dialog-header"><div><p className="eyebrow">BOSS DASHBOARD / PEOPLE</p><h2 id="boss-hr-hire-title">Add team member</h2></div><button type="button" aria-label="Close" onClick={close}><X size={20}/></button></header>
+      <HireEmployeeForm key={formKey} companies={companies} brands={brands} initialCompanyId={initialCompanyId} onOpenProfile={close}/>
+    </dialog>
+  </>;
 }

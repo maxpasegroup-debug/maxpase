@@ -11,7 +11,7 @@ const id = z.string().min(1).max(200);
 const reference = z.string().trim().min(8).max(200);
 const optionalEmail = z.union([z.literal(""), z.email().max(254)]).transform(value => value ? value.toLowerCase() : null);
 const optionalPhone = z.union([z.literal(""), z.string().trim().regex(/^\+?[0-9().\-\s]{7,24}$/)]).transform(value => value || null);
-const personDraft = z.object({ companyId: id, personId: id.optional(), displayName: z.string().trim().min(2).max(200).optional(), email: z.email().max(254).transform(v => v.toLowerCase()).optional(), linkExisting: z.boolean().optional(), designation: z.string().trim().max(120).optional(), employmentType: z.string().trim().min(2).max(80).optional(), joiningDate: z.coerce.date().optional(), initialBrandIds: z.array(id).max(20).optional(), initialDepartmentId: id.optional(), initialManagerPersonId: id.optional(), assignmentDecisionReference: reference.optional() }).strict();
+const personDraft = z.object({ companyId: id, personId: id.optional(), displayName: z.string().trim().min(2).max(200).optional(), email: z.email().max(254).transform(v => v.toLowerCase()).optional(), phone: optionalPhone.optional(), contactEmail: optionalEmail.optional(), contactPhone: optionalPhone.optional(), emergencyContactName: z.string().trim().max(160).transform(value => value || null).optional(), emergencyContactRelationship: z.string().trim().max(80).transform(value => value || null).optional(), emergencyContactPhone: optionalPhone.optional(), emergencyContactEmail: optionalEmail.optional(), linkExisting: z.boolean().optional(), designation: z.string().trim().max(120).optional(), employmentType: z.string().trim().min(2).max(80).optional(), joiningDate: z.coerce.date().optional(), initialBrandIds: z.array(id).max(20).optional(), initialDepartmentId: id.optional(), initialManagerPersonId: id.optional(), assignmentDecisionReference: reference.optional() }).strict();
 const assignmentDraft = z.object({ employmentId: id, brandId: id, departmentId: id.optional(), managerPersonId: id.optional(), designation: z.string().trim().min(2).max(120), startDate: z.coerce.date(), decisionReference: reference }).strict();
 export const hrEmployeeProfileInput = z.object({ employmentId: id, contactEmail: optionalEmail, contactPhone: optionalPhone, emergencyContactName: z.string().trim().max(160).transform(value => value || null), emergencyContactRelationship: z.string().trim().max(80).transform(value => value || null), emergencyContactPhone: optionalPhone, emergencyContactEmail: optionalEmail }).strict();
 
@@ -91,16 +91,20 @@ export function createHrEmploymentService(client: PrismaClient = prisma) {
       }
       let personId = input.personId;
       if (personId) {
-        const person = await db.person.findUnique({ where: { id: personId }, select: { id: true, status: true } });
+        const person = await db.person.findUnique({ where: { id: personId }, select: { id: true, status: true, phone: true } });
         if (!person || person.status !== "ACTIVE") throw new AccessError("Person unavailable");
+        if (input.phone && person.phone && input.phone !== person.phone) throw new AccessError("This person already has a different verified contact number; review the existing profile first");
+        if (!person.phone && input.phone) await db.person.update({ where: { id: person.id }, data: { phone: input.phone } });
       } else {
-        const existing = await db.person.findUnique({ where: { email: input.email! }, select: { id: true, status: true } });
+        const existing = await db.person.findUnique({ where: { email: input.email! }, select: { id: true, status: true, phone: true } });
         if (existing) {
           if (!input.linkExisting || existing.status !== "ACTIVE") throw new AccessError("An existing person uses this email; choose explicit linking");
+          if (input.phone && existing.phone && input.phone !== existing.phone) throw new AccessError("This person already has a different verified contact number; review the existing profile first");
           personId = existing.id;
+          if (!existing.phone && input.phone) await db.person.update({ where: { id: existing.id }, data: { phone: input.phone } });
         } else {
           if (input.linkExisting) throw new AccessError("No existing person matches this email");
-          const person = await db.person.create({ data: { displayName: input.displayName!, email: input.email! }, select: { id: true } });
+          const person = await db.person.create({ data: { displayName: input.displayName!, email: input.email!, phone: input.phone ?? null }, select: { id: true } });
           personId = person.id;
         }
       }
@@ -114,7 +118,8 @@ export function createHrEmploymentService(client: PrismaClient = prisma) {
         const assignments = manager ? await db.hrAssignment.findMany({ where: { employmentId: manager.id, brandId: { in: initialBrandIds }, status: "ACTIVE" }, select: { brandId: true } }) : [];
         if (!manager || !verified || initialBrandIds.some(brandId => !assignments.some(assignment => assignment.brandId === brandId))) throw new AccessError("Verified manager with an active assignment to every selected brand required");
       }
-      const row = await db.employment.create({ data: { personId: personId!, companyId: input.companyId, designation: input.designation || null, employmentType: input.employmentType ?? null, startDate: input.joiningDate ?? null } });
+      const personContact = await db.person.findUnique({ where: { id: personId! }, select: { email: true, phone: true } });
+      const row = await db.employment.create({ data: { personId: personId!, companyId: input.companyId, designation: input.designation || null, employmentType: input.employmentType ?? null, startDate: input.joiningDate ?? null, contactEmail: input.contactEmail ?? personContact?.email ?? null, contactPhone: input.contactPhone ?? personContact?.phone ?? null, emergencyContactName: input.emergencyContactName ?? null, emergencyContactRelationship: input.emergencyContactRelationship ?? null, emergencyContactPhone: input.emergencyContactPhone ?? null, emergencyContactEmail: input.emergencyContactEmail ?? null } });
       await operationalEvent(db, { actorUserId: actorId, actorPersonId: ctx.user!.personId, organizationId: input.companyId, action: "hr.employment_drafted", entityType: "Employment", entityId: row.id, result: "SUCCESS" });
       for (const brandId of initialBrandIds) {
         const assignment = await db.hrAssignment.create({ data: { employmentId: row.id, brandId, departmentId: input.initialDepartmentId, managerPersonId: input.initialManagerPersonId, designation: input.designation!, startDate: input.joiningDate!, decisionReference: input.assignmentDecisionReference } });

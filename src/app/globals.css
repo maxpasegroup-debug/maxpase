@@ -977,14 +977,42 @@ progress { width: 120px; accent-color: var(--accent); }
 .boss-hr-quick-actions > header h2, .boss-hr-people-section > header h2, .boss-hr-command-aside h2 { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 17px; }
 .boss-hr-quick-actions > header span, .boss-hr-people-section > header p { margin: 0; color: var(--muted); font-size: 12px; }
 .boss-hr-action-cards { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 9px; }
-.boss-hr-action-cards > a, .boss-hr-action-cards > div { display: grid; grid-template-columns: 1fr auto; align-items: start; gap: 7px 8px; min-height: 128px; padding: 12px; border: 1px solid #dce5f3; border-radius: 10px; background: linear-gradient(145deg, #f8faff, #edf3fc); color: var(--ink); text-decoration: none; }
-.boss-hr-action-cards > a:hover { border-color: #70a5f5; transform: translateY(-1px); }
-.boss-hr-action-cards > a > svg:first-child, .boss-hr-action-cards > div > svg:first-child { grid-column: 1 / -1; color: #246beb; }
+.boss-hr-action-cards > a, .boss-hr-action-cards > div, .boss-hr-action-cards > button { display: grid; grid-template-columns: 1fr auto; align-items: start; gap: 7px 8px; min-height: 128px; padding: 12px; border: 1px solid #dce5f3; border-radius: 10px; background: linear-gradient(145deg, #f8faff, #edf3fc); color: var(--ink); text-decoration: none; text-align: left; font: inherit; }
+.boss-hr-action-cards > a:hover, .boss-hr-action-cards > button:hover { border-color: #70a5f5; transform: translateY(-1px); }
+.boss-hr-action-cards > a > svg:first-child, .boss-hr-action-cards > div > svg:first-child, .boss-hr-action-cards > button > svg:first-child { grid-column: 1 / -1; color: #246beb; }
 .boss-hr-action-cards strong, .boss-hr-action-cards small { grid-column: 1 / -1; }
 .boss-hr-action-cards small { color: var(--muted); font-size: 11px; line-height: 1.4; }
-.boss-hr-action-cards a > svg:last-child { grid-column: 2; grid-row: 2; color: #246beb; }
-.boss-hr-action-cards .boss-hr-action-primary { color: #fff; border-color: #1c59c7; background: linear-gradient(135deg, #246beb, #1447a8); }
+.boss-hr-action-cards a > svg:last-child, .boss-hr-action-cards > button > svg:last-child { grid-column: 2; grid-row: 2; color: #246beb; }
+.boss-hr-action-cards .boss-hr-action-primary { color: #fff; border-color: #1c59c7; background: linear-gradient(135deg, #246beb, #1447a8); cursor: pointer; }
 .boss-hr-action-cards .boss-hr-action-primary > svg, .boss-hr-action-cards .boss-hr-action-primary small { color: #e4efff; }
+.boss-hr-hire-dialog { width: min(660px, calc(100vw - 28px)); max-width: 660px; max-height: min(90vh, 820px); padding: 0; border: 1px solid #d7def0; border-radius: 18px; color: var(--ink); background: #fff; box-shadow: 0 28px 90px #07152b55; }
+.boss-hr-hire-dialog::backdrop { background: #10182bb8; backdrop-filter: blur(5px); }
+.boss-hr-hire-dialog-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; padding: 22px 24px 16px; border-bottom: 1px solid #e8edf5; }
+.boss-hr-hire-dialog-header .eyebrow, .boss-hr-hire-step-heading > span { margin: 0; color: #246beb; font-size: 10px; font-weight: 800; letter-spacing: .12em; }
+.boss-hr-hire-dialog-header h2 { margin: 5px 0 0; font-size: 24px; }
+.boss-hr-hire-dialog-header > button { display: grid; width: 36px; height: 36px; place-items: center; border: 1px solid #dce5f3; border-radius: 50%; color: var(--ink); background: #f7f9fd; cursor: pointer; }
+.boss-hr-hire-form { padding: 20px 24px 24px; }
+.boss-hr-hire-step-heading { margin-bottom: 18px; }
+.boss-hr-hire-step-heading h3 { margin: 6px 0 4px; font-size: 20px; }
+.boss-hr-hire-step-heading p, .boss-hr-hire-note { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.5; }
+.boss-hr-hire-fields { display: grid; gap: 14px; }
+.boss-hr-hire-fields > label, .boss-hr-hire-grid > label { display: grid; gap: 6px; color: var(--ink); font-size: 12px; font-weight: 700; }
+.boss-hr-hire-fields input:not([type="checkbox"]), .boss-hr-hire-fields select { width: 100%; min-height: 42px; padding: 9px 11px; border: 1px solid #d4deed; border-radius: 9px; color: var(--ink); background: #fff; font: inherit; font-size: 14px; }
+.boss-hr-hire-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.boss-hr-hire-wide { grid-column: 1 / -1; }
+.boss-hr-hire-summary { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; padding: 12px; border: 1px solid #dce7f8; border-radius: 10px; background: #f5f8fe; font-size: 13px; }
+.boss-hr-hire-summary span { color: var(--muted); }
+.boss-hr-hire-summary button { grid-column: 2; grid-row: 1 / 3; border: 0; color: #1d5dc7; background: transparent; font: inherit; font-weight: 700; cursor: pointer; }
+.boss-hr-hire-link-existing { display: flex !important; align-items: flex-start; gap: 8px !important; font-weight: 500 !important; line-height: 1.4; }
+.boss-hr-hire-link-existing input { margin-top: 2px; accent-color: #246beb; }
+.boss-hr-hire-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; margin-top: 18px; }
+.boss-hr-hire-actions .button { display: inline-flex; min-height: 42px; align-items: center; justify-content: center; gap: 8px; padding: 9px 14px; border: 1px solid #1c59c7; border-radius: 9px; color: #fff; background: linear-gradient(135deg, #246beb, #1447a8); font: inherit; font-size: 13px; font-weight: 700; text-decoration: none; cursor: pointer; }
+.boss-hr-hire-actions .button.secondary { border-color: #d4deed; color: var(--ink); background: #fff; }
+.boss-hr-hire-actions .button:disabled { opacity: .65; cursor: wait; }
+.boss-hr-hire-error { margin: 14px 0 0; color: #a12632; font-size: 13px; }
+.boss-hr-hire-result { padding: 22px 24px 24px; }
+.boss-hr-hire-result h3 { margin: 6px 0; }
+.boss-hr-hire-result p { color: var(--muted); font-size: 13px; line-height: 1.5; }
 .boss-hr-people-section > header > a { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; }
 .boss-hr-status-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
 .boss-hr-status-tabs a { padding: 6px 11px; border: 1px solid var(--line); border-radius: 999px; color: var(--ink); font-size: 11px; text-decoration: none; }
@@ -1079,7 +1107,8 @@ progress { width: 120px; accent-color: var(--accent); }
 @media (max-width: 460px) { .boss-hr-candidate-form, .boss-hr-letter-form, .boss-hr-template-form { grid-template-columns: minmax(0, 1fr); } .boss-hr-candidate-form .wide, .boss-hr-letter-form .wide, .boss-hr-template-form .wide { grid-column: 1; } .boss-hr-recruit-section { padding: 12px; } .hr-public-offer { margin: 16px auto; padding: 18px; } }
 @media (max-width: 1100px) { .boss-hr-command-layout { grid-template-columns: minmax(0, 1fr); } .boss-hr-command-aside { grid-template-columns: repeat(2, minmax(0, 1fr)); } .boss-hr-command-aside .boss-hr-planned-card { grid-column: 1 / -1; } }
 @media (max-width: 720px) { .boss-hr-command-heading { align-items: stretch; flex-direction: column; } .boss-hr-command-heading .boss-hr-company-switch { min-width: 0; } .boss-hr-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } .boss-hr-action-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); } .boss-hr-command-aside { grid-template-columns: minmax(0, 1fr); } .boss-hr-command-aside .boss-hr-planned-card { grid-column: auto; } }
-@media (max-width: 420px) { .boss-hr-kpis a { padding: 10px; } .boss-hr-kpis strong { font-size: 24px; } .boss-hr-quick-actions, .boss-hr-people-section, .boss-hr-command-aside .executive-band { padding: 12px; } .boss-hr-quick-actions > header { align-items: flex-start; flex-direction: column; } .boss-hr-action-cards > a, .boss-hr-action-cards > div { padding: 10px; } }
+@media (max-width: 520px) { .boss-hr-hire-dialog { max-height: 94vh; border-radius: 14px; } .boss-hr-hire-dialog-header, .boss-hr-hire-form, .boss-hr-hire-result { padding-right: 16px; padding-left: 16px; } .boss-hr-hire-grid { grid-template-columns: minmax(0, 1fr); } .boss-hr-hire-wide { grid-column: auto; } }
+@media (max-width: 420px) { .boss-hr-kpis a { padding: 10px; } .boss-hr-kpis strong { font-size: 24px; } .boss-hr-quick-actions, .boss-hr-people-section, .boss-hr-command-aside .executive-band { padding: 12px; } .boss-hr-quick-actions > header { align-items: flex-start; flex-direction: column; } .boss-hr-action-cards > a, .boss-hr-action-cards > div, .boss-hr-action-cards > button { padding: 10px; } }
 .boss-hr-steps { display: grid; grid-template-columns: repeat(4, 1fr); list-style: none; gap: 8px; padding: 0; margin: 24px 0; }
 .boss-hr-steps li { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 13px; }
 .boss-hr-steps li span { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; background: var(--line); color: var(--text); flex: none; }
