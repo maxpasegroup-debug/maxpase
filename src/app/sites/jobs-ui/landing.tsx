@@ -39,7 +39,6 @@ export function JobsLanding({ paths }: { paths: Paths; opportunities?: unknown[]
           <span className={styles.brandName}>NICEJOBS</span>
         </Link>
         <nav className={styles.nav} aria-label="Main navigation">
-          <Link href={paths.opportunities}>Explore Opportunities</Link>
           <Link className={styles.signIn} href={paths.login}>Sign In</Link>
           <StartNow signup={paths.signup}/>
         </nav>
@@ -48,7 +47,6 @@ export function JobsLanding({ paths }: { paths: Paths; opportunities?: unknown[]
           <details className={styles.mobileMenu}>
             <summary aria-label="Open navigation menu"><span/><span/><span/></summary>
             <nav aria-label="Mobile navigation">
-              <Link href={paths.opportunities}>Explore Opportunities</Link>
               <Link href={paths.login}>Sign In</Link>
               <a href="#experience">How NICEJOBS Works</a>
             </nav>
