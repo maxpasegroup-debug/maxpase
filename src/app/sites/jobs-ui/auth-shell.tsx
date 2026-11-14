@@ -1,6 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
-import { ArrowLeft, BriefcaseBusiness } from "lucide-react";
+import { ArrowLeft, X } from "lucide-react";
 import type { ReactNode } from "react";
 import styles from "./auth.module.css";
 
@@ -14,22 +14,23 @@ export function JobsAuthShell({ paths, title, eyebrow, description, mode, childr
   mode: "signup" | "login" | "reset" | "verify";
   children: ReactNode;
 }) {
-  return <main className={`${styles.page} ${mode === "signup" ? styles.signupPage : ""}`}>
+  return <main className={`${styles.page} ${mode === "signup" ? styles.signupPage : ""} ${mode === "login" ? styles.loginPage : ""}`}>
     <aside className={styles.story} aria-label="Nice Jobs">
-      <Image className={styles.storyImage} src="/images/nice-jobs-hero-v2.webp" alt="" fill sizes="(max-width: 900px) 100vw, 48vw" priority />
+      <Image className={styles.storyImage} src="/images/nicejobs-cinematic-hero.webp" alt="" fill sizes="100vw" priority />
       <div className={styles.storyContent}>
-        <p>AIRA CAREER HUB</p>
-        <h2>Good things start with a first step.</h2>
-        <span>Discover opportunities. Learn the work. Grow through practice.</span>
+        <p>NICEJOBS · CAREER HUB</p>
+        <h2>Your next step starts here.</h2>
+        <span>Explore in-house opportunities, gain practical experience and grow through guided work.</span>
       </div>
     </aside>
     <div className={styles.content}>
       <header className={styles.header}>
-        <Link className={styles.brand} href={paths.home} aria-label="Nice Jobs home"><span className={styles.brandMark}><BriefcaseBusiness size={21} /></span><span>Nice Jobs<small>AIRA Career Hub</small></span></Link>
+        <Link className={styles.brand} href={paths.home} aria-label="NICEJOBS home"><span className={styles.brandMark}>N</span><span>NICEJOBS<small>Career Hub by AIRA Skill City</small></span></Link>
         <nav aria-label="Account navigation"><Link aria-current={mode === "login" ? "page" : undefined} href={paths.login}>Sign in</Link><Link aria-current={mode === "signup" ? "page" : undefined} href={paths.signup}>Create account</Link></nav>
       </header>
       <div className={styles.formWrap}>
         <div className={styles.formContent} key={mode}>
+          {mode === "login" && <Link className={styles.loginClose} href={paths.home} aria-label="Close sign in"><X size={19}/></Link>}
           <p className={styles.eyebrow}>{eyebrow}</p>
           <h1>{title}</h1>
           <p className={styles.description}>{description}</p>

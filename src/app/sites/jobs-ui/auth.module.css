@@ -164,3 +164,99 @@
   .signupPage .phoneRow { grid-template-columns: minmax(104px, 40%) minmax(0, 1fr); }
   .verificationDialog { padding: 18px; }
 }
+
+/* NICEJOBS account pages share the violet landing-page identity. */
+.page {
+  --aira-black: #140d25;
+  --aira-burgundy: #7427f5;
+  --aira-ruby: #e05bef;
+  --aira-gold: #cba7ff;
+  --aira-ivory: #fff;
+  --aira-border: rgba(241,234,255,.16);
+  --aira-soft-ivory: #241037;
+  color: var(--aira-ivory);
+  background: radial-gradient(ellipse at 78% 14%,rgba(116,39,245,.18),transparent 38%),var(--aira-black);
+  font-family: var(--aira-text), Arial, sans-serif;
+}
+.story { background: #140d25; }
+.story::after { background: linear-gradient(180deg,rgba(20,13,37,.05),rgba(20,13,37,.88)); }
+.storyContent p, .eyebrow { color: #e3c8ff; }
+.content { background: rgba(20,13,37,.96); }
+.header, .footer { border-color: rgba(241,234,255,.12); }
+.brand { color: #fff; }
+.brandMark { border-radius: 12px 12px 12px 4px; background: linear-gradient(140deg,#35c8ec 0%,#8327ec 55%,#e05bef 100%); box-shadow: 0 7px 20px rgba(166,44,245,.35); font-size: 23px; font-style: italic; }
+.brand small { color: #c7c0dc; }
+.header nav a { color: #f8f5ff; }
+.header nav a[aria-current] { color: #e7c8ff; border-color: #a62cf5; }
+.formContent { border-color: rgba(174,141,255,.22); border-radius: 20px; background: rgba(31,21,51,.82); box-shadow: 0 28px 90px rgba(9,5,20,.44); }
+.description, .hint, .notice, .field label, .acknowledge { color: #f1eaff; }
+.field input, .field select { border-color: rgba(203,167,255,.34); border-radius: 11px; color: #fff; background: rgba(20,13,37,.82); }
+.field input:hover, .field input:focus, .field select:focus { border-color: #cba7ff; }
+.passwordInput button { color: #f1eaff; }
+.acknowledge input { accent-color: #a62cf5; }
+.button { border-radius: 13px; background: linear-gradient(108deg,#c328e8 0%,#7427f5 88%); box-shadow: 0 10px 28px rgba(125,38,247,.28); }
+.button:hover { background: linear-gradient(108deg,#d33bea 0%,#8738ff 88%); }
+.alert { border-left-color: #e05bef; color: #ffe6ff; background: rgba(116,39,245,.16); }
+.status { border-left-color: #a62cf5; color: #f1eaff; background: rgba(116,39,245,.16); }
+.supportLink, .switch { color: #f1eaff; }
+.supportLink a, .switch a, .footer a { color: #d7b8ff; }
+.footer { color: #d0c9df; }
+.page :where(a,button,input,select):focus-visible { outline-color: #cba7ff; }
+.verificationDialog { border-color: rgba(174,141,255,.35); border-radius: 18px; background: #140d25; }
+.verificationDialog::backdrop { background: rgba(9,5,20,.78); backdrop-filter: blur(8px); }
+.dialogClose:hover { background: #302247; }
+.verifyChoices { border-bottom-color: rgba(203,167,255,.28); }
+.verifyChoices button[aria-current] { border-bottom-color: #e05bef; color: #e3c8ff; }
+.verificationDialog :where(button,input,select):focus-visible { outline-color: #cba7ff; }
+.signupPage .formContent::before { border-color: #cba7ff; background: radial-gradient(circle at 35% 30%,#fff,#cba7ff 12%,#7427f5 48%,#171014 76%); box-shadow: 0 0 25px rgba(166,44,245,.42),inset -6px -5px 10px rgba(0,0,0,.5); }
+.steps li { border-top-color: rgba(203,167,255,.28); color: #c7c0dc; }
+.steps li[aria-current] { border-top-color: #e05bef; color: #fff; }
+.backButton { border-color: #cba7ff; border-radius: 11px; }
+.backButton:hover { background: rgba(166,44,245,.14); }
+
+/* The sign-in route is presented as a focused modal-style card over the hero. */
+.loginPage {
+  display: block;
+  min-height: 100svh;
+  overflow: hidden;
+  isolation: isolate;
+  background:
+    linear-gradient(90deg,rgba(20,13,37,.82),rgba(20,13,37,.38) 52%,rgba(20,13,37,.7)),
+    linear-gradient(0deg,rgba(20,13,37,.62),rgba(20,13,37,.14)),
+    url("/images/nicejobs-cinematic-hero.webp") center 43%/cover no-repeat,
+    #140d25;
+}
+.loginPage .story { display: none; }
+.loginPage .content { position: relative; min-height: 100svh; background: transparent; }
+.loginPage .header { position: absolute; z-index: 2; inset: 0 0 auto; min-height: 78px; padding: 14px clamp(20px,5vw,72px); border: 0; }
+.loginPage .header nav { gap: 12px; }
+.loginPage .header nav a { min-height: 40px; padding-inline: 15px; border: 1px solid rgba(255,255,255,.25); border-radius: 999px; }
+.loginPage .header nav a[aria-current] { border-color: rgba(203,167,255,.65); color: #fff; }
+.loginPage .formWrap { flex: 1; align-items: center; padding: 100px 20px 72px; }
+.loginPage .formContent { position: relative; width: min(100%,460px); padding: clamp(28px,4vw,40px); border: 1px solid rgba(203,167,255,.34); border-radius: 24px; background: rgba(20,13,37,.9); box-shadow: 0 28px 100px rgba(10,5,25,.52),0 0 50px rgba(116,39,245,.12); backdrop-filter: blur(20px); }
+.loginPage .formContent h1 { color: #fff; font-size: clamp(32px,5vw,42px); letter-spacing: -.045em; }
+.loginPage .description { margin-bottom: 24px; color: #e1d9f1; }
+.loginClose { position: absolute; top: 16px; right: 16px; display: grid; place-items: center; width: 42px; height: 42px; border: 1px solid rgba(255,255,255,.22); border-radius: 50%; color: #f1eaff; background: rgba(255,255,255,.06); }
+.loginClose:hover { border-color: #cba7ff; background: rgba(166,44,245,.18); }
+.loginPage .form { gap: 14px; }
+.loginPage .form fieldset { gap: 14px; }
+.loginPage .field input, .loginPage .field select { min-height: 50px; }
+.loginPage .button { min-height: 52px; margin-top: 3px; border-radius: 14px; }
+.loginPage .supportLink { margin-top: 12px; }
+.loginPage .switch { margin-top: 18px; }
+.loginPage .footer { position: absolute; inset: auto 0 0; min-height: 52px; padding: 5px clamp(20px,5vw,72px); border: 0; color: rgba(255,255,255,.75); }
+.loginPage .footer span { color: rgba(255,255,255,.65); }
+
+@media (max-width: 600px) {
+  .loginPage { background-position: 61% center; }
+  .loginPage .header { min-height: 66px; padding-inline: 16px; }
+  .loginPage .header nav { gap: 6px; }
+  .loginPage .header nav a { min-height: 38px; padding-inline: 10px; font-size: 11px; }
+  .loginPage .brand { gap: 8px; font-size: 16px; }
+  .loginPage .brand small { font-size: 8px; }
+  .loginPage .brandMark { width: 32px; height: 32px; }
+  .loginPage .formWrap { padding: 86px 16px 58px; }
+  .loginPage .formContent { padding: 28px 22px 24px; border-radius: 20px; }
+  .loginPage .footer { min-height: 44px; }
+  .loginPage .footer span { display: none; }
+}
