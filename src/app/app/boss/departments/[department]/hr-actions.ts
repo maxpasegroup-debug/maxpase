@@ -18,15 +18,8 @@ async function appoint(actorId: string, form: FormData): Promise<HrState> {
   const reference = "Boss HR appointment";
   let employmentId: string | undefined;
   try {
-    employmentId = await hrEmploymentService.create(actorId, { companyId: data.companyId, displayName: data.displayName, email: data.email, phone: data.phone, designation: data.designation, joiningDate: data.joiningDate, initialBrandIds: data.brandId ? [data.brandId] : [], assignmentDecisionReference: data.brandId ? reference : undefined });
-    await hrEmploymentService.changeEmployment(actorId, { employmentId, action: "activate", decisionReference: reference, designation: data.designation, joiningDate: data.joiningDate });
-    let employee = await hrEmploymentService.get(actorId, employmentId);
-    if (data.brandId) {
-      const assignment = employee.assignments.find(item => item.brandId === data.brandId && item.status === "DRAFT");
-      if (!assignment) throw new AccessError("The selected workspace assignment could not be prepared");
-      await hrEmploymentService.changeAssignment(actorId, { assignmentId: assignment.id, action: "activate", decisionReference: reference });
-      employee = await hrEmploymentService.get(actorId, employmentId);
-    }
+    employmentId = await hrEmploymentService.create(actorId, { companyId: data.companyId, displayName: data.displayName, email: data.email, phone: data.phone, designation: data.designation, joiningDate: data.joiningDate, initialBrandIds: data.brandId ? [data.brandId] : [], assignmentDecisionReference: data.brandId ? reference : undefined, activateImmediately: true, decisionReference: reference });
+    const employee = await hrEmploymentService.get(actorId, employmentId);
     const overview = await hrAccess.overview(actorId, employmentId);
     const target = overview.targets.find(item => data.brandId ? item.brandId === data.brandId : item.id === data.companyId && !item.brandId);
     if (!target) throw new AccessError("The selected dashboard workspace is not configured for appointments");

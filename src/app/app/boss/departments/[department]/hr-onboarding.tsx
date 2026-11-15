@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useRef, useState } from "react";
+import { useActionState, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { ArrowRight, UserPlus, X } from "lucide-react";
 import { hrAction, type HrState } from "./hr-actions";
@@ -29,7 +29,14 @@ function HireEmployeeForm({ companies, brands, initialCompanyId, onOpenProfile }
   const titleOptions = positions(company?.slug ?? "", selectedBrand?.slug);
   const [position, setPosition] = useState("");
   const [formError, setFormError] = useState("");
+  const [slowRequest, setSlowRequest] = useState(false);
   const title = position;
+
+  useEffect(() => {
+    if (!pending) { setSlowRequest(false); return; }
+    const timer = window.setTimeout(() => setSlowRequest(true), 15000);
+    return () => window.clearTimeout(timer);
+  }, [pending]);
 
   if (state.employmentId) return <section className="boss-hr-hire-result" role="status" aria-live="polite">
     <span className="eyebrow">EMPLOYEE APPOINTMENT</span>
@@ -86,9 +93,10 @@ function HireEmployeeForm({ companies, brands, initialCompanyId, onOpenProfile }
     </div>}
 
     {(formError || state.error) && <p role="alert" className="boss-hr-hire-error">{formError || state.error}</p>}
+    {pending && slowRequest && <p role="status" className="boss-hr-hire-note">This is taking longer than usual. Keep this window open and do not submit again. The record may already be saving; check the HR employee list before retrying.</p>}
     <footer className="boss-hr-hire-actions">
       {step === 1 && <button type="button" className="button secondary" onClick={() => { setFormError(""); setStep(0); }}>Back</button>}
-      {step === 0 ? <button type="button" className="button" onClick={continueToDetails}>Continue <ArrowRight size={16}/></button> : <button className="button" disabled={pending}>{pending ? "Preparing appointment…" : "Appoint and send setup"}</button>}
+      {step === 0 ? <button type="button" className="button" onClick={continueToDetails}>Continue <ArrowRight size={16}/></button> : <button className="button" disabled={pending}>{pending ? slowRequest ? "Still preparing…" : "Preparing appointment…" : "Appoint and send setup"}</button>}
     </footer>
   </form>;
 }
