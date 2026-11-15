@@ -3019,6 +3019,30 @@ a.nj-director-metric:hover { transform: translateY(-1px); box-shadow: 0 12px 24p
 .boss-hr-top-workspaces { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 16px; }
 .boss-hr-top-workspaces a { padding: 8px 13px; border: 1px solid var(--line); border-radius: 999px; color: inherit; text-decoration: none; }
 .boss-hr-top-workspaces a[aria-current="page"] { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 18%, transparent); }
+.boss-home-assistant { display:flex; align-items:center; gap:14px; padding:18px 20px; border:1px solid #d8c7ff; border-radius:16px; background:linear-gradient(115deg,#f5efff,#fff 68%); box-shadow:0 8px 24px #32105610; }
+.boss-home-assistant > span { display:grid; place-items:center; width:44px; height:44px; border-radius:14px; color:#7427f5; background:#fff; }
+.boss-home-assistant > div { display:grid; gap:4px; flex:1; min-width:0; }
+.boss-home-assistant > div strong { font-size:16px; }
+.boss-home-assistant > div small { color:var(--muted); }
+.boss-home-assistant > a { display:flex; align-items:center; gap:8px; }
+.boss-home-company-shortcut { padding-block:14px; }
+.boss-home-company-shortcut > p { margin:8px 0 0; color:var(--muted); }
+.boss-hr-simple .boss-hr-command-heading { margin-bottom:12px; }
+.boss-hr-simple-nav { align-items:center; }
+.boss-hr-simple-nav details { position:relative; }
+.boss-hr-simple-nav summary { display:flex; align-items:center; gap:7px; padding:8px 13px; border:1px solid var(--line); border-radius:999px; cursor:pointer; list-style:none; }
+.boss-hr-simple-nav summary::-webkit-details-marker { display:none; }
+.boss-hr-simple-nav details[open] summary { border-color:var(--accent); background:color-mix(in srgb,var(--accent) 12%,white); }
+.boss-hr-simple-nav details > div { position:absolute; z-index:20; top:calc(100% + 6px); left:0; display:grid; min-width:210px; padding:6px; border:1px solid var(--line); border-radius:12px; background:#fff; box-shadow:0 14px 32px #17233a20; }
+.boss-hr-simple-nav details > div a { padding:9px 10px; border-radius:7px; color:inherit; text-decoration:none; }
+.boss-hr-simple-nav details > div a:hover, .boss-hr-simple-nav details > div a:focus-visible { background:#f3f5fa; }
+.boss-hr-simple-summary { display:flex; align-items:center; gap:12px; margin-bottom:14px; padding:14px; border:1px solid var(--line); border-radius:14px; background:#fff; }
+.boss-hr-simple-summary > div:not(.boss-hr-simple-add) { display:grid; gap:5px; min-width:130px; padding:4px 14px; border-right:1px solid var(--line); }
+.boss-hr-simple-summary > div span { display:flex; align-items:center; gap:7px; color:var(--muted); font-size:13px; }
+.boss-hr-simple-summary > div strong { font-size:24px; }
+.boss-hr-simple-add { margin-left:auto; }
+.boss-hr-simple-add > span { color:var(--muted); }
+@media (max-width:600px) { .boss-home-assistant { align-items:flex-start; flex-wrap:wrap; } .boss-home-assistant > div { flex-basis:calc(100% - 60px); } .boss-home-assistant > a { margin-left:58px; } .boss-hr-simple-summary { align-items:stretch; flex-wrap:wrap; } .boss-hr-simple-summary > div:not(.boss-hr-simple-add) { flex:1; min-width:0; } .boss-hr-simple-add { width:100%; margin:0; } .boss-hr-simple-nav details > div { left:auto; right:0; } }
 .hr-operations-workspace { display: grid; gap: 14px; }
 .hr-ops-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
 .hr-ops-heading h2 { display: flex; align-items: center; gap: 9px; margin-top: 0; }

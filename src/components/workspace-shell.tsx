@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { ArrowLeft, BarChart3, Bell, BriefcaseBusiness, Building2, ChevronDown, ChevronRight, ClipboardList, Gavel, Grid2X2, LayoutDashboard, Menu, Search, Settings, TrendingUp, Users, Wallet, X } from "lucide-react";
+import { ArrowLeft, Bell, BriefcaseBusiness, Building2, ChevronDown, ChevronRight, ClipboardList, Gavel, Grid2X2, LayoutDashboard, Menu, Search, Settings, Users, Wallet, X } from "lucide-react";
 import { groupForPath, isBossDestination, navigationBossHref, workspaceGroups, workspaceHref, workspacePageLabel } from "@/lib/workspace-navigation";
 import { bossDepartments, departmentHref, type BossDepartment } from "@/lib/boss-departments";
 import { timezoneLabel } from "@/lib/timezone";
@@ -12,15 +12,15 @@ const icons = [LayoutDashboard, Building2, ClipboardList, Gavel, Users, Settings
 const bossDestinations = [
   { label: "Home", icon: LayoutDashboard, view: "overview" },
   { label: "Companies & Brands", icon: Building2, view: "companies" },
-  { label: "Growth", icon: TrendingUp, view: "growth" },
   { label: "People & HR", icon: Users, department: "hr" },
-  { label: "Money", icon: Wallet, department: "finance" },
-  { label: "My Money", icon: Wallet, href: "/app/boss/money" },
   { label: "Work & Delivery", icon: BriefcaseBusiness, department: "operations" },
-  { label: "Decisions", icon: Gavel, view: "approvals" },
-  { label: "Reports", icon: BarChart3, view: "performance" },
+  { label: "My Money", icon: Wallet, href: "/app/boss/money" },
 ] as const;
 const bossMoreTools = [
+  { label: "Growth", href: (companyId?: string) => `/app/boss?view=growth${companyId ? `&companyId=${encodeURIComponent(companyId)}` : ""}` },
+  { label: "Company finance", href: (companyId?: string) => `/app/boss/departments/finance${companyId ? `?companyId=${encodeURIComponent(companyId)}` : ""}` },
+  { label: "Decisions", href: (companyId?: string) => `/app/boss?view=approvals${companyId ? `&companyId=${encodeURIComponent(companyId)}` : ""}` },
+  { label: "Reports", href: (companyId?: string) => `/app/boss?view=performance${companyId ? `&companyId=${encodeURIComponent(companyId)}` : ""}` },
   { label: "NICEJOBS management", href: () => "/app/boss/nicejobs?view=workforce-command" },
   { label: "NEXA command", href: (companyId?: string) => `/app/boss?view=nexa${companyId ? `&companyId=${encodeURIComponent(companyId)}` : ""}` },
   { label: "AIRA journey report", href: (companyId?: string) => `/app/boss?view=aira-journey${companyId ? `&companyId=${encodeURIComponent(companyId)}` : ""}` },
