@@ -12,6 +12,6 @@ export default async function BossNiceJobsPage({ searchParams }: { searchParams:
   const query = await searchParams;
   return <main className="boss-view">
     <nav className="boss-command-breadcrumb" aria-label="Breadcrumb"><Link href="/app/boss?view=companies">MAXPASE Boss</Link><span>/</span><Link href="/app/boss/command/aira-skill-city/aira-career-hub">AIRA Career Hub</Link><span>/</span><strong>Nice Jobs</strong></nav>
-    <BossWorkspace userId={session.userId} realm="corporate" base="/app/boss/nicejobs" query={{ ...query, view: typeof query.view === "string" ? query.view : "workforce-command" }} />
+    <BossWorkspace userId={session.userId} realm="corporate" base="/app/boss/nicejobs" query={{ ...query, view: typeof query.view === "string" ? query.view : "office-admin" }} />
   </main>;
 }

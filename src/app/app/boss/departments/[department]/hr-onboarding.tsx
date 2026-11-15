@@ -11,7 +11,6 @@ export type ReportingChoice = { userId: string; name: string; title: string; ema
 const initial: HrState = {};
 
 function positions(companySlug: string, brandSlug?: string) {
-  if (brandSlug === "nice-jobs") return ["NICEJOBS Director"];
   if (brandSlug === "aira-labs") return ["Director", "Full Stack Developer"];
   if (brandSlug === "startup-school") return ["Director"];
   if (brandSlug === "aira-media-company") return ["Digital Marketing Manager", "Graphic Designer", "Video and Audio Editor", "AI Video Expert"];

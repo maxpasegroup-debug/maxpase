@@ -53,6 +53,9 @@ export async function skillCityWorkAction(_state: SkillCityActionState, form: Fo
     } else if (field(form, "action") === "AO_TASK_UPDATE") {
       await skillCityEmployeeDashboard.dashboard(session.userId, "administrative-officer");
       await skillCityAdministrativeDesk.updateOwnTask(session.userId, { taskId: field(form, "taskId"), revision: Number(field(form, "revision")), status: field(form, "taskStatus"), note: field(form, "taskNote"), reference });
+    } else if (field(form, "action") === "AO_STARTUP_TRIAGE") {
+      await skillCityEmployeeDashboard.dashboard(session.userId, "administrative-officer");
+      await skillCityAdministrativeDesk.triageStartupApplication(session.userId, { id: field(form, "id"), version: Number(field(form, "version")), reason: field(form, "reason"), reference });
     } else if (field(form, "action") === "TASK") {
       await skillCityEmployeeDashboard.dashboard(session.userId, "developer");
       await skillCityDeveloperDesk.updateOwnTask(session.userId, { taskId: field(form, "taskId"), revision: Number(field(form, "revision")), description: field(form, "description"), status: field(form, "status"), reference });

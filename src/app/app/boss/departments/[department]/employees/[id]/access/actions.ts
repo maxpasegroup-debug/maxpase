@@ -19,6 +19,10 @@ export async function accessAction(_previous: AccessState, form: FormData): Prom
   const value = (key: string) => String(form.get(key) ?? "").trim();
   try {
     const employmentId = value("employmentId");
+    if (["grant", "change", "send-invite", "revoke-invite", "suspend-account", "resume-account", "reset-credential", "prepare-staff"].includes(value("intent"))) {
+      const overview = await hrAccess.overview(session.userId, employmentId);
+      if (overview.portal === "NICEJOBS") throw new AccessError("NICEJOBS administration is managed only from the Boss NICEJOBS module.");
+    }
     switch (value("intent")) {
       case "grant": await hrAccess.grant(session.userId, { employmentId, organizationId: value("organizationId"), roleId: value("roleId"), ...(value("brandId") ? { brandId: value("brandId") } : {}) }); break;
       case "change": await hrAccess.change(session.userId, { employmentId, membershipId: value("membershipId"), action: value("action") }); break;

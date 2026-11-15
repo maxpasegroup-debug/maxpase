@@ -10,6 +10,7 @@ type Query = Record<string, string | string[] | undefined>;
 export function BossDashboardOverview({ data, query }: { data: Data; query: Query }) {
   const scope = data.selectedCompanyId;
   const brands = data.brands.filter(row => "organizationId" in row && (!scope || row.organizationId === scope));
+  const startupSkool = data.brands.find(row => "slug" in row && row.slug === "startup-school");
   const urgent = data.overview.urgent.slice(0, 4);
   const metrics = [
     { label: "Companies", value: data.companies.length, note: "In your current view", href: bossHref("companies", scope, query), icon: Building2 },
@@ -42,5 +43,6 @@ export function BossDashboardOverview({ data, query }: { data: Data; query: Quer
     </section>
 
     <section className="executive-band boss-home-companies boss-home-company-shortcut"><header><div><h2>Your companies</h2><p>Manage companies and brands from one place.</p></div><Link href={bossHref("companies", scope, query)}>Open companies &amp; brands <ArrowRight size={16}/></Link></header><p>{data.companies.length} authorized {data.companies.length === 1 ? "company" : "companies"} in the current view.</p></section>
+    <section className="executive-band boss-home-company-shortcut"><header><div><h2>Brand workspaces</h2><p>Open the two management areas you asked to keep close.</p></div></header><div className="boss-home-shortcut-actions"><Link className="button secondary" href="/app/boss/nicejobs?view=office-admin">NICEJOBS management <ArrowRight size={16}/></Link>{startupSkool && <Link className="button secondary" href={`/app/boss/brands/${encodeURIComponent(startupSkool.id)}/admissions`}>Startup Skool PBA applications <ArrowRight size={16}/></Link>}</div></section>
   </div>;
 }

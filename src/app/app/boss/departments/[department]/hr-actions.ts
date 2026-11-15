@@ -17,6 +17,7 @@ async function appoint(actorId: string, form: FormData): Promise<HrState> {
   const val = (key: string) => String(form.get(key) ?? "").trim();
   const data = z.object({ companyId: z.string().min(1), brandId: z.string().optional(), designation: z.string().trim().min(2).max(120), displayName: z.string().trim().min(2).max(200), email: z.email().max(254).transform(v => v.toLowerCase()), phone: z.string().trim().regex(/^\+?[0-9().\-\s]{7,24}$/), joiningDate: z.coerce.date(), reportToUserId: z.string().min(1) }).strict().parse({ companyId: val("companyId"), ...(val("brandId") ? { brandId: val("brandId") } : {}), designation: val("designation"), displayName: val("displayName"), email: val("email"), phone: val("phone"), joiningDate: val("joiningDate"), reportToUserId: val("reportToUserId") });
   const reference = "Boss HR appointment";
+  if (data.designation === "NICEJOBS Director") throw new AccessError("NICEJOBS administration is managed from the Boss NICEJOBS module.");
   let employmentId: string | undefined;
   try {
     const reportingPerson = await prisma.user.findUnique({ where: { id: data.reportToUserId }, select: { personId: true, status: true, emailVerifiedAt: true } });

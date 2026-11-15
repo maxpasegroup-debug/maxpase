@@ -9,8 +9,8 @@ import { requireStartupStaffAccess } from "./startup-staff-access";
 import { assertStartupPilotEnrollmentReady } from "./startup-pilot-register";
 
 const id = z.string().min(1).max(200);
-const tier = z.enum(["STARTER", "PRO", "EXTRAORDINARY"]);
-const communityFor = { STARTER: "MENTORING", PRO: "MENTORING", EXTRAORDINARY: "TRAINING" } as const;
+const tier = z.enum(["PBA_30_DAYS", "PBA_180_DAYS", "STARTER", "PRO", "EXTRAORDINARY"]);
+const communityFor = { PBA_30_DAYS: "MENTORING", PBA_180_DAYS: "TRAINING", STARTER: "MENTORING", PRO: "MENTORING", EXTRAORDINARY: "TRAINING" } as const;
 const milestone = z.object({ key: z.string().regex(/^[a-z0-9-]{2,40}$/), title: z.string().trim().min(3).max(120), practice: z.string().trim().min(20).max(1200), evidencePrompt: z.string().trim().min(10).max(500) }).strict();
 export const founderPlanInput = z.object({ tier, termsApprovalRef: z.string().trim().min(8).max(300), milestones: z.array(milestone).min(1).max(24) }).strict().refine(value => new Set(value.milestones.map(item => item.key)).size === value.milestones.length, "Milestone keys must be unique");
 const planPayload = founderPlanInput.extend({ batchId: id, programId: id, preparedByUserId: id, community: z.enum(["MENTORING", "TRAINING"]), version: z.literal(1) }).strict();

@@ -2,6 +2,8 @@ import type { PermissionScope } from "@prisma/client";
 export const workforcePermissions: { key: string; name: string; scope: PermissionScope }[] = [
   { key: "skillcity.administrative.read", name: "Skill City administrative desk read", scope: "GROUP" },
   { key: "skillcity.administrative.task.perform", name: "Update assigned administrative tasks", scope: "GROUP" },
+  { key: "startup.application.read", name: "View Startup Skool application intake", scope: "GROUP" },
+  { key: "startup.application.triage", name: "Triage Startup Skool application intake", scope: "GROUP" },
   ...["hr.document.read", "hr.document.manage", "hr.document.category.manage"].map(key => ({ key, name: key.replaceAll(".", " "), scope: "GROUP" as const })),
   ...["aira.crm.self", "aira.crm.perform", "aira.crm.manage"].map(key => ({ key, name: key.replaceAll(".", " "), scope: "GROUP" as const })),
   ...["labs.customer.read", "labs.customer.manage"].map(key => ({ key, name: key.replaceAll(".", " "), scope: "GROUP" as const })),

@@ -42,6 +42,7 @@ import { SkillCityHrProfile } from "../../skillcity-ui/hr-profile";
 import { DirectorReportWorkspace } from "../../skillcity-ui/director-report";
 import { MarketingWorkspace } from "@/components/marketing-workspace";
 import { StartupCommercialWorkspace } from "@/components/startup-commercial-workspace";
+import { bossService } from "@/server/group/boss-service";
 const views = ["overview", "programs", "projects", "tasks", "goals"];
 export default async function Gateway({ params, searchParams }: { params: Promise<{ site: string }>; searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const { site, paths } = await requestPortal((await params).site), query = await searchParams;
@@ -110,6 +111,8 @@ export default async function Gateway({ params, searchParams }: { params: Promis
     }
   }
   if (site.id === "jobs" && (isNiceJobsControlView(view, query) || !query.view && (await employeeService.navigation(session.userId)).command)) {
+    try { await bossService.authority(session.userId); }
+    catch (error) { if (error instanceof AccessError) notFound(); throw error; }
     await requirePortalAccess(prisma, session.userId, "jobs");
     return <main className="portal-workspace portal-jobs"><header className="portal-header"><Link href={paths.home}>Nice Jobs</Link><form action={portalLogoutAction}><input type="hidden" name="site" value="jobs" /><button>Sign out</button></form></header><BossWorkspace userId={session.userId} realm="jobs" base={paths.gateway} query={query} /></main>;
   }

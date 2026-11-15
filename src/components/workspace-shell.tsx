@@ -21,7 +21,6 @@ const bossMoreTools = [
   { label: "Company finance", href: (companyId?: string) => `/app/boss/departments/finance${companyId ? `?companyId=${encodeURIComponent(companyId)}` : ""}` },
   { label: "Decisions", href: (companyId?: string) => `/app/boss?view=approvals${companyId ? `&companyId=${encodeURIComponent(companyId)}` : ""}` },
   { label: "Reports", href: (companyId?: string) => `/app/boss?view=performance${companyId ? `&companyId=${encodeURIComponent(companyId)}` : ""}` },
-  { label: "NICEJOBS management", href: () => "/app/boss/nicejobs?view=workforce-command" },
   { label: "NEXA command", href: (companyId?: string) => `/app/boss?view=nexa${companyId ? `&companyId=${encodeURIComponent(companyId)}` : ""}` },
   { label: "AIRA journey report", href: (companyId?: string) => `/app/boss?view=aira-journey${companyId ? `&companyId=${encodeURIComponent(companyId)}` : ""}` },
   { label: "System health", href: (companyId?: string) => `/app/boss?view=system${companyId ? `&companyId=${encodeURIComponent(companyId)}` : ""}` },

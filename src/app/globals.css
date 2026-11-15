@@ -1125,6 +1125,12 @@ progress { width: 120px; accent-color: var(--accent); }
 .boss-hr-wizard-form .boss-hr-inline-check, .boss-hr-brand-choice { display: flex; align-items: center; gap: 10px; }
 .boss-hr-brand-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 .boss-hr-brand-choice { padding: 12px; border: 1px solid var(--line); border-radius: 8px; overflow-wrap: anywhere; }
+  .boss-hr-access-state { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; }
+  .boss-hr-access-state > div:first-child { flex: 1 1 240px; }
+  .boss-hr-access-badge { display: inline-flex; align-items: center; border-radius: 999px; padding: 4px 10px; font-size: 12px; font-weight: 700; }
+  .boss-hr-access-badge.is-active { color: #146c43; background: #e8f7ef; }
+  .boss-hr-access-badge.is-suspended { color: #7a4b00; background: #fff3d8; }
+  .boss-home-shortcut-actions { display: flex; flex-wrap: wrap; gap: 10px; }
 .boss-hr-wizard-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 25px; }
 .boss-hr-access-warning { border-left: 3px solid var(--accent); padding: 10px 12px; background: #fff; }
 .boss-hr-profile { max-width: 1200px; margin-inline: auto; }

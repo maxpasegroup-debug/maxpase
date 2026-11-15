@@ -8,7 +8,7 @@ import { requireStartupStaffAccess } from "./startup-staff-access";
 import { createBossService } from "@/server/group/boss-service";
 import { assertStartupPilotEnrollmentReady } from "./startup-pilot-register";
 
-const tiers = ["STARTER", "PRO", "EXTRAORDINARY"] as const;
+const tiers = ["PBA_30_DAYS", "PBA_180_DAYS", "STARTER", "PRO", "EXTRAORDINARY"] as const;
 export const startupApplicationInput = z.object({ tier: z.enum(tiers), idea: z.string().trim().min(20).max(1500), goal: z.string().trim().min(20).max(1500), experience: z.string().trim().min(10).max(1000), location: z.string().trim().min(2).max(120), timeCommitment: z.string().trim().min(5).max(250), consent: z.literal(true), referralToken: z.string().regex(/^[A-Za-z0-9_-]{32,100}$/).optional() }).strict();
 const reviewInput = z.object({ id: z.string().min(1).max(200), version: z.number().int().min(0), decision: z.enum(["IN_REVIEW", "APPROVED", "REJECTED"]), reason: z.string().trim().min(5).max(1000) }).strict();
 const kind = "STARTUP_APPLICATION";

@@ -16,10 +16,17 @@ import { BossWorkspace } from "./boss-workspace";
 import { isNiceJobsControlView } from "@/lib/nicejobs-control-navigation";
 import { ParticipantDashboard } from "./participant-dashboard";
 import { isParticipantDashboardView } from "@/lib/nicejobs-dashboard";
+import { bossService } from "@/server/group/boss-service";
+import { AccessError } from "@/server/authorization/engine";
+import { notFound } from "next/navigation";
 export default async function NiceJobsPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const session = await requireSession();
   const query = await searchParams;
-  if (isNiceJobsControlView(String(query.view), query) || !query.view && (await employeeService.navigation(session.userId)).command) return <BossWorkspace userId={session.userId} realm="corporate" base="/app/nicejobs" query={query} />;
+  if (isNiceJobsControlView(String(query.view), query) || !query.view && (await employeeService.navigation(session.userId)).command) {
+    try { await bossService.authority(session.userId); }
+    catch (error) { if (error instanceof AccessError) notFound(); throw error; }
+    return <BossWorkspace userId={session.userId} realm="corporate" base="/app/nicejobs" query={query} />;
+  }
   if (isParticipantDashboardView(typeof query.view === "string" ? query.view : undefined, query)) return <ParticipantDashboard userId={session.userId} realm="corporate" base="/app/nicejobs" query={query} />;
   if (!query.view || ["my-day", "my-work", "worker-reports", "worker-wallet", "worker-resources", "worker-help"].includes(String(query.view))) {
     const nav = await employeeService.navigation(session.userId);

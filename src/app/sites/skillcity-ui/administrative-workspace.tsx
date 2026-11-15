@@ -23,6 +23,7 @@ export function AdministrativeWorkspace({ data }: { data: Desk }) {
         <a href="#ao-dashboard" aria-current="page"><Building2 size={18}/>Dashboard</a>
         <a href="#ao-documents"><FileCheck2 size={18}/>Company &amp; Documents</a>
         <a href="#ao-business-units"><BriefcaseBusiness size={18}/>Brands &amp; Business Units</a>
+        <a href="#ao-startup-applications"><BriefcaseBusiness size={18}/>Startup Skool applications</a>
         <a href="#ao-tasks"><CheckSquare size={18}/>My Tasks</a>
         <a href="#ao-customers"><Users size={18}/>Customer Contacts</a>
         <a href="#ao-commercial"><FileText size={18}/>Quotation &amp; Invoice Status</a>
@@ -75,7 +76,11 @@ export function AdministrativeWorkspace({ data }: { data: Desk }) {
           {!data.permissions.canEvents ? <p className="ao-empty">Activity history is not authorized for this account.</p> : !data.recentActivity.length ? <p className="ao-empty">No recent company activity is recorded.</p> : <div className="ao-record-list">{data.recentActivity.map(event=><article key={event.id}><h3>{words(event.eventType)}</h3><p>{event.entityType} · {words(event.status)} · {date(event.createdAt)}</p></article>)}</div>}
         </section>
       </div>
-      <p className="ao-footer-note">Displayed lists are limited to the recent records or page size noted. Amounts, payment actions, payroll, admissions and approvals are not part of this AO workspace.</p>
+      <section className="ao-panel" id="ao-startup-applications"><header><div><p className="ao-eyebrow">Startup Skool · PBA</p><h2>Applications for intake</h2></div><span className="ao-count">{data.startupApplications.length}</span></header>
+        {!data.startupApplications.length ? <p className="ao-empty">No applications are waiting in the AO intake queue, or this role has not yet been enabled for intake.</p> : <div className="ao-record-list">{data.startupApplications.map(application => <article key={application.id}><header><h3>{application.applicant}</h3><span className="ao-status">{words(application.status)}</span></header><p>{application.tier === "PBA_30_DAYS" ? "PBA · 30-day programme" : application.tier === "PBA_180_DAYS" ? "PBA · 180-day programme" : application.tier.replaceAll("_", " ")} · Submitted {date(application.createdAt)}</p>{application.status === "SUBMITTED" && data.permissions.canStartupTriage && <WorkForm actionName="AO_STARTUP_TRIAGE" reference={randomUUID()} label="Send to Director review" confirm="Move this application into the Director's review queue?"><input type="hidden" name="id" value={application.id}/><input type="hidden" name="version" value={application.version}/><input type="hidden" name="reason" value="AO intake triage; forwarded to the Startup Skool Director for admissions review."/></WorkForm>}</article>)}</div>}
+        <p className="ao-muted">The AO can route applications for review. Only the authorized Startup Skool Director or Boss can approve, reject or confirm admission.</p>
+      </section>
+      <p className="ao-footer-note" id="ao-sidebar-note">Displayed lists are limited to recent records. The AO may route applications to the Director; admissions decisions, financial actions and payroll remain restricted.</p>
     </div>
   </div>;
 }

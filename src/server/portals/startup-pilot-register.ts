@@ -12,7 +12,7 @@ const optional = <T extends z.ZodType>(schema: T) => z.union([schema, z.null()])
 const participant = z.object({ personId: id, consentAt: optional(instant), consentEvidenceRef: optional(reference) }).strict();
 export const pilotRegisterInput = z.object({
   intakeCode: z.string().trim().regex(/^[A-Z0-9-]{5,40}$/),
-  tier: optional(z.enum(["STARTER", "PRO", "EXTRAORDINARY"])),
+  tier: optional(z.enum(["PBA_30_DAYS", "PBA_180_DAYS", "STARTER", "PRO", "EXTRAORDINARY"])),
   termsVersion: optional(reference), termsEvidenceRef: optional(reference), termsEffectiveAt: optional(instant), termsApprovedAt: optional(instant), termsApproverUserId: optional(id),
   reviewerUserId: optional(id), reviewerEvidenceRef: optional(reference), mentorUserId: optional(id), mentorEvidenceRef: optional(reference),
   participants: z.array(participant).max(20)
