@@ -78,7 +78,7 @@ export function createNiceJobsDirectorInvite(client: PrismaClient = prisma, opti
       const providerRef = await sendEmail({ id, email: target.email, code, purpose: "STAFF_INVITE" });
       const updated = await client.emailAuthChallenge.updateMany({ where: { id, status: "PENDING", expiresAt: { gt: now() } }, data: { status: "SENT", providerRef } });
       if (updated.count !== 1) throw new EmailAuthUnavailable();
-      return { sent: true };
+      return { sent: true, activationUrl: `https://nicejobs.online/activate?challenge=${encodeURIComponent(id)}` };
     } catch {
       await client.emailAuthChallenge.updateMany({ where: { id, status: "PENDING" }, data: { status: "FAILED" } });
       throw new EmailAuthUnavailable();

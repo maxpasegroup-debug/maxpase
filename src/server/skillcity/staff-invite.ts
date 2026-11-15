@@ -26,7 +26,7 @@ export function createStaffInvite(client: PrismaClient = prisma, env: Record<str
     await ctx.requireAccess("user.read", { organizationId });
     await ctx.requireAccess("membership.read", { organizationId });
     const rows = await client.user.findMany({ where: { status: "INACTIVE", person: { memberships: { some: { organizationId, status: "INVITED" } } } }, select: { id: true, email: true, person: { select: { metadata: true, memberships: { where: { organizationId, status: "INVITED" }, select: { title: true } } } } }, orderBy: { createdAt: "desc" }, take: 50 });
-    return rows.filter(row => { try { return ["skillcity", "labs"].includes(JSON.parse(row.person?.metadata ?? "{}").authenticationRealm); } catch { return false; } }).map(row => { const metadata = JSON.parse(row.person?.metadata ?? "{}"); return { id: row.id, email: row.email, role: row.person?.memberships[0]?.title ?? "Not assigned", reviewable: metadata.staffOnboarding === "DRAFT", decisionsRecorded: typeof metadata.scopeDecisionReference === "string" && metadata.scopeDecisionReference.length >= 8 && (["Director", "Division Director"].includes(row.person?.memberships[0]?.title ?? "") || typeof metadata.managerDecisionReference === "string" && typeof metadata.managerUserId === "string") }; });
+    return rows.filter(row => { try { return ["skillcity", "labs"].includes(JSON.parse(row.person?.metadata ?? "{}").authenticationRealm); } catch { return false; } }).map(row => { const metadata = JSON.parse(row.person?.metadata ?? "{}"); return { id: row.id, email: row.email, role: row.person?.memberships[0]?.title ?? "Not assigned", reviewable: metadata.staffOnboarding === "DRAFT", decisionsRecorded: typeof metadata.scopeDecisionReference === "string" && metadata.scopeDecisionReference.length >= 8 && (metadata.appointmentAuthority === "GROUP_BOSS" || ["Director", "Division Director"].includes(row.person?.memberships[0]?.title ?? "") || typeof metadata.managerDecisionReference === "string" && typeof metadata.managerUserId === "string") }; });
   }
   async function send(actorUserId: string, raw: unknown) {
     const data = sendInput.parse(raw), config = settings.parse(env);
@@ -53,6 +53,8 @@ export function createStaffInvite(client: PrismaClient = prisma, env: Record<str
       if (role.name === "Director" || role.name === "Division Director") {
         await createBossService(client).authority(actorUserId, db);
         if (membership.scope !== (role.name === "Director" ? "DESCENDANTS" : "ORGANIZATION") || !role.permissions.some(item => item.permission.key === "decision.decide")) throw new AccessError("Director authority is not prepared");
+      } else if (metadata.appointmentAuthority === "GROUP_BOSS") {
+        await createBossService(client).authority(actorUserId, db);
       } else {
         const manager = await db.reportingRelationship.findFirst({
           where: {
@@ -71,11 +73,12 @@ export function createStaffInvite(client: PrismaClient = prisma, env: Record<str
     });
     try {
       const domain = target.portal === "labs" ? "airalabs.online" : "airaskillcity.com";
-      const response = await transport("https://api.resend.com/emails", { method: "POST", redirect: "error", signal: AbortSignal.timeout(8000), headers: { Authorization: `Bearer ${config.RESEND_API_KEY}`, "Content-Type": "application/json", "Idempotency-Key": `staff-invite/${id}` }, body: JSON.stringify({ from: config.SKILLCITY_AUTH_FROM, to: [target.email], subject: "Activate your AIRA workplace account", text: `Your AIRA workplace activation code is ${code}. Open https://${domain}/activate?challenge=${id} and enter this code. It expires in 24 hours. Do not share it.` }) });
+      const activationUrl = `https://${domain}/activate?challenge=${id}`;
+      const response = await transport("https://api.resend.com/emails", { method: "POST", redirect: "error", signal: AbortSignal.timeout(8000), headers: { Authorization: `Bearer ${config.RESEND_API_KEY}`, "Content-Type": "application/json", "Idempotency-Key": `staff-invite/${id}` }, body: JSON.stringify({ from: config.SKILLCITY_AUTH_FROM, to: [target.email], subject: "Activate your AIRA workplace account", text: `Your AIRA workplace activation code is ${code}. Open ${activationUrl} and enter this code. It expires in 24 hours. Do not share the code. After activation, sign in and complete your employee profile.` }) });
       if (!response.ok) throw new Error("Email provider unavailable");
       const receipt = z.object({ id: z.string().min(1) }).parse(await response.json());
       if ((await client.emailAuthChallenge.updateMany({ where: { id, status: "PENDING", expiresAt: { gt: now() } }, data: { status: "SENT", providerRef: receipt.id } })).count !== 1) throw new Error("Invitation state changed");
-      return { sent: true };
+      return { sent: true, activationUrl };
     } catch {
       await client.$transaction(async db => {
         await db.emailAuthChallenge.updateMany({ where: { id, status: "PENDING" }, data: { status: "FAILED" } });
@@ -112,13 +115,14 @@ export function createStaffInvite(client: PrismaClient = prisma, env: Record<str
       if (!company || !(membership.organizationId === company.id || memberScope?.parentId === company.id)) throw new AccessError("Staff scope unavailable");
       if (!(await db.employment.findFirst({ where: { personId: user.personId!, companyId: company.id, status: "ACTIVE" } }))) throw new AccessError("Active company employment required for activation");
       if (!memberScope || membership.roles[0].role.key === "nicejobs-director" || !isPreparedStaffRole(membership.roles[0].role.key, memberScope.slug) || staffPortalForRole(membership.roles[0].role.key) !== data.portal || !hasStaffWorkspaceCapabilities(membership.roles[0].role.key, membership.roles[0].role.permissions.map(item => item.permission.key))) throw new AccessError("Role appointment unavailable");
-      const pendingManager = !["Director", "Division Director"].includes(membership.roles[0]?.role.name ?? "") ? await db.reportingRelationship.findFirst({
+      const bossAppointment = metadata.appointmentAuthority === "GROUP_BOSS";
+      const pendingManager = !bossAppointment && !["Director", "Division Director"].includes(membership.roles[0]?.role.name ?? "") ? await db.reportingRelationship.findFirst({
         where: {
           personId: user.personId!, organizationId: membership.organizationId, status: "INACTIVE",
           manager: { users: { some: { id: metadata.managerUserId, status: "ACTIVE", emailVerifiedAt: { not: null } } } }
         }
       }) : null;
-      if (!["Director", "Division Director"].includes(membership.roles[0]?.role.name ?? "") && (!pendingManager || typeof metadata.managerDecisionReference !== "string" || metadata.managerDecisionReference.length < 8)) throw new AccessError("Manager appointment unavailable");
+      if (!bossAppointment && !["Director", "Division Director"].includes(membership.roles[0]?.role.name ?? "") && (!pendingManager || typeof metadata.managerDecisionReference !== "string" || metadata.managerDecisionReference.length < 8)) throw new AccessError("Manager appointment unavailable");
       if ((await db.emailAuthChallenge.updateMany({ where: { id: challenge.id, status: "SENT", attempts: { lte: 5 } }, data: { status: "CONSUMED", consumedAt: now() } })).count !== 1) throw new AccessError("Invitation already used");
       await db.user.update({ where: { id: user.id }, data: { status: "ACTIVE", passwordHash: hash, emailVerifiedAt: now() } });
       await db.membership.update({ where: { id: membership.id }, data: { status: "ACTIVE" } });
@@ -196,3 +200,4 @@ export function createStaffInvite(client: PrismaClient = prisma, env: Record<str
 }
 
 export const staffInvite = createStaffInvite();
+
