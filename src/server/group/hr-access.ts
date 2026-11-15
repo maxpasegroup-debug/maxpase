@@ -46,7 +46,7 @@ export function createHrAccess(client: PrismaClient = prisma) {
       employmentStatus: row.status,
       companyId: row.companyId,
       portal: row.company.slug === "aira-skill-city" ? account ? accountPortalRealm(account.person?.metadata) === "labs" ? "AIRA Labs" : accountPortalRealm(account.person?.metadata) === "skillcity" ? "AIRA Skill City" : accountPortalRealm(account.person?.metadata) === "jobs" ? "NICEJOBS" : "NOT ASSIGNED" : "NOT ASSIGNED" : "NOT CONFIGURED",
-      account: account ? { id: account.id, status: account.status, verified: !!account.emailVerifiedAt, realm: accountPortalRealm(account.person?.metadata) } : null,
+      account: account ? { id: account.id, email: account.email, status: account.status, verified: !!account.emailVerifiedAt, realm: accountPortalRealm(account.person?.metadata) } : null,
       invitation: challenge,
       invitations,
       history,

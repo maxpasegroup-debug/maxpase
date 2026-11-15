@@ -5,11 +5,11 @@ import { accessAction, type AccessState } from "./actions";
 
 type Overview = Awaited<ReturnType<typeof import("@/server/group/hr-access").hrAccess.overview>>;
 
-function Form({ employmentId, children }: { employmentId: string; children: React.ReactNode }) {
+function Form({ employmentId, children, submitLabel = "Confirm" }: { employmentId: string; children: React.ReactNode; submitLabel?: string }) {
   const [state, action, pending] = useActionState(accessAction, {} as AccessState);
   return <form action={action} className="boss-hr-action-form">
     <input type="hidden" name="employmentId" value={employmentId}/>{children}
-    <button className="button secondary" disabled={pending}>{pending ? "Saving…" : "Confirm"}</button>
+    <button className="button secondary" disabled={pending}>{pending ? "Working…" : submitLabel}</button>
     {state.error && <p role="alert">{state.error}</p>}{state.message && <p role="status">{state.message}</p>}
   </form>;
 }
@@ -22,6 +22,7 @@ export function HrAccessPanel({ employmentId, data, deliveryReady, managedInvite
       <p>Employee portal: {data.portal}. Employment: {data.employmentStatus}. An HR record does not itself grant login access.</p>
       <p>Account: {data.account ? `${data.account.status} · ${data.account.verified ? "email verified" : "email unverified"}` : "No linked account"}</p>
       {data.portal === "NICEJOBS" ? <p>{data.account?.status === "ACTIVE" ? "The Director signs in with their NICEJOBS mobile number and PIN. HR can manage only the scoped Director role; it never changes or reveals the PIN." : "The pending account stays inactive until the appointee verifies email and mobile access and chooses their own six-digit PIN."}</p> : <p>Latest invitation: {data.invitation ? `${data.invitation.status} · ${new Date(data.invitation.createdAt).toLocaleString()}` : "None"}</p>}
+      {data.employmentStatus === "ACTIVE" && data.account?.status === "ACTIVE" && data.account.verified && <><h3>Authentication credentials</h3><p>Send a secure one-time reset code to the employee’s verified email. The employee chooses their new credential; HR cannot view or set it.</p><Form employmentId={employmentId} submitLabel={data.portal === "NICEJOBS" ? "Send PIN reset instructions" : "Send password reset instructions"}><input type="hidden" name="intent" value="reset-credential"/><span>{data.portal === "NICEJOBS" ? "Reset NICEJOBS six-digit PIN" : "Reset staff password"}</span></Form></>}
       {data.portal === "NICEJOBS" && data.account?.status === "INACTIVE" && data.employmentStatus === "ACTIVE" && <><p>Director appointment: {data.invitation ? `${data.invitation.status} · ${new Date(data.invitation.createdAt).toLocaleString()}` : "Pending invitation"}. The appointee must verify email and mobile access and choose their own PIN.</p><Form employmentId={employmentId}><input type="hidden" name="intent" value="send-invite"/><input type="hidden" name="userId" value={data.account.id}/><span>{data.invitation?.status === "SENT" ? "Resend activation instructions" : "Send activation instructions"}</span></Form></>}
       {data.portal === "NICEJOBS" && data.account?.status === "INACTIVE" && data.invitation && <Form employmentId={employmentId}><input type="hidden" name="intent" value="revoke-invite"/><input type="hidden" name="challengeId" value={data.invitation.id}/><span>Cancel pending appointment</span></Form>}
       {accountPortal && data.account?.status === "INACTIVE" && <><p>{deliveryReady ? "Email provider settings are present; live delivery is unverified." : "Email delivery is not configured; invitation sending is unavailable."}</p>{data.employmentStatus !== "ACTIVE" || data.account.realm !== (data.portal === "AIRA Labs" ? "labs" : "skillcity") || !data.memberships.some(item => item.status === "INVITED") ? <p>Activate employment and complete the reviewed staff appointment before sending an invitation.</p> : deliveryReady && !managedInvite && <Form employmentId={employmentId}><input type="hidden" name="intent" value="send-invite"/><input type="hidden" name="userId" value={data.account.id}/><label>Identity and scope verification reference <input name="verificationEvidence" required minLength={10} maxLength={1000}/></label></Form>}</>}
