@@ -30,7 +30,7 @@ export function createSkillCityEmployeeDashboard(client: PrismaClient = prisma) 
     const can = (key: string, organizationId: string) => ctx.decide(key, { organizationId }).then(result => result.allowed);
     const allowed = {
       director: hasRole([companyId], "Director") && await can("executive.read", companyId) && await can("decision.decide", companyId) || (await Promise.all(divisions.map(async division => hasRole([division.id], "Division Director") && await can("executive.read", division.id) && await can("decision.decide", division.id)))).some(Boolean),
-      manager: hasRole([companyId, ...divisions.map(d => d.id)], "Director", "Division Director", "Business Development & Operations Manager") && (await Promise.all([companyId, ...divisions.map(d => d.id)].map(async id => await can("reporting.read", id) && await can("person.read", id) && await can("responsibility.read", id)))).some(Boolean),
+      manager: hasRole([companyId, ...divisions.map(d => d.id)], "Director", "Division Director", "Business Development & Operations Manager", "Administrative Officer", "Digital Marketing Manager") && (await Promise.all([companyId, ...divisions.map(d => d.id)].map(async id => await can("reporting.read", id) && await can("person.read", id) && await can("responsibility.read", id)))).some(Boolean),
       "administrative-officer": hasRole([companyId], "Administrative Officer") && await can("organization.read", companyId) && await can("company.read", companyId) && await can("skillcity.administrative.read", companyId) && await can("skillcity.administrative.task.perform", companyId) && await can("task.read", companyId) && !!labs && await can("labs.billing.status.read", labs.id) && await can("labs.billing.customer.read", labs.id) && await can("labs.billing.customer.manage", labs.id),
       advisor: hasRole([companyId, ...divisions.map(d => d.id)], "Senior Academic Advisor", "Junior Academic Advisor") && (await Promise.all(divisions.map(async d => d.slug === "aira-labs" ? await can("labs.sales.self", d.id) : await can("aira.crm.self", d.id)))).some(Boolean),
       developer: !!labs && hasRole([companyId, labs.id], "Software Developer", "Full Stack Developer", "Junior Developer") && await can("labs.delivery.assignee", labs.id) && await can("organization.read", labs.id),
@@ -40,7 +40,7 @@ export function createSkillCityEmployeeDashboard(client: PrismaClient = prisma) 
     const available = employeeViews.filter(view => allowed[view]);
     if (requested && !employeeViews.includes(requested as EmployeeView)) throw new AccessError("Employee view unavailable");
     if (requested && !allowed[requested as EmployeeView]) throw new AccessError("Employee view unavailable");
-    const view = (requested as EmployeeView | undefined) ?? (allowed.director ? "director" : available[0]);
+    const view = (requested as EmployeeView | undefined) ?? (allowed.director ? "director" : allowed["administrative-officer"] ? "administrative-officer" : available[0]);
     if (!view) return { view: null, available, companyId, name: ctx.user?.id ?? "", data: null };
 
     if (view === "manager") return { view, available, companyId, name: "Manager", data: {} };

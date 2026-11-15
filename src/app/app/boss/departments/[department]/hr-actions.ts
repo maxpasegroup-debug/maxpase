@@ -9,16 +9,19 @@ import { hrAccess } from "@/server/group/hr-access";
 import { staffOnboardingService } from "@/server/skillcity/staff-onboarding";
 import { staffInvite } from "@/server/skillcity/staff-invite";
 import { niceJobsDirectorInvite } from "@/server/auth/nicejobs-director-invite";
+import { prisma } from "@/server/db";
 import { safeDiagnostic } from "@/server/security/diagnostics";
 
-export type HrState = { message?: string; error?: string; employmentId?: string; inviteSent?: boolean; activationUrl?: string };
+export type HrState = { message?: string; error?: string; employmentId?: string; inviteSent?: boolean; activationUrl?: string; shareMessage?: string; shareEmail?: string };
 async function appoint(actorId: string, form: FormData): Promise<HrState> {
   const val = (key: string) => String(form.get(key) ?? "").trim();
-  const data = z.object({ companyId: z.string().min(1), brandId: z.string().optional(), designation: z.string().trim().min(2).max(120), displayName: z.string().trim().min(2).max(200), email: z.email().max(254).transform(v => v.toLowerCase()), phone: z.string().trim().regex(/^\+?[0-9().\-\s]{7,24}$/), joiningDate: z.coerce.date() }).strict().parse({ companyId: val("companyId"), ...(val("brandId") ? { brandId: val("brandId") } : {}), designation: val("designation"), displayName: val("displayName"), email: val("email"), phone: val("phone"), joiningDate: val("joiningDate") });
+  const data = z.object({ companyId: z.string().min(1), brandId: z.string().optional(), designation: z.string().trim().min(2).max(120), displayName: z.string().trim().min(2).max(200), email: z.email().max(254).transform(v => v.toLowerCase()), phone: z.string().trim().regex(/^\+?[0-9().\-\s]{7,24}$/), joiningDate: z.coerce.date(), reportToUserId: z.string().min(1) }).strict().parse({ companyId: val("companyId"), ...(val("brandId") ? { brandId: val("brandId") } : {}), designation: val("designation"), displayName: val("displayName"), email: val("email"), phone: val("phone"), joiningDate: val("joiningDate"), reportToUserId: val("reportToUserId") });
   const reference = "Boss HR appointment";
   let employmentId: string | undefined;
   try {
-    employmentId = await hrEmploymentService.create(actorId, { companyId: data.companyId, displayName: data.displayName, email: data.email, phone: data.phone, designation: data.designation, joiningDate: data.joiningDate, initialBrandIds: data.brandId ? [data.brandId] : [], assignmentDecisionReference: data.brandId ? reference : undefined, activateImmediately: true, decisionReference: reference });
+    const reportingPerson = await prisma.user.findUnique({ where: { id: data.reportToUserId }, select: { personId: true, status: true, emailVerifiedAt: true } });
+    if (!reportingPerson?.personId || reportingPerson.status !== "ACTIVE" || !reportingPerson.emailVerifiedAt) throw new AccessError("The selected reporting person is no longer active. Choose another person.");
+    employmentId = await hrEmploymentService.create(actorId, { companyId: data.companyId, displayName: data.displayName, email: data.email, phone: data.phone, designation: data.designation, joiningDate: data.joiningDate, initialBrandIds: data.brandId ? [data.brandId] : [], ...(data.brandId ? { initialManagerPersonId: reportingPerson.personId } : {}), assignmentDecisionReference: data.brandId ? reference : undefined, activateImmediately: true, decisionReference: reference });
     const employee = await hrEmploymentService.get(actorId, employmentId);
     const overview = await hrAccess.overview(actorId, employmentId);
     const target = overview.targets.find(item => data.brandId ? item.brandId === data.brandId : item.id === data.companyId && !item.brandId);
@@ -32,12 +35,15 @@ async function appoint(actorId: string, form: FormData): Promise<HrState> {
       const appointment = await hrAccess.prepareNiceJobsDirector(actorId, { employmentId, organizationId: target.id, roleId: role.id, country: "IN", nationalNumber, decisionReference: reference });
       delivery = await niceJobsDirectorInvite.send(actorId, { userId: appointment.userId });
     } else {
-      const draft = await staffOnboardingService.prepare(actorId, { organizationId: target.id, existingPersonId: employee.person.id, roleId: role.id, scopeDecisionReference: reference });
+      const draft = await staffOnboardingService.prepare(actorId, { organizationId: target.id, existingPersonId: employee.person.id, roleId: role.id, managerUserId: data.reportToUserId, managerDecisionReference: reference, scopeDecisionReference: reference });
       delivery = await staffInvite.send(actorId, { userId: draft.id, verificationEvidence: "Boss-approved appointment recorded in HR." });
     }
     revalidatePath("/app/boss/departments/hr");
     revalidatePath("/app/boss/departments/hr/employees/" + encodeURIComponent(employmentId));
-    return { employmentId, inviteSent: delivery.sent, activationUrl: delivery.activationUrl, message: "Appointment saved. The secure setup invitation was emailed. The employee must verify their identity and set their own sign-in credential before dashboard access is enabled." };
+    const activationUrl = delivery.activationUrl;
+    const workArea = employee.assignments.find(item => item.status === "ACTIVE")?.brand.name ?? employee.company.name;
+    const shareMessage = activationUrl ? `Hello ${data.displayName}, your ${data.designation} workspace with ${workArea} is ready for setup. Start here: ${activationUrl}. We have emailed your verification code to ${data.email}. Enter that code on the setup page and create your own sign-in credential. Please do not share your verification code.` : undefined;
+    return { employmentId, inviteSent: delivery.sent, activationUrl, shareMessage, shareEmail: data.email, message: "Employee record and role-based access are prepared. Setup instructions were emailed; access activates after the employee verifies their identity and creates their own sign-in credential." };
   } catch (error) {
     if (employmentId) { revalidatePath("/app/boss/departments/hr"); return { employmentId, message: "The employee record is saved. Dashboard access remains pending until the setup invitation is completed.", error: error instanceof AccessError ? error.message : "Setup access could not be prepared. Open the employee record to review it." }; }
     throw error;

@@ -16,7 +16,7 @@ import { bossStaffDraftAction, bossStaffInviteAction, bossStaffReviewAction } fr
 import { prisma } from "@/server/db";
 import { hrEmploymentService } from "@/server/group/hr-employment";
 import { HrEmployees } from "./hr-employees";
-import { HrOnboarding } from "./hr-onboarding";
+import { HrOnboarding, type ReportingChoice } from "./hr-onboarding";
 import { marketingDivisionSlug } from "@/server/group/brand-marketing-scope";
 import { hrCompanyConfig } from "@/server/group/hr-company-config";
 import { HrCompanySettings } from "./hr-company-settings";
@@ -148,7 +148,52 @@ export default async function BossDepartmentPage({ params, searchParams }: { par
     }
     const groupedAssignments = company && query.view === "organization" ? await prisma.hrAssignment.groupBy({ by: ["brandId"], where: { brandId: { in: brandChoices.map(row => row.id) }, status: "ACTIVE", employment: { companyId: company.organizationId, status: "ACTIVE" } }, _count: { _all: true } }) : [];
     const brandCounts = Object.fromEntries(groupedAssignments.map(row => [row.brandId, row._count._all]));
-    const onboardingPanel = canAddEmployee ? <HrOnboarding companies={hireableCompanies} brands={hireableBrands.map(row => ({ id: row.id, name: row.name, organizationId: row.organizationId, slug: row.slug, parentName: row.parentBrand?.name ?? null }))} initialCompanyId={company?.organizationId}/> : null;
+    let reportingChoices: ReportingChoice[] = [];
+    if (hireableCompanies.length) {
+      const scopes: { organizationId: string; brandId: string | null }[] = [];
+      for (const hireable of hireableCompanies) {
+        scopes.push({ organizationId: hireable.organizationId, brandId: null });
+        for (const brandRow of hireableBrands.filter(item => item.organizationId === hireable.organizationId && !item.parentBrand)) {
+          const scopeSlug = marketingDivisionSlug(brandRow.slug);
+          if (!scopeSlug) continue;
+          const target = await prisma.organization.findFirst({ where: { slug: scopeSlug, parentId: hireable.organizationId, type: "DIVISION", status: "ACTIVE" }, select: { id: true } });
+          if (target) scopes.push({ organizationId: target.id, brandId: brandRow.id });
+        }
+      }
+      const scopeOptions = await Promise.all(scopes.map(async scope => ({ ...scope, managers: (await staffOnboardingService.options(session.userId, scope.organizationId)).managers })));
+      const userIds = [...new Set(scopeOptions.flatMap(scope => scope.managers.map(manager => manager.id)))];
+      const reportingUsers = userIds.length ? await prisma.user.findMany({
+        where: { id: { in: userIds }, status: "ACTIVE", emailVerifiedAt: { not: null } },
+        select: {
+          id: true,
+          email: true,
+          person: {
+            select: {
+              displayName: true,
+              memberships: {
+                where: { status: "ACTIVE", organizationId: { in: scopes.map(scope => scope.organizationId) } },
+                select: { organizationId: true, scope: true, title: true, roles: { select: { role: { select: { name: true } } } } }
+              }
+            }
+          }
+        }
+      }) : [];
+      for (const scope of scopeOptions) for (const manager of scope.managers) {
+        const user = reportingUsers.find(item => item.id === manager.id);
+        if (!user?.person) continue;
+        const membership = user.person.memberships.find(item => item.organizationId === scope.organizationId) ?? user.person.memberships.find(item => item.scope === "DESCENDANTS" && scopes.some(companyScope => companyScope.brandId === null && companyScope.organizationId === item.organizationId));
+        const title = membership?.roles.map(item => item.role.name).find(name => /boss|director|manager|administrative officer/i.test(name)) ?? membership?.title ?? "Team lead";
+        if (!/boss|director|manager|administrative officer/i.test(title)) continue;
+        reportingChoices.push({ userId: user.id, name: user.person.displayName, title, email: user.email, brandId: scope.brandId });
+      }
+      const isBoss = await bossService.authority(session.userId).then(() => true).catch(error => { if (error instanceof AccessError) return false; throw error; });
+      if (isBoss) {
+        const currentBoss = await prisma.user.findUnique({ where: { id: session.userId }, select: { id: true, email: true, person: { select: { displayName: true } } } });
+        if (currentBoss?.person) for (const scope of scopes) if (!reportingChoices.some(choice => choice.userId === currentBoss.id && choice.brandId === scope.brandId)) reportingChoices.push({ userId: currentBoss.id, name: currentBoss.person.displayName || "Group Boss", title: "Group Boss", email: currentBoss.email, brandId: scope.brandId });
+      }
+      reportingChoices = reportingChoices.filter((choice, index, rows) => rows.findIndex(other => other.userId === choice.userId && other.brandId === choice.brandId) === index);
+    }
+    const onboardingPanel = canAddEmployee ? <HrOnboarding companies={hireableCompanies} brands={hireableBrands.map(row => ({ id: row.id, name: row.name, organizationId: row.organizationId, slug: row.slug, parentName: row.parentBrand?.name ?? null }))} reportingChoices={reportingChoices} initialCompanyId={company?.organizationId}/> : null;
     return <CentralHrWorkspace companies={data.companies} brands={brandChoices.map(item => ({ ...item, parentName: item.parentBrand?.name ?? null }))} company={company} brand={brand} view={query.view} search={query.search} recruitingPanel={recruitingPanel} payrollPanel={payrollPanel} operationsPanel={operationsPanel} onboardingPanel={onboardingPanel} employeePanel={employeePanel} staffPanel={staffPanel} configPanel={<HrCompanySettings companies={onboardingSettings}/>} rolePanel={<section className="executive-band"><h2>Scoped human roles</h2>{!company ? <p>Select a company to view its roles.</p> : <><p>Designations do not grant access. Roles start with only their explicitly assigned permissions.</p>{company.organization.slug === "aira-skill-city" && <RoleTemplateForm/>}<Link href={`/app/workforce/roles?organization=${encodeURIComponent(company.organizationId)}&create=true`}>Create company role</Link>{!roles.length && <p>No human roles in this company scope.</p>}<ul>{roles.map(role => <li key={role.id}><strong>{role.name}</strong> · {role.status} · {roleScopes.find(scope => scope.id === role.organizationId)?.name} · {role.permissions.length} permissions · <Link href={`/app/workforce/roles?organization=${encodeURIComponent(role.organizationId ?? company.organizationId)}`}>Manage role and permissions</Link></li>)}</ul></>}</section>} departments={departments} departmentId={query.departmentId} employmentStatus={query.employmentStatus} draftCount={draftCount} counts={hrCounts} brandCounts={brandCounts} canAddEmployee={canAddEmployee} previousPage={employeePage > 1 ? employeeHref(employeePage - 1) : undefined} nextPage={employeeNextPage ? employeeHref(employeePage + 1) : undefined}/>;
   }
   let detail: Awaited<ReturnType<typeof bossRegistry.brand>> | undefined;

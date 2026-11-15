@@ -1013,6 +1013,11 @@ progress { width: 120px; accent-color: var(--accent); }
 .boss-hr-hire-result { padding: 22px 24px 24px; }
 .boss-hr-hire-result h3 { margin: 6px 0; }
 .boss-hr-hire-result p { color: var(--muted); font-size: 13px; line-height: 1.5; }
+.boss-hr-share-message { display: grid; gap: 7px; margin: 14px 0; color: var(--ink); font-size: 12px; font-weight: 700; }
+.boss-hr-share-message textarea { width: 100%; padding: 10px 12px; border: 1px solid #d4deed; border-radius: 9px; color: var(--ink); background: #f8faff; font: inherit; font-size: 12px; line-height: 1.5; resize: vertical; }
+.boss-hr-share-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+.boss-hr-share-actions .button { display: inline-flex; min-height: 40px; align-items: center; justify-content: center; padding: 8px 12px; border: 1px solid #1c59c7; border-radius: 9px; color: #fff; background: linear-gradient(135deg, #246beb, #1447a8); font: inherit; font-size: 12px; font-weight: 700; text-decoration: none; cursor: pointer; }
+.boss-hr-share-actions .button.secondary { border-color: #d4deed; color: var(--ink); background: #fff; }
 .boss-hr-people-section > header > a { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; }
 .boss-hr-status-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
 .boss-hr-status-tabs a { padding: 6px 11px; border: 1px solid var(--line); border-radius: 999px; color: var(--ink); font-size: 11px; text-decoration: none; }

@@ -59,7 +59,8 @@ export function createStaffOnboardingService(client: PrismaClient = prisma) {
       if (["Software Developer", "Full Stack Developer", "Junior Developer"].includes(role.name) && (await db.organization.findUnique({ where: { slug: "aira-labs" }, select: { id: true } }))?.id !== scope.id) throw new AccessError("Developer assignment requires Labs scope");
       if (input.managerUserId) {
         const manager = await db.user.findUnique({ where: { id: input.managerUserId }, select: { personId: true, status: true, emailVerifiedAt: true } });
-        if (!manager?.personId || manager.status !== "ACTIVE" || !manager.emailVerifiedAt || !(await db.membership.findFirst({ where: { personId: manager.personId, status: "ACTIVE", OR: [{ organizationId: scope.id }, { organizationId: company.id, scope: "DESCENDANTS" }] } }))) throw new AccessError("Verified manager appointment required");
+        const isAppointingBoss = input.managerUserId === actorUserId && groupBossAppointment;
+        if (!manager?.personId || manager.status !== "ACTIVE" || !manager.emailVerifiedAt || !isAppointingBoss && !(await db.membership.findFirst({ where: { personId: manager.personId, status: "ACTIVE", OR: [{ organizationId: scope.id }, { organizationId: company.id, scope: "DESCENDANTS" }] } }))) throw new AccessError("Verified manager appointment required");
       }
       let person;
       if (input.existingPersonId) {

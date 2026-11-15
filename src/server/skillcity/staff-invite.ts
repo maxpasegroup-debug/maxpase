@@ -116,13 +116,16 @@ export function createStaffInvite(client: PrismaClient = prisma, env: Record<str
       if (!(await db.employment.findFirst({ where: { personId: user.personId!, companyId: company.id, status: "ACTIVE" } }))) throw new AccessError("Active company employment required for activation");
       if (!memberScope || membership.roles[0].role.key === "nicejobs-director" || !isPreparedStaffRole(membership.roles[0].role.key, memberScope.slug) || staffPortalForRole(membership.roles[0].role.key) !== data.portal || !hasStaffWorkspaceCapabilities(membership.roles[0].role.key, membership.roles[0].role.permissions.map(item => item.permission.key))) throw new AccessError("Role appointment unavailable");
       const bossAppointment = metadata.appointmentAuthority === "GROUP_BOSS";
-      const pendingManager = !bossAppointment && !["Director", "Division Director"].includes(membership.roles[0]?.role.name ?? "") ? await db.reportingRelationship.findFirst({
+      const directorAppointment = ["Director", "Division Director"].includes(membership.roles[0]?.role.name ?? "");
+      const managerAssigned = typeof metadata.managerUserId === "string";
+      const managerRequired = !bossAppointment && !directorAppointment;
+      const pendingManager = managerAssigned ? await db.reportingRelationship.findFirst({
         where: {
           personId: user.personId!, organizationId: membership.organizationId, status: "INACTIVE",
           manager: { users: { some: { id: metadata.managerUserId, status: "ACTIVE", emailVerifiedAt: { not: null } } } }
         }
       }) : null;
-      if (!bossAppointment && !["Director", "Division Director"].includes(membership.roles[0]?.role.name ?? "") && (!pendingManager || typeof metadata.managerDecisionReference !== "string" || metadata.managerDecisionReference.length < 8)) throw new AccessError("Manager appointment unavailable");
+      if (managerAssigned && !pendingManager || managerRequired && (!pendingManager || typeof metadata.managerDecisionReference !== "string" || metadata.managerDecisionReference.length < 8)) throw new AccessError("Manager appointment unavailable");
       if ((await db.emailAuthChallenge.updateMany({ where: { id: challenge.id, status: "SENT", attempts: { lte: 5 } }, data: { status: "CONSUMED", consumedAt: now() } })).count !== 1) throw new AccessError("Invitation already used");
       await db.user.update({ where: { id: user.id }, data: { status: "ACTIVE", passwordHash: hash, emailVerifiedAt: now() } });
       await db.membership.update({ where: { id: membership.id }, data: { status: "ACTIVE" } });

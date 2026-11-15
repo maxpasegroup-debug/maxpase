@@ -82,7 +82,8 @@ export function createHrEmploymentService(client: PrismaClient = prisma) {
     if (initialBrandIds.length && (!input.designation || !input.joiningDate || !input.assignmentDecisionReference)) throw new AccessError("Designation, joining date and decision reference are required for brand assignments");
     return client.$transaction(async db => {
       const ctx = await authorized(actorId, db, input.companyId, "person.create");
-      if (input.activateImmediately) await boss.authority(actorId, db);
+      let groupBossAppointment = false;
+      if (input.activateImmediately) { await boss.authority(actorId, db); groupBossAppointment = true; }
       if (initialBrandIds.length) {
         await ctx.requireAccess("person.update", { organizationId: input.companyId });
         const found = await db.brand.findMany({ where: { id: { in: initialBrandIds }, organizationId: input.companyId, status: "ACTIVE" }, select: { id: true } });
@@ -115,11 +116,12 @@ export function createHrEmploymentService(client: PrismaClient = prisma) {
       if (open) throw new AccessError("An open employment record already exists");
       if (input.initialManagerPersonId) {
         if (!initialBrandIds.length || input.initialManagerPersonId === personId) throw new AccessError("Choose a distinct manager for an assigned brand");
-        const manager = await db.employment.findFirst({ where: { personId: input.initialManagerPersonId, companyId: input.companyId, status: "ACTIVE" }, select: { id: true } });
+        const isAppointingBoss = groupBossAppointment && input.initialManagerPersonId === ctx.user?.personId;
+        const manager = isAppointingBoss ? { id: "group-boss" } : await db.employment.findFirst({ where: { personId: input.initialManagerPersonId, companyId: input.companyId, status: "ACTIVE" }, select: { id: true } });
         const scopes = ctx.nodes.filter(node => ancestry(ctx.nodes, node.id).some(parent => parent.id === input.companyId)).map(node => node.id);
         const verified = await db.user.findFirst({ where: { personId: input.initialManagerPersonId, status: "ACTIVE", emailVerifiedAt: { not: null }, person: { memberships: { some: { organizationId: { in: scopes }, status: "ACTIVE" } } } }, select: { id: true } });
-        const assignments = manager ? await db.hrAssignment.findMany({ where: { employmentId: manager.id, brandId: { in: initialBrandIds }, status: "ACTIVE" }, select: { brandId: true } }) : [];
-        if (!manager || !verified || initialBrandIds.some(brandId => !assignments.some(assignment => assignment.brandId === brandId))) throw new AccessError("Verified manager with an active assignment to every selected brand required");
+        const assignments = manager && !isAppointingBoss ? await db.hrAssignment.findMany({ where: { employmentId: manager.id, brandId: { in: initialBrandIds }, status: "ACTIVE" }, select: { brandId: true } }) : [];
+        if (!manager || !isAppointingBoss && !verified || !isAppointingBoss && initialBrandIds.some(brandId => !assignments.some(assignment => assignment.brandId === brandId))) throw new AccessError("Choose an active reporting person with access to this work area");
       }
       const personContact = await db.person.findUnique({ where: { id: personId! }, select: { email: true, phone: true } });
       const row = await db.employment.create({ data: { personId: personId!, companyId: input.companyId, designation: input.designation || null, employmentType: input.employmentType ?? null, startDate: input.joiningDate ?? null, status: input.activateImmediately ? "ACTIVE" : "DRAFT", decisionReference: input.decisionReference, contactEmail: input.contactEmail ?? personContact?.email ?? null, contactPhone: input.contactPhone ?? personContact?.phone ?? null, emergencyContactName: input.emergencyContactName ?? null, emergencyContactRelationship: input.emergencyContactRelationship ?? null, emergencyContactPhone: input.emergencyContactPhone ?? null, emergencyContactEmail: input.emergencyContactEmail ?? null } });
