@@ -49,7 +49,11 @@ jobs:
             "$tool" --version
             "$tool" --version | grep -Eq 'PostgreSQL\) 16(\.| )'
           done
-      - name: Run PostgreSQL integration and regression suite
+      - name: Run Startup and SIA regression suite
+        if: github.ref == 'refs/heads/codex/aira-startup-admissions-acceptance'
+        run: npx vitest run tests/startup-*.test.ts tests/sia-*.test.ts --no-file-parallelism --testTimeout=30000
+      - name: Run full PostgreSQL integration and regression suite
+        if: github.ref != 'refs/heads/codex/aira-startup-admissions-acceptance'
         run: npm test
       - run: npm run build
       - name: Require reviewed registry metadata submission
