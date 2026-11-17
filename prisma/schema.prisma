@@ -1860,6 +1860,7 @@ model Organization {
   department               DepartmentProfile?
   team                     TeamProfile?
   memberships              Membership[]
+  startupPublicApplicants   StartupPublicApplicant[]
   reporting                ReportingRelationship[]
   responsibilities         Responsibility[]
   siaRoles                 SiaRoleAssignment[]
@@ -3740,4 +3741,103 @@ model Escalation {
   updatedAt         DateTime     @updatedAt
 
   @@unique([organizationId, reference])
+}
+
+model StartupPublicApplicant {
+  id                    String   @id @default(cuid())
+  organizationId        String
+  organization          Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  reference             String   @unique
+  possessionSecretHash  String
+  fullName              String?
+  mobile                String?
+  normalizedMobile      String?
+  email                 String?
+  state                 String?
+  district              String?
+  preferredCentre       String?
+  programPreference     String?
+  entrepreneurialStage  String?
+  businessInterest      String?
+  goals                 String?
+  referralSnapshot      String?
+  consentVersion        String?
+  consentedAt           DateTime?
+  phoneVerifiedAt       DateTime?
+  status                String   @default("DRAFT")
+  submittedAt           DateTime?
+  expiresAt             DateTime
+  version               Int      @default(0)
+  otpChallenges         StartupOtpChallenge[]
+  events                StartupApplicationEvent[]
+  followups             StartupAdmissionFollowUp[]
+  assignments           StartupAdmissionAssignment[]
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@index([organizationId, status, createdAt])
+  @@index([normalizedMobile, expiresAt])
+  @@index([expiresAt])
+}
+
+model StartupOtpChallenge {
+  id               String   @id @default(cuid())
+  applicantId      String
+  applicant        StartupPublicApplicant @relation(fields: [applicantId], references: [id], onDelete: Cascade)
+  mobile           String
+  otpHash          String
+  provider         String
+  providerRef      String?
+  status           String   @default("PENDING")
+  attempts         Int      @default(0)
+  expiresAt        DateTime
+  consumedAt       DateTime?
+  createdAt        DateTime @default(now())
+
+  @@index([applicantId, status, createdAt])
+  @@index([expiresAt])
+}
+
+model StartupApplicationEvent {
+  id               String   @id @default(cuid())
+  applicantId      String
+  applicant        StartupPublicApplicant @relation(fields: [applicantId], references: [id], onDelete: Restrict)
+  actorUserId      String?
+  action           String
+  reason           String?
+  metadata         String?
+  createdAt        DateTime @default(now())
+
+  @@index([applicantId, createdAt])
+  @@index([actorUserId, createdAt])
+}
+
+model StartupAdmissionAssignment {
+  id               String   @id @default(cuid())
+  applicantId      String
+  applicant        StartupPublicApplicant @relation(fields: [applicantId], references: [id], onDelete: Restrict)
+  assignedUserId   String
+  status           String   @default("ACTIVE")
+  assignedAt       DateTime @default(now())
+  endedAt          DateTime?
+
+  @@index([assignedUserId, status, assignedAt])
+  @@index([applicantId, status])
+}
+
+model StartupAdmissionFollowUp {
+  id               String   @id @default(cuid())
+  applicantId      String
+  applicant        StartupPublicApplicant @relation(fields: [applicantId], references: [id], onDelete: Restrict)
+  actorUserId      String
+  contactMethod    String?
+  outcome          String?
+  note             String
+  nextFollowUpAt   DateTime?
+  status           String   @default("OPEN")
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([applicantId, createdAt])
+  @@index([actorUserId, nextFollowUpAt, status])
 }

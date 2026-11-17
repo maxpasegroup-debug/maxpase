@@ -6,7 +6,7 @@ import { createBossRegistry } from "./boss-registry";
 import { createBossService } from "./boss-service";
 import { z } from "zod";
 
-export const admissionStatuses = ["SUBMITTED", "IN_REVIEW", "APPROVED", "REJECTED"] as const;
+export const admissionStatuses = ["SUBMITTED", "IN_REVIEW", "CLARIFICATION_REQUIRED", "RETURNED_TO_AO", "APPROVED", "REJECTED"] as const;
 export function startupAdmissionsWhere(divisionId: string, search = "", status?: string): Prisma.ExecutiveRecordWhereInput {
   const term = search.trim().slice(0, 100);
   return { organizationId: divisionId, kind: "STARTUP_APPLICATION", sourceKey: { startsWith: "startup:application:" },

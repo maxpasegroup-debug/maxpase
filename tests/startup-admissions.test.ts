@@ -9,7 +9,7 @@ const answers = { tier: "STARTER", idea: "A local business problem that I want t
 describe("Startup Skool admissions contract", () => {
   it("keeps search and status inside the verified application division and kind", () => {
     expect(startupAdmissionsWhere("division-1", "  Meera  ", "IN_REVIEW")).toEqual({ organizationId: "division-1", kind: "STARTUP_APPLICATION", sourceKey: { startsWith: "startup:application:" }, status: "IN_REVIEW", owner: { displayName: { contains: "Meera", mode: "insensitive" } } });
-    expect(startupAdmissionsWhere("division-1", "", "ACTIVE")).toMatchObject({ organizationId: "division-1", kind: "STARTUP_APPLICATION", status: { in: ["SUBMITTED", "IN_REVIEW", "APPROVED", "REJECTED"] } });
+    expect(startupAdmissionsWhere("division-1", "", "ACTIVE")).toMatchObject({ organizationId: "division-1", kind: "STARTUP_APPLICATION", status: { in: ["SUBMITTED", "IN_REVIEW", "CLARIFICATION_REQUIRED", "RETURNED_TO_AO", "APPROVED", "REJECTED"] } });
   });
   it("validates legacy answers and an optional recorded Program ID without changing candidate submission", () => {
     expect(parseStartupApplicationPayload(JSON.stringify(answers)).programId).toBeUndefined();
@@ -29,6 +29,10 @@ describe("Startup Skool admissions contract", () => {
     expect(canReviewStartupApplication(submitted, "reviewer", 2, "IN_REVIEW")).toBe(true);
     expect(canReviewStartupApplication(submitted, "applicant", 2, "APPROVED")).toBe(false);
     expect(canReviewStartupApplication(submitted, "reviewer", 1, "APPROVED")).toBe(false);
+    expect(canReviewStartupApplication(submitted, "reviewer", 2, "APPROVED")).toBe(false);
+    expect(canReviewStartupApplication({ ...submitted, status: "IN_REVIEW", version: 3 }, "reviewer", 3, "APPROVED")).toBe(true);
+    expect(canReviewStartupApplication({ ...submitted, status: "IN_REVIEW", version: 3 }, "reviewer", 3, "CLARIFICATION_REQUIRED")).toBe(true);
+    expect(canReviewStartupApplication({ ...submitted, status: "IN_REVIEW", version: 3 }, "reviewer", 2, "REJECTED")).toBe(false);
     expect(canReviewStartupApplication({ ...submitted, status: "APPROVED" }, "reviewer", 2, "REJECTED")).toBe(false);
   });
   it("keeps admission separate from application review and requires another authorized decision maker", () => {

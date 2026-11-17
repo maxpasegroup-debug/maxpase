@@ -37,7 +37,7 @@ export default async function PortalLanding({ params }: { params: Promise<{ site
   }
   if (site.id === "startup") {
     const local = paths.home.startsWith("/sites/");
-    return <StartupLanding home={paths.home} login={paths.login} signup={paths.signup} name={site.name} description={site.description} image={site.image} ecosystem={local ? "/sites/skillcity" : "https://airaskillcity.com"} focus={site.focus} faqs={startupFaqs} />;
+    return <StartupLanding home={paths.home} login={paths.login} signup={local ? "/sites/startup/apply" : "/apply"} name={site.name} description={site.description} image={site.image} ecosystem={local ? "/sites/skillcity" : "https://airaskillcity.com"} focus={site.focus} faqs={startupFaqs} />;
   }
   const local = paths.home.startsWith("/sites/");
   return <div className={`${display.variable} ${text.variable}`}>

@@ -11,6 +11,7 @@ import { middleware } from "@/middleware";
 import { portalPaths, siteById } from "@/server/portals/sites";
 import { startupEmailSettings, StartupAuthUnavailable } from "@/server/portals/startup-auth";
 import { startupApplicationInput } from "@/server/portals/startup-applications";
+import { startupPublicDraftInput, startupPublicSubmissionInput } from "@/server/portals/startup-public-admissions";
 
 const localRequire = createRequire(import.meta.url);
 const compiled = transpileModule(readFileSync("src/app/sites/startup-ui/landing.tsx", "utf8"), { compilerOptions: { module: ModuleKind.CommonJS, jsx: JsxEmit.ReactJSX, esModuleInterop: true } }).outputText;
@@ -26,6 +27,15 @@ runInNewContext(compiled, { module: moduleTarget, exports: moduleTarget.exports,
   "./sia-assistant": { StartupSiaAssistant: () => createElement("span", null, "SIA guidance") }
 } as Record<string, unknown>)[name] ?? localRequire(name) });
 const StartupLanding = (moduleTarget.exports as { StartupLanding: ComponentType<{ home: string; login: string; signup: string; name: string; description: string; image: string; ecosystem: string; focus: readonly string[]; faqs: readonly (readonly [string, string])[] }> }).StartupLanding;
+const publicAppCompiled = transpileModule(readFileSync("src/app/sites/startup-ui/public-application.tsx", "utf8"), { compilerOptions: { module: ModuleKind.CommonJS, jsx: JsxEmit.ReactJSX, esModuleInterop: true } }).outputText;
+const publicAppTarget = { exports: {} };
+const PublicIcon = () => createElement("span", null);
+runInNewContext(publicAppCompiled, { module: publicAppTarget, exports: publicAppTarget.exports, require: (name: string) => ({
+  "next/link": { __esModule: true, default: ({ href, children, className }: { href: string; children: ReactNode; className?: string }) => createElement("a", { href, className }, children) },
+  "react": localRequire("react"), "react/jsx-runtime": localRequire("react/jsx-runtime"),
+  "./public-application.css": {}, "lucide-react": { ArrowLeft: PublicIcon, ArrowRight: PublicIcon, Sparkles: PublicIcon }
+} as Record<string, unknown>)[name] ?? localRequire(name) });
+const PublicStartupApplication = (publicAppTarget.exports as { PublicStartupApplication: ComponentType }).PublicStartupApplication;
 
 const previousSecret = process.env.AUTH_SECRET;
 beforeAll(() => { process.env.AUTH_SECRET = randomBytes(32).toString("base64url"); });
@@ -35,8 +45,18 @@ describe("Startup Skool application entry", () => {
   it("routes only the Startup Skool signup path through its own domain", async () => {
     const startup = await middleware(new NextRequest("https://airastartupskool.com/signup", { headers: { host: "airastartupskool.com" } }));
     expect(startup.headers.get("x-middleware-rewrite")).toContain("/sites/startup/signup");
+    const publicApplication = await middleware(new NextRequest("https://airastartupskool.com/apply", { headers: { host: "airastartupskool.com" } }));
+    expect(publicApplication.headers.get("x-middleware-rewrite")).toContain("/sites/startup/apply");
+    expect(publicApplication.status).toBe(200);
     const labs = await middleware(new NextRequest("https://airalabs.online/signup", { headers: { host: "airalabs.online" } }));
     expect(labs.status).toBe(404);
+    const labsApplication = await middleware(new NextRequest("https://airalabs.online/apply", { headers: { host: "airalabs.online" } }));
+    expect(labsApplication.status).toBe(404);
+    const publicApi = await middleware(new NextRequest("https://airastartupskool.com/api/startup/public-application/draft", { method: "POST", headers: { host: "airastartupskool.com", origin: "https://airastartupskool.com" } }));
+    expect(publicApi.status).toBe(200);
+    expect(publicApi.headers.get("x-middleware-rewrite")).toBeNull();
+    const crossBrandApi = await middleware(new NextRequest("https://airalabs.online/api/startup/public-application/draft", { method: "POST", headers: { host: "airalabs.online", origin: "https://airalabs.online" } }));
+    expect(crossBrandApi.status).toBe(404);
   });
 
   it("keeps email verification disabled until distinct Startup configuration is present", () => {
@@ -55,12 +75,30 @@ describe("Startup Skool application entry", () => {
   it("offers a guided application without presenting proposed fees or automatic admission", () => {
     const site = siteById("startup")!;
     const paths = portalPaths(site, true);
-    const html = renderToStaticMarkup(createElement(StartupLanding, { home: paths.home, login: paths.login, signup: paths.signup, name: site.name, description: site.description, image: site.image, ecosystem: "https://airaskillcity.com", focus: site.focus, faqs: [] }));
-    expect(html).toContain("/sites/startup/signup");
+    const html = renderToStaticMarkup(createElement(StartupLanding, { home: paths.home, login: paths.login, signup: "/apply", name: site.name, description: site.description, image: site.image, ecosystem: "https://airaskillcity.com", focus: site.focus, faqs: [] }));
+    expect(html).toContain("/apply");
     expect(html).toContain("SIA guidance");
     expect(html).toContain("Apply to Startup Skool");
     expect(html).toContain("AIRA Skill City Private Limited");
     expect(html).not.toContain("₹35,000");
     expect(html).not.toContain("Pay now");
+  });
+
+  it("renders the public SIA application connected to secure draft-backed actions", () => {
+    const html = renderToStaticMarkup(createElement(PublicStartupApplication));
+    expect(html).toContain("SIA - APPLICATION GUIDE");
+    expect(html).toContain("get started.");
+    expect(html).toContain("Application draft:");
+    expect(html).toContain("Opening your secure application draft");
+    expect(html).not.toContain("Create an account");
+  });
+
+  it("accepts resumable partial drafts but requires complete verified application data and consent at submission", () => {
+    expect(startupPublicDraftInput.safeParse({ fullName: "", mobile: "", programPreference: "" }).success).toBe(true);
+    const submitted = { fullName: "Asha Menon", mobile: "+919876543210", email: "", state: "Kerala", district: "Kochi", programPreference: "PBA_30_DAYS", entrepreneurialStage: "Exploring a first venture", businessInterest: "A local service for small businesses", goals: "Learn to validate and grow the idea", consent: true };
+    expect(startupPublicSubmissionInput.safeParse(submitted).success).toBe(true);
+    expect(startupPublicSubmissionInput.safeParse({ ...submitted, mobile: "9876543210" }).success).toBe(false);
+    expect(startupPublicSubmissionInput.safeParse({ ...submitted, consent: false }).success).toBe(false);
+    expect(startupPublicSubmissionInput.safeParse({ ...submitted, programPreference: "MBA" }).success).toBe(false);
   });
 });

@@ -56,6 +56,20 @@ export async function startupSubmitAction(_state: StartupActionState, form: Form
   }
   redirect(paths.gateway);
 }
+export async function startupDraftAction(_state: StartupActionState, form: FormData): Promise<StartupActionState> {
+  const { site } = await requestPortal("startup", true);
+  const session = await getPortalSession(site);
+  if (!session) return { error: "Sign in again to save your application draft." };
+  try {
+    const raw = JSON.parse(String(form.get("draft") ?? "{}"));
+    await startupApplications.saveDraft(session.userId, raw);
+    return { message: "Draft saved to your account." };
+  } catch (error) {
+    if (error instanceof z.ZodError) return { error: "Please check that answer and try again." };
+    if (!(error instanceof AccessError)) safeDiagnostic("operation_failed");
+    return { error: "Draft could not be saved. Please try again." };
+  }
+}
 export async function startupReviewAction(_state: StartupActionState, form: FormData): Promise<StartupActionState> {
   const { site, paths } = await requestPortal("skillcity", true);
   const session = await getPortalSession(site);

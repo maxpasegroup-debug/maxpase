@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import Link from "next/link";
 import { ArrowUpRight, BriefcaseBusiness, Building2, CalendarClock, CheckSquare, CircleDollarSign, FileCheck2, FileText, Users } from "lucide-react";
 import { WorkForm } from "./work-form";
 import type { createSkillCityAdministrativeDesk } from "@/server/skillcity/administrative-desk";
@@ -8,7 +9,7 @@ const words = (value: string) => value.replaceAll("_", " ").toLowerCase();
 const date = (value: Date | null) => value ? new Intl.DateTimeFormat("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" }).format(value) + " IST" : "No due date";
 const dateLabel = new Intl.DateTimeFormat("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "full" }).format(new Date());
 
-export function AdministrativeWorkspace({ data }: { data: Desk }) {
+export function AdministrativeWorkspace({ data, admissionsHref }: { data: Desk; admissionsHref: string }) {
   const metrics = [
     { label: "My open tasks", value: data.tasks.length, note: "Assigned to you · current list", icon: CheckSquare, href: "#ao-tasks" },
     { label: "Customer records", value: data.customers.length, note: "Active contacts · current list", icon: Users, href: "#ao-customers" },
@@ -80,6 +81,7 @@ export function AdministrativeWorkspace({ data }: { data: Desk }) {
         {!data.startupApplications.length ? <p className="ao-empty">No applications are waiting in the AO intake queue, or this role has not yet been enabled for intake.</p> : <div className="ao-record-list">{data.startupApplications.map(application => <article key={application.id}><header><h3>{application.applicant}</h3><span className="ao-status">{words(application.status)}</span></header><p>{application.tier === "PBA_30_DAYS" ? "PBA · 30-day programme" : application.tier === "PBA_180_DAYS" ? "PBA · 180-day programme" : application.tier.replaceAll("_", " ")} · Submitted {date(application.createdAt)}</p>{application.status === "SUBMITTED" && data.permissions.canStartupTriage && <WorkForm actionName="AO_STARTUP_TRIAGE" reference={randomUUID()} label="Send to Director review" confirm="Move this application into the Director's review queue?"><input type="hidden" name="id" value={application.id}/><input type="hidden" name="version" value={application.version}/><input type="hidden" name="reason" value="AO intake triage; forwarded to the Startup Skool Director for admissions review."/></WorkForm>}</article>)}</div>}
         <p className="ao-muted">The AO can route applications for review. Only the authorized Startup Skool Director or Boss can approve, reject or confirm admission.</p>
       </section>
+      <section className="ao-panel"><header><div><p className="ao-eyebrow">STARTUP SKOOL · PBA</p><h2>Dedicated admissions workspace</h2></div></header><p>Review assigned applications, record follow-ups, and forward verified cases to leadership from one focused desk.</p><Link href={admissionsHref}>Open admissions workspace →</Link></section>
       <p className="ao-footer-note" id="ao-sidebar-note">Displayed lists are limited to recent records. The AO may route applications to the Director; admissions decisions, financial actions and payroll remain restricted.</p>
     </div>
   </div>;

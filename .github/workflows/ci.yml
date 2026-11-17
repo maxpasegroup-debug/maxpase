@@ -41,6 +41,8 @@ jobs:
       - run: npm run prisma:validate
       - name: Verify empty PostgreSQL baseline, repeat deploy and all safeguard triggers
         run: npm run validate:migrations
+      - name: Run Startup Skool database-backed admissions acceptance
+        run: npx vitest run tests/startup-admissions-postgres.test.ts --no-file-parallelism --testTimeout=120000
       - run: npm run lint
       - run: npm run typecheck
       - name: Confirm PostgreSQL 16 client binaries

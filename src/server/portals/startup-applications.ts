@@ -10,12 +10,18 @@ import { assertStartupPilotEnrollmentReady } from "./startup-pilot-register";
 
 const tiers = ["PBA_30_DAYS", "PBA_180_DAYS", "STARTER", "PRO", "EXTRAORDINARY"] as const;
 export const startupApplicationInput = z.object({ tier: z.enum(tiers), idea: z.string().trim().min(20).max(1500), goal: z.string().trim().min(20).max(1500), experience: z.string().trim().min(10).max(1000), location: z.string().trim().min(2).max(120), timeCommitment: z.string().trim().min(5).max(250), consent: z.literal(true), referralToken: z.string().regex(/^[A-Za-z0-9_-]{32,100}$/).optional() }).strict();
-const reviewInput = z.object({ id: z.string().min(1).max(200), version: z.number().int().min(0), decision: z.enum(["IN_REVIEW", "APPROVED", "REJECTED"]), reason: z.string().trim().min(5).max(1000) }).strict();
+const startupDraftInput = startupApplicationInput.omit({ consent: true, referralToken: true }).partial().strict();
+export const startupLeadershipDecisions = ["IN_REVIEW", "APPROVED", "REJECTED", "CLARIFICATION_REQUIRED", "RETURNED_TO_AO"] as const;
+export type StartupLeadershipDecision = typeof startupLeadershipDecisions[number];
+const reviewInput = z.object({ id: z.string().min(1).max(200), version: z.number().int().min(0), decision: z.enum(startupLeadershipDecisions), reason: z.string().trim().min(8).max(1000) }).strict();
 const kind = "STARTUP_APPLICATION";
-const statuses = new Set(["SUBMITTED", "IN_REVIEW", "APPROVED", "REJECTED"]);
-export function canReviewStartupApplication(current: { status: string; version: number; ownerPersonId: string }, actorPersonId: string | null, expectedVersion: number, decision: "IN_REVIEW" | "APPROVED" | "REJECTED") {
-  return !!actorPersonId && actorPersonId !== current.ownerPersonId && current.version === expectedVersion &&
-    ["SUBMITTED", "IN_REVIEW"].includes(current.status) && (decision !== "IN_REVIEW" || current.status === "SUBMITTED");
+const statuses = new Set(["SUBMITTED", "IN_REVIEW", "CLARIFICATION_REQUIRED", "RETURNED_TO_AO", "APPROVED", "REJECTED"]);
+export function canTransitionStartupApplication(from: string, to: StartupLeadershipDecision) {
+  if (to === "IN_REVIEW") return ["SUBMITTED", "CLARIFICATION_REQUIRED", "RETURNED_TO_AO"].includes(from);
+  return from === "IN_REVIEW" && ["APPROVED", "REJECTED", "CLARIFICATION_REQUIRED", "RETURNED_TO_AO"].includes(to);
+}
+export function canReviewStartupApplication(current: { status: string; version: number; ownerPersonId: string }, actorPersonId: string | null, expectedVersion: number, decision: StartupLeadershipDecision) {
+  return !!actorPersonId && actorPersonId !== current.ownerPersonId && current.version === expectedVersion && canTransitionStartupApplication(current.status, decision);
 }
 export function canConfirmStartupAdmission(application: { status: string; version: number; ownerPersonId: string; reviewerPersonId: string | null }, actorPersonId: string | null, expectedVersion: number) {
   return !!actorPersonId && application.status === "APPROVED" && application.version === expectedVersion &&
@@ -57,7 +63,30 @@ export function createStartupApplications(client: PrismaClient = prisma) {
     const { access, personId, name } = await applicant(userId);
     const row = await client.executiveRecord.findUnique({ where: { sourceKey: `startup:application:${userId}` }, select: { id: true, organizationId: true, ownerPersonId: true, status: true, payload: true, createdAt: true, updatedAt: true } });
     if (row && (row.organizationId !== access.divisionId || row.ownerPersonId !== personId || !statuses.has(row.status))) throw new AccessError("Application unavailable");
-    return { name, application: row ? { id: row.id, status: row.status, tier: parsePayload(row.payload).tier, createdAt: row.createdAt, updatedAt: row.updatedAt } : null };
+    const draftRow = row ? null : await client.executiveRecord.findUnique({ where: { sourceKey: `startup:application-draft:${userId}` }, select: { id: true, kind: true, organizationId: true, ownerPersonId: true, status: true, payload: true, updatedAt: true } });
+    if (draftRow && (draftRow.organizationId !== access.divisionId || draftRow.ownerPersonId !== personId || draftRow.kind !== "STARTUP_APPLICATION_DRAFT" || draftRow.status !== "DRAFT")) throw new AccessError("Application draft unavailable");
+    const draft = draftRow && Date.now() - draftRow.updatedAt.getTime() < 30 * 86400000 ? startupDraftInput.parse(JSON.parse(draftRow.payload)) : null;
+    return { name, draft, application: row ? { id: row.id, status: row.status, tier: parsePayload(row.payload).tier, createdAt: row.createdAt, updatedAt: row.updatedAt } : null };
+  }
+  async function saveDraft(userId: string, raw: unknown) {
+    const input = startupDraftInput.parse(raw);
+    const { access, personId } = await applicant(userId);
+    const sourceKey = `startup:application-draft:${userId}`;
+    return client.$transaction(async db => {
+      await requirePortalAccess(db, userId, "startup");
+      if (await db.executiveRecord.findUnique({ where: { sourceKey: `startup:application:${userId}` }, select: { id: true } })) throw new AccessError("An application has already been submitted");
+      const existing = await db.executiveRecord.findUnique({ where: { sourceKey }, select: { id: true, kind: true, ownerPersonId: true, organizationId: true, version: true } });
+      if (existing) {
+        if (existing.kind !== "STARTUP_APPLICATION_DRAFT" || existing.ownerPersonId !== personId || existing.organizationId !== access.divisionId) throw new AccessError("Application draft unavailable");
+        const changed = await db.executiveRecord.updateMany({ where: { id: existing.id, kind: "STARTUP_APPLICATION_DRAFT", ownerPersonId: personId, organizationId: access.divisionId, status: "DRAFT", version: existing.version }, data: { payload: JSON.stringify(input), version: { increment: 1 } } });
+        if (changed.count !== 1) throw new AccessError("Application draft changed; refresh and try again");
+      } else {
+        const row = await db.executiveRecord.create({ data: { kind: "STARTUP_APPLICATION_DRAFT", organizationId: access.divisionId, ownerPersonId: personId, title: "PBA application draft", status: "DRAFT", sourceKey, payload: JSON.stringify(input) } });
+        await db.executiveHistory.create({ data: { recordId: row.id, actorUserId: userId, toStatus: "DRAFT", reason: "Applicant saved a private application draft" } });
+      }
+      await operationalEvent(db, { actorUserId: userId, actorPersonId: personId, organizationId: access.divisionId, action: "startup.application_draft.saved", entityType: "ExecutiveRecord", entityId: existing?.id ?? sourceKey, result: "SUCCESS" });
+      return { saved: true };
+    });
   }
   async function submit(userId: string, raw: unknown) {
     const input = startupApplicationInput.parse(raw);
@@ -84,6 +113,7 @@ export function createStartupApplications(client: PrismaClient = prisma) {
       }
       const { referralToken: _referralToken, ...answers } = input;
       const row = await db.executiveRecord.create({ data: { kind, organizationId: access.divisionId, ownerPersonId: personId, title: "PBA entrepreneur journey application", status: "SUBMITTED", sourceKey, payload: JSON.stringify({ ...answers, noticeVersion: 1, ...(referral ? { referral } : {}) }) } });
+      await db.executiveRecord.deleteMany({ where: { sourceKey: `startup:application-draft:${userId}`, kind: "STARTUP_APPLICATION_DRAFT", organizationId: access.divisionId, ownerPersonId: personId, status: "DRAFT" } });
       await db.executiveHistory.create({ data: { recordId: row.id, actorUserId: userId, toStatus: "SUBMITTED", reason: "Applicant submitted the journey application" } });
       await operationalEvent(db, { actorUserId: userId, actorPersonId: personId, organizationId: access.divisionId, action: "startup.application.submitted", entityType: "ExecutiveRecord", entityId: row.id, result: "SUCCESS", metadata: { tierPreference: input.tier, noticeVersion: 1 } });
       return { id: row.id, duplicate: false };
@@ -96,19 +126,53 @@ export function createStartupApplications(client: PrismaClient = prisma) {
   }
   async function queue(userId: string) {
     const access = await requireStartupStaffAccess(client, userId);
-    const rows = await client.executiveRecord.findMany({ where: { organizationId: access.divisionId, kind, status: { in: ["SUBMITTED", "IN_REVIEW", "APPROVED", "REJECTED"] } }, select: { id: true, status: true, version: true, payload: true, createdAt: true, owner: { select: { displayName: true } }, history: { select: { fromStatus: true, toStatus: true, reason: true, createdAt: true }, orderBy: { createdAt: "desc" }, take: 5 } }, orderBy: { createdAt: "asc" }, take: 50 });
-    return rows.map(row => ({ ...row, payload: parsePayload(row.payload) }));
+      const [rows, publicRows] = await Promise.all([
+      client.executiveRecord.findMany({ where: { organizationId: access.divisionId, kind, status: { in: [...statuses] } }, select: { id: true, status: true, version: true, payload: true, createdAt: true, owner: { select: { displayName: true } }, history: { select: { fromStatus: true, toStatus: true, reason: true, createdAt: true }, orderBy: { createdAt: "desc" }, take: 5 } }, orderBy: { createdAt: "asc" }, take: 50 }),
+      client.startupPublicApplicant.findMany({ where: { organizationId: access.companyId, status: { in: [...statuses] }, submittedAt: { not: null } }, select: { id: true, fullName: true, email: true, mobile: true, state: true, district: true, preferredCentre: true, programPreference: true, entrepreneurialStage: true, businessInterest: true, goals: true, referralSnapshot: true, consentVersion: true, phoneVerifiedAt: true, status: true, version: true, submittedAt: true, events: { select: { action: true, reason: true, createdAt: true }, orderBy: { createdAt: "desc" }, take: 5 } }, orderBy: { submittedAt: "asc" }, take: 50 })
+    ]);
+    const authenticated = rows.map(row => ({ ...row, source: "AUTHENTICATED" as const, payload: parsePayload(row.payload) }));
+    const publicSia = publicRows.map(row => {
+      let referral: string | null = null;
+      try { const snapshot = JSON.parse(row.referralSnapshot ?? "{}"); referral = snapshot.verifiedReferral?.referralId ?? snapshot.applicantProvided ?? null; } catch { /* omit an invalid legacy snapshot */ }
+      return {
+        id: `public:${row.id}`, source: "PUBLIC_SIA" as const, status: row.status, version: row.version,
+        createdAt: row.submittedAt!, owner: { displayName: row.fullName ?? "Public applicant" },
+        payload: { tier: row.programPreference ?? "PBA_30_DAYS", idea: row.businessInterest ?? "", goal: row.goals ?? "", experience: row.entrepreneurialStage ?? "", location: [row.district, row.state].filter(Boolean).join(", "), timeCommitment: "Not collected for public SIA applications", mobile: row.mobile, email: row.email, preferredCentre: row.preferredCentre, referral, phoneVerified: !!row.phoneVerifiedAt, consentVersion: row.consentVersion },
+        history: row.events.map(event => ({ fromStatus: null, toStatus: event.action, reason: event.reason ?? "", createdAt: event.createdAt }))
+      };
+    });
+    return [...authenticated, ...publicSia].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime()).slice(0, 50);
   }
   async function reviewAuthorized(userId: string, raw: unknown, authority: { kind: "STAFF" } | { kind: "BOSS"; brandId: string }) {
     const input = reviewInput.parse(raw);
     return client.$transaction(async db => {
       let divisionId: string;
+      let companyId: string;
       if (authority.kind === "BOSS") {
-        divisionId = (await bossReviewScope(db, userId, authority.brandId)).divisionId;
-      } else divisionId = (await requireStartupStaffAccess(db, userId)).divisionId;
+        const scope = await bossReviewScope(db, userId, authority.brandId); divisionId = scope.divisionId; companyId = scope.companyId;
+      } else { const scope = await requireStartupStaffAccess(db, userId); divisionId = scope.divisionId; companyId = scope.companyId; }
       const actor = await db.user.findUniqueOrThrow({ where: { id: userId }, select: { personId: true } });
+      if (input.id.startsWith("public:")) {
+        const publicId = input.id.slice("public:".length);
+        const row = await db.startupPublicApplicant.findFirst({ where: { id: publicId, organizationId: companyId, status: { in: ["SUBMITTED", "IN_REVIEW", "CLARIFICATION_REQUIRED", "RETURNED_TO_AO"] }, submittedAt: { not: null }, phoneVerifiedAt: { not: null }, consentVersion: "startup-public-sia-v1" }, select: { id: true, version: true, status: true } });
+        if (!row || row.version !== input.version || !canTransitionStartupApplication(row.status, input.decision)) throw new AccessError("Public application decision unavailable or already recorded");
+        if (["CLARIFICATION_REQUIRED", "RETURNED_TO_AO"].includes(input.decision)) {
+          const assignment = await db.startupAdmissionAssignment.findFirst({ where: { applicantId: row.id, status: "ACTIVE" }, select: { id: true } });
+          if (!assignment) throw new AccessError("Assign an active Administrative Officer before returning this application for follow-up");
+        }
+        const changed = await db.startupPublicApplicant.updateMany({ where: { id: row.id, organizationId: companyId, version: input.version, status: row.status, submittedAt: { not: null }, phoneVerifiedAt: { not: null } }, data: { status: input.decision, version: { increment: 1 } } });
+        if (changed.count !== 1) throw new AccessError("Application changed. Refresh before deciding");
+        await db.startupApplicationEvent.create({ data: { applicantId: row.id, actorUserId: userId, action: `PUBLIC_APPLICATION_${input.decision}`, reason: input.reason, metadata: JSON.stringify({ version: input.version + 1 }) } });
+        await operationalEvent(db, { actorUserId: userId, actorPersonId: actor.personId, organizationId: divisionId, action: `startup.public_application.${input.decision.toLowerCase()}`, entityType: "StartupPublicApplicant", entityId: row.id, result: "SUCCESS", metadata: { previousStatus: row.status, nextStatus: input.decision, version: input.version + 1 } });
+        return { id: input.id, status: input.decision };
+      }
       const row = await db.executiveRecord.findFirst({ where: { id: input.id, organizationId: divisionId, kind, sourceKey: { startsWith: "startup:application:" } }, select: { id: true, ownerPersonId: true, version: true, status: true } });
       if (!row || !canReviewStartupApplication(row, actor.personId, input.version, input.decision)) throw new AccessError("Application decision unavailable or already recorded");
+      if (["CLARIFICATION_REQUIRED", "RETURNED_TO_AO"].includes(input.decision)) {
+        const assignments = await db.executiveRecord.findMany({ where: { organizationId: divisionId, kind: "STARTUP_ADMISSION_ASSIGNMENT", status: "ACTIVE" }, select: { payload: true } });
+        const assigned = assignments.some(item => { try { const payload = JSON.parse(item.payload) as { applicationId?: unknown; assignedUserId?: unknown }; return payload.applicationId === row.id && typeof payload.assignedUserId === "string" && payload.assignedUserId.length > 0; } catch { return false; } });
+        if (!assigned) throw new AccessError("Assign an active Administrative Officer before returning this application for follow-up");
+      }
       if ((await db.executiveRecord.updateMany({ where: { id: row.id, organizationId: divisionId, kind, sourceKey: { startsWith: "startup:application:" }, version: input.version, status: row.status }, data: { status: input.decision, version: { increment: 1 } } })).count !== 1) throw new AccessError("Application changed. Refresh before deciding");
       await db.executiveHistory.create({ data: { recordId: row.id, actorUserId: userId, fromStatus: row.status, toStatus: input.decision, reason: input.reason } });
       await operationalEvent(db, { actorUserId: userId, actorPersonId: actor.personId, organizationId: divisionId, action: `startup.application.${input.decision.toLowerCase()}`, entityType: "ExecutiveRecord", entityId: row.id, result: "SUCCESS", metadata: { previousStatus: row.status, nextStatus: input.decision, version: input.version + 1 } });
@@ -167,6 +231,6 @@ export function createStartupApplications(client: PrismaClient = prisma) {
       return { id: prior.id, duplicate: true };
     }
   }
-  return { mine, submit, queue, review, reviewForBoss, associateProgramForBoss, confirmAdmissionForBoss };
+  return { mine, saveDraft, submit, queue, review, reviewForBoss, associateProgramForBoss, confirmAdmissionForBoss };
 }
 export const startupApplications = createStartupApplications();
