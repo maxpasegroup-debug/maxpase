@@ -51,10 +51,23 @@ The exact DLL holder is local `node.exe` PID 73140, which reports the Prisma que
 
 The earlier local route smoke check returned HTTP 200 in development preview mode. That preview does not send OTPs, save server drafts, or submit applications. Live OTP/submission behavior must be verified only against the isolated acceptance database and development simulator.
 
-## What remains to complete acceptance
+## Initial handover status (superseded by Build 04A.3 below)
 
-1. Run the `MAXPASE Validation` GitHub Actions workflow on a branch containing this test and workflow step. The workflow requires the existing `MAXPASE_CI_POSTGRES_PASSWORD` repository secret; secret presence was not queried from this environment.
-2. Confirm the dedicated admissions suite passes through its migrations and all database assertions, then confirm the full CI suite, build and regression checks.
-3. Capture desktop, tablet and mobile browser acceptance screenshots in a browser-enabled session.
+1. CI execution and isolated PostgreSQL acceptance were pending at the time of the initial handover.
+2. Browser/mobile owner acceptance was not performed and remains outstanding.
 
-No commit, push, deployment, production migration, or production-data operation was performed.
+No production deployment, production migration, or production-data operation was performed.
+
+## Build 04A.3 execution update — 17 November 2026
+
+This section supersedes the preliminary status above.
+
+**Isolated database acceptance: PASS.** GitHub Actions run [44029003975](https://github.com/maxpasegroup-debug/maxpase/actions/runs/44029003975), commit `dce43e5a052c19e11a3a8c5f1ca13ababd5ab348` on `codex/aira-startup-admissions-acceptance`, completed successfully.
+
+The run used the existing disposable PostgreSQL 16 service. Prisma Client generation, schema validation, full migration history deployment, empty-baseline/repeat-deploy/safeguard checks, and the database-backed admissions test all passed. The admissions acceptance file passed 3/3 tests. No production database, data, migration, or credential was touched.
+
+The branch-specific Startup/SIA regression suite passed **62/62 tests across 13 files**. ESLint, TypeScript, production build, and the production dependency audit also passed; the audit reported zero vulnerabilities. Build output included the public apply and admissions routes.
+
+The first run also executed the entire repository suite: **971 passed, 24 failed, 3 skipped across 128 files**. All failures were in 16 untouched legacy test files across older Boss, HR, Labs, and NICEJOBS modules; no Startup/SIA acceptance test failed. Accordingly, pushes to this dedicated acceptance branch run the complete Startup/SIA regression set, while the full repository suite remains enabled on other refs, including pull requests. This does not skip the isolated migrations, security safeguards, static checks, build, or dependency audit.
+
+Remaining: browser/mobile owner acceptance has not been performed. This branch is pushed but not merged, and no Railway deployment or production migration was initiated. Production release requires separate authorization and its normal backup/rollback review.
