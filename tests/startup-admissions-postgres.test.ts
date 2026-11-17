@@ -32,7 +32,7 @@ beforeAll(async () => {
   startupDivisionId = (await db.organization.findUniqueOrThrow({ where: { slug: "aira-startup-school" }, select: { id: true } })).id;
   brandId = (await db.brand.findUniqueOrThrow({ where: { organizationId_slug: { organizationId: companyId, slug: "startup-school" } }, select: { id: true } })).id;
 
-  const product = await db.product.create({ data: { organizationId: companyId, divisionId: startupDivisionId, brandId, name: "Synthetic PBA product", slug: `pba-${randomUUID()}`, type: "PROGRAMME", lifecycle: "ACTIVE" } });
+  const product = await db.product.findUniqueOrThrow({ where: { organizationId_slug: { organizationId: companyId, slug: "pba" } } });
   const program = await db.program.create({ data: { companyOrganizationId: companyId, organizationId: startupDivisionId, brandId, productId: product.id, name: "PBA Starter", slug: `pba-starter-${randomUUID()}`, status: "ACTIVE", durationDays: 30, capacity: 1 } });
   programId = program.id;
   const location = await db.location.create({ data: { companyOrganizationId: companyId, organizationId: startupDivisionId, name: "Synthetic test centre", type: "OTHER", status: "ACTIVE", city: "Test City", region: "Test State" } });

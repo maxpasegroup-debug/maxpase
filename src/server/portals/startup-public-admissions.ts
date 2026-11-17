@@ -3,7 +3,7 @@ import type { PrismaClient, Prisma } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "@/server/db";
 import { createSecurityLimiter, RateLimitError, securityKey } from "@/server/security/rate-limit";
-import { startupAdmissionIntakes } from "@/server/group/startup-admission-intakes";
+import { createStartupAdmissionIntakes } from "@/server/group/startup-admission-intakes";
 
 const answerSchema = z.object({
   fullName: z.string().trim().max(120).optional(),
@@ -88,6 +88,7 @@ export function createStartupPublicAdmissions(client: PrismaClient = prisma, opt
   const now = options.now ?? (() => new Date());
   const nodeEnv = options.nodeEnv ?? process.env.NODE_ENV ?? "development";
   const consume = createSecurityLimiter(client, now);
+  const intakes = createStartupAdmissionIntakes(client);
 
   function keys() { return { possession: secret(env, "AUTH_SECRET"), otp: secret(env, "STARTUP_PUBLIC_OTP_SECRET") }; }
   function provider() {
@@ -253,7 +254,7 @@ export function createStartupPublicAdmissions(client: PrismaClient = prisma, opt
     if (row.status !== "DRAFT" || row.expiresAt <= now()) throw new StartupPublicAccessError("This application draft has expired.");
     if (!row.phoneVerifiedAt || row.normalizedMobile !== normalizeMobile(input.mobile)) throw new StartupPublicAccessError("Verify the mobile number on this application before submitting.");
     if (row.mobile !== input.mobile) throw new StartupPublicAccessError("The verified mobile number changed. Verify it again.");
-    const availability = await startupAdmissionIntakes.publicAvailability(now());
+    const availability = await intakes.publicAvailability(now());
     if (!availability.programs.some(program => program.code === input.programPreference)) throw new StartupPublicAccessError("This PBA intake is not currently open. Please check back when applications reopen.");
     const referral = await resolveReferral(client, referralToken, row.organizationId);
     const snapshot = JSON.stringify({ version: 1, ...(input.referralInfo ? { applicantProvided: input.referralInfo } : {}), ...(referral ? { verifiedReferral: referral } : {}) });

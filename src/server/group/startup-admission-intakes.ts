@@ -4,7 +4,7 @@ import { prisma } from "@/server/db";
 import { AccessError } from "@/server/authorization/engine";
 import { operationalEvent } from "@/server/domain/operational-events";
 import { createBossService } from "./boss-service";
-import { startupPrograms, startupProgramWhere } from "./startup-programs";
+import { createStartupPrograms, startupProgramWhere } from "./startup-programs";
 import { intakeProgramCode, isIntakeOpen } from "./startup-intake-policy";
 export { intakeProgramCode, isIntakeOpen } from "./startup-intake-policy";
 
@@ -21,8 +21,9 @@ const intakeInput = z.object({
 }).strict();
 
 export function createStartupAdmissionIntakes(client: PrismaClient = prisma) {
+  const programsService = createStartupPrograms(client);
   async function scope(userId: string, brandId: string, manage = false) {
-    const data = await startupPrograms.list(userId, brandId);
+    const data = await programsService.list(userId, brandId);
     const { ctx } = await createBossService(client).authority(userId);
     const batchManage = (await ctx.decide("batch.manage", { organizationId: data.divisionId })).allowed;
     const canManage = data.canManage && batchManage;
