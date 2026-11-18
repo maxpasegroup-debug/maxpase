@@ -1,5 +1,6 @@
 "use server";
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { ZodError, z } from "zod";
 import { requireSession } from "@/server/auth/guards";
 import { AccessError } from "@/server/authorization/engine";
@@ -55,8 +56,9 @@ export async function hrAction(_state: HrState, form: FormData): Promise<HrState
   const session = await requireSession();
   const value = (key: string) => String(form.get(key) ?? "").trim();
   const optional = (key: string) => value(key) || undefined;
+  let removedRedirect: string | undefined;
+  let employmentId: string | undefined;
   try {
-    let employmentId: string | undefined;
     if (value("intent") === "appoint") return await appoint(session.userId, form);
     switch (value("intent")) {
       case "create": employmentId = await hrEmploymentService.create(session.userId, { companyId: value("companyId"), ...(optional("personId") ? { personId: value("personId") } : { displayName: value("displayName"), email: value("email"), phone: optional("phone"), linkExisting: value("linkExisting") === "on" }), contactEmail: optional("contactEmail"), contactPhone: optional("contactPhone"), emergencyContactName: optional("emergencyContactName"), emergencyContactRelationship: optional("emergencyContactRelationship"), emergencyContactPhone: optional("emergencyContactPhone"), emergencyContactEmail: optional("emergencyContactEmail"), designation: optional("designation"), employmentType: optional("employmentType"), joiningDate: optional("joiningDate"), initialBrandIds: form.getAll("initialBrandIds").map(String), initialDepartmentId: optional("initialDepartmentId"), initialManagerPersonId: optional("initialManagerPersonId"), assignmentDecisionReference: optional("assignmentDecisionReference") }); break;
@@ -65,19 +67,22 @@ export async function hrAction(_state: HrState, form: FormData): Promise<HrState
       case "remove-employee": {
         const result = await hrEmploymentService.removeEmployee(session.userId, { employmentId: value("employmentId"), mode: value("mode"), confirmation: value("confirmation") });
         revalidatePath("/app/boss/departments/hr");
-        revalidatePath(`/app/boss/departments/hr/employees/${encodeURIComponent(value("employmentId"))}`);
-        return { removed: true, message: result.mode === "permanent" ? "The HR employment record was permanently removed. Shared identity and audit records were retained." : "Employee removed from active employment. The profile and history are retained." };
+        const notice = result.mode === "permanent" ? "employee-deleted" : "employee-archived";
+        removedRedirect = `/app/boss/departments/hr?view=people&companyId=${encodeURIComponent(result.companyId)}&notice=${notice}`;
+        break;
       }
       case "assignment": await hrEmploymentService.changeAssignment(session.userId, { assignmentId: value("assignmentId"), action: value("transition"), decisionReference: value("decisionReference"), nextBrandId: optional("nextBrandId"), designation: optional("designation"), departmentId: optional("departmentId"), managerPersonId: optional("managerPersonId") }); break;
       case "company-proposal": await hrCompanyConfig.saveProposal(session.userId, { companyId: value("companyId"), proposedPortalHost: optional("proposedPortalHost"), proposedSenderEmail: optional("proposedSenderEmail"), decisionReference: value("decisionReference") }); break;
       default: throw new AccessError("Unknown HR action");
     }
     revalidatePath("/app/boss/departments/hr");
-    return { message: employmentId ? "Employee record and selected brand assignments saved as drafts. Login access is pending." : "HR record updated. Login access is unchanged.", employmentId };
   } catch (error) {
     if (error instanceof AccessError) return { error: error.message };
     if (error instanceof ZodError) return { error: "Check the required fields and dates." };
     safeDiagnostic("operation_failed");
     return { error: "The HR change could not be saved." };
   }
+  const redirectTarget = removedRedirect;
+  if (typeof redirectTarget === "string") redirect(redirectTarget);
+  return { message: employmentId ? "Employee record and selected brand assignments saved as drafts. Login access is pending." : "HR record updated. Login access is unchanged.", employmentId };
 }

@@ -279,7 +279,7 @@ export function createHrEmploymentService(client: PrismaClient = prisma) {
         await db.employment.update({ where: { id: row.id }, data: { status: "ENDED", endDate: row.endDate ?? at } });
       }
       await operationalEvent(db, { actorUserId: actorId, actorPersonId: ctx.user!.personId, organizationId: row.companyId, action: input.mode === "permanent" ? "hr.employee_removed_permanently" : "hr.employee_archived", entityType: "Employment", entityId: row.id, result: "SUCCESS", metadata: { employmentStatus: row.status, assignmentIds: input.mode === "permanent" ? "removed" : "retained", membershipIds: memberships.map(member => member.id), personIdentityRetained: true } });
-      return { mode: input.mode, displayName: row.person.displayName };
+      return { mode: input.mode, displayName: row.person.displayName, companyId: row.companyId };
     });
   }
   return { list, get, create, addAssignment, changeAssignment, changeEmployment, removeEmployee, updateProfile, canUpdateProfile };

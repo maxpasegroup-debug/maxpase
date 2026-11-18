@@ -1,19 +1,12 @@
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useActionState, useState } from "react";
 import { hrAction, type HrState } from "../../hr-actions";
 
 export function EmployeeRemoval({ employmentId, employeeName, canArchive, canDeletePermanently }: { employmentId: string; employeeName: string; canArchive: boolean; canDeletePermanently: boolean }) {
   const [state, action, pending] = useActionState(hrAction, {} as HrState);
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<"archive" | "permanent">(canArchive ? "archive" : "permanent");
-  const router = useRouter();
-
-  useEffect(() => {
-    if (state.removed) router.replace("/app/boss/departments/hr?view=people");
-  }, [state.removed, router]);
-
   if (!canArchive && !canDeletePermanently) return null;
 
   return <>
