@@ -235,7 +235,54 @@ export function createHrEmploymentService(client: PrismaClient = prisma) {
       await operationalEvent(db, { actorUserId: actorId, actorPersonId: ctx.user!.personId, organizationId: row.companyId, action: `hr.employment_${input.action}`, entityType: "Employment", entityId: row.id, result: "SUCCESS", metadata: { decisionReference: input.decisionReference, previousDesignation: row.designation, designation: input.designation ?? row.designation } });
     });
   }
-  return { list, get, create, addAssignment, changeAssignment, changeEmployment, updateProfile, canUpdateProfile };
+  async function removeEmployee(actorId: string, raw: unknown) {
+    const input = z.object({ employmentId: id, mode: z.enum(["archive", "permanent"]), confirmation: z.string().optional() }).strict().parse(raw);
+    return client.$transaction(async db => {
+      const row = await db.employment.findUnique({ where: { id: input.employmentId }, include: { person: { select: { displayName: true } } } });
+      if (!row) throw new AccessError("Employee record is unavailable");
+      const ctx = await authorized(actorId, db, row.companyId, "person.update");
+      if (input.mode === "permanent") {
+        await boss.authority(actorId, db);
+        if (input.confirmation !== "DELETE") throw new AccessError("Type DELETE to confirm permanent removal");
+      }
+
+      const at = new Date();
+      const scopeIds = ctx.nodes.filter(node => ancestry(ctx.nodes, node.id).some(parent => parent.id === row.companyId)).map(node => node.id);
+      const memberships = await db.membership.findMany({ where: { personId: row.personId, organizationId: { in: scopeIds }, status: { in: ["ACTIVE", "INVITED", "SUSPENDED"] } }, select: { id: true, organizationId: true } });
+      for (const membership of memberships) await ctx.requireAccess("membership.manage", { organizationId: membership.organizationId });
+
+      if (input.mode === "permanent") {
+        const [documents, compensation, payroll, letters, convertedCandidates] = await Promise.all([
+          db.hrDocument.findFirst({ where: { employmentId: row.id }, select: { id: true } }),
+          db.hrCompensation.findFirst({ where: { employmentId: row.id }, select: { id: true } }),
+          db.hrPayrollLine.findFirst({ where: { employmentId: row.id }, select: { id: true } }),
+          db.hrLetter.findFirst({ where: { employmentId: row.id }, select: { id: true } }),
+          db.hrCandidate.findFirst({ where: { convertedEmploymentId: row.id }, select: { id: true } }),
+        ]);
+        if (documents || compensation || payroll || letters || convertedCandidates) {
+          throw new AccessError("This employee has retained HR or financial records. Choose ‘Remove and keep in history’ so those records remain linked.");
+        }
+      }
+
+      await db.hrAssignment.updateMany({ where: { employmentId: row.id, status: { in: ["ACTIVE", "DRAFT"] } }, data: { status: "ENDED", endDate: at } });
+      if (memberships.length) {
+        await db.membership.updateMany({ where: { id: { in: memberships.map(member => member.id) } }, data: { status: "ENDED", endDate: at } });
+      }
+      const userIds = (await db.user.findMany({ where: { personId: row.personId }, select: { id: true } })).map(user => user.id);
+      if (userIds.length) await db.emailAuthChallenge.updateMany({ where: { userId: { in: userIds }, purpose: "STAFF_INVITE", status: { in: ["PENDING", "SENT"] } }, data: { status: "CANCELLED" } });
+
+      if (input.mode === "permanent") {
+        // Preserve the shared Person/User identity and operational audit trail; remove only this HR employment and its assignments.
+        await db.hrAssignment.deleteMany({ where: { employmentId: row.id } });
+        await db.employment.delete({ where: { id: row.id } });
+      } else {
+        await db.employment.update({ where: { id: row.id }, data: { status: "ENDED", endDate: row.endDate ?? at } });
+      }
+      await operationalEvent(db, { actorUserId: actorId, actorPersonId: ctx.user!.personId, organizationId: row.companyId, action: input.mode === "permanent" ? "hr.employee_removed_permanently" : "hr.employee_archived", entityType: "Employment", entityId: row.id, result: "SUCCESS", metadata: { employmentStatus: row.status, assignmentIds: input.mode === "permanent" ? "removed" : "retained", membershipIds: memberships.map(member => member.id), personIdentityRetained: true } });
+      return { mode: input.mode, displayName: row.person.displayName };
+    });
+  }
+  return { list, get, create, addAssignment, changeAssignment, changeEmployment, removeEmployee, updateProfile, canUpdateProfile };
 }
 
 export const hrEmploymentService = createHrEmploymentService();

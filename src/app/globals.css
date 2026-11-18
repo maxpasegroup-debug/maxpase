@@ -3087,3 +3087,24 @@ a.nj-director-metric:hover { transform: translateY(-1px); box-shadow: 0 12px 24p
 .boss-hr-payroll-payment-form label { display: grid; gap: 4px; }
 .boss-hr-payroll-reconcile-form { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; }
 @media (max-width: 760px) { .boss-hr-payroll-rule-row { grid-template-columns: 1fr 1fr; } .boss-hr-payroll-reconcile-form { display: grid; } }
+.boss-hr-profile-header-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
+.boss-hr-remove-trigger { min-height: 40px; }
+.boss-hr-remove-backdrop { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; padding: 18px; background: rgb(18 14 30 / 58%); backdrop-filter: blur(5px); }
+.boss-hr-remove-dialog { position: relative; width: min(100%, 620px); max-height: min(90vh, 760px); overflow: auto; padding: 26px; border: 1px solid var(--line); border-radius: 16px; background: var(--panel, #fff); box-shadow: 0 24px 80px rgb(14 10 30 / 28%); }
+.boss-hr-remove-dialog > .eyebrow { color: var(--accent, #1d5fd0); font-size: 11px; font-weight: 800; letter-spacing: .12em; }
+.boss-hr-remove-dialog h2 { margin: 8px 40px 8px 0; }
+.boss-hr-remove-dialog > p:not(.eyebrow) { color: var(--muted); }
+.boss-hr-remove-close { position: absolute; top: 16px; right: 16px; width: 36px; height: 36px; border: 1px solid var(--line); border-radius: 50%; background: transparent; font-size: 24px; cursor: pointer; }
+.boss-hr-remove-options { display: grid; gap: 10px; margin: 18px 0; padding: 0; border: 0; }
+.boss-hr-remove-options legend { margin-bottom: 8px; font-weight: 700; }
+.boss-hr-remove-options label { display: flex; align-items: flex-start; gap: 12px; padding: 14px; border: 1px solid var(--line); border-radius: 11px; cursor: pointer; }
+.boss-hr-remove-options label.selected { border-color: #6b42ce; background: #f7f3ff; }
+.boss-hr-remove-options label.danger.selected { border-color: #a33; background: #fff5f5; }
+.boss-hr-remove-options input { margin-top: 3px; }
+.boss-hr-remove-options span { display: grid; gap: 5px; }
+.boss-hr-remove-options small { color: var(--muted); line-height: 1.5; }
+.boss-hr-remove-confirm { display: grid; gap: 8px; margin: 14px 0; font-size: 13px; }
+.boss-hr-remove-confirm input:not([type="checkbox"]) { max-width: 240px; min-height: 40px; }
+.boss-hr-remove-error { color: #a11; font-weight: 600; }
+.boss-hr-remove-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
+.danger-button { border-color: #8b1828 !important; background: #8b1828 !important; color: white !important; }
