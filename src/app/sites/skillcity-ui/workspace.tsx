@@ -21,7 +21,7 @@ import { AdministrativeWorkspace } from "./administrative-workspace";
 import { SkillCityLogo } from "@/components/skillcity-logo";
 
 type Dashboard = Awaited<ReturnType<typeof skillCityEmployeeDashboard.dashboard>>;
-const labels: Record<EmployeeView,string> = { advisor: "Advisory", director: "Director", manager: "Manager desk", "administrative-officer": "Administration", developer: "Labs delivery", "business-development": "Labs business development", media: "AIRA Media" };
+const labels: Record<EmployeeView,string> = { advisor: "Advisory", director: "Director", manager: "Manager desk", "administrative-officer": "Administration", "startup-admissions": "Startup Skool admissions", developer: "Labs delivery", "business-development": "Labs business development", media: "AIRA Media" };
 const leadNext: Record<string,string[]> = { NEW: ["NEW", "CONTACTED", "LOST"], CONTACTED: ["CONTACTED", "QUALIFIED", "LOST"], QUALIFIED: ["QUALIFIED", "AUDIT", "LOST"], AUDIT: ["AUDIT", "QUOTATION_READY", "LOST"], QUOTATION_READY: ["QUOTATION_READY", "LOST"] };
 const date = (value: Date | string | null | undefined) => value ? new Date(value).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" }) + " IST" : "Not scheduled";
 
@@ -36,6 +36,7 @@ export function SkillCityWorkspace({ data, email, userId, base, home }: { data: 
       {data.view==="advisor"&&data.data&&"leads" in data.data&&data.data.labsId&&<AdvisorAssistance userId={userId} organizationId={data.data.labsId}/>}
       {data.view==="manager"&&<><header className="sc-heading"><p>AIRA Skill City</p><h1>Manager desk</h1><span>Direct reports and accessible work</span></header><ManagerDesk userId={userId}/></>}
       {data.view==="administrative-officer"&&data.data&&"customers" in data.data&&<AdministrativeWorkspace data={data.data} admissionsHref={base.startsWith("/sites/")?"/sites/skillcity/admissions":"/admissions"}/>}
+      {data.view==="startup-admissions"&&<><header className="sc-heading"><p>AIRA Skill City Private Limited · AIRA Startup Skool</p><h1>Admissions dashboard</h1><span>Review new SIA applications, follow up with applicants, and send verified cases to leadership.</span></header><section className="sc-section"><h2>Your Startup Skool work</h2><p>This dashboard contains Startup Skool admissions only. Company-wide finance, Labs billing, and other brand records stay outside this role.</p><Link className="sc-primary-link" href={base.startsWith("/sites/")?"/sites/skillcity/admissions":"/admissions"}>Open applications and follow-ups</Link></section></>}
       {data.view==="director"&&data.data&&"divisions" in data.data&&<>
         <header className="sc-heading"><p>AIRA Skill City</p><h1>Director desk</h1><span>Authorized company records</span></header>
         <section className="sc-section"><h2>Decisions awaiting me</h2>

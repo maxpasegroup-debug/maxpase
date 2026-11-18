@@ -17,6 +17,7 @@ const templates = [
   { scope: "aira-skill-city", key: "aira-administrative-officer", name: "Administrative Officer", permissions: administrativeOfficerRolePermissions },
   { scope: "aira-labs", key: "labs-division-director", name: "Division Director", permissions: [...divisionDirector, "labs.sales.self", "labs.sales.perform", "labs.sales.read", "labs.sales.manage", "labs.delivery.assignee", "labs.customer.manage"] },
   { scope: "aira-startup-school", key: "startup-division-director", name: "Division Director", permissions: [...divisionDirector, "program.manage", "aira.crm.self", "aira.crm.perform", "aira.crm.manage"] },
+  { scope: "aira-startup-school", key: "startup-admissions-officer", name: "Startup Skool Administrative Officer", permissions: ["organization.read", "startup.application.read", "startup.application.triage"] },
   { scope: "aira-skill-studio", key: "studio-division-director", name: "Division Director", permissions: [...divisionDirector, "aira.crm.self", "aira.crm.perform", "aira.crm.manage"] },
   { scope: "aira-career-hub", key: "career-division-director", name: "Division Director", permissions: divisionDirector },
   { scope: "aira-career-hub", key: "nicejobs-director", name: "NICEJOBS Director", permissions: niceJobsDirector },
@@ -60,7 +61,7 @@ export function createSkillCityRoleTemplates(client: PrismaClient = prisma) {
           await ctx.requireDelegation(permission, { organizationId: target.id }, saved.organizationId === company.id);
           await db.rolePermission.upsert({ where: { roleId_permissionId: { roleId: saved.id, permissionId: permission.id } }, create: { roleId: saved.id, permissionId: permission.id }, update: {} });
         }
-        if (template.key === "aira-administrative-officer" || template.key === "nicejobs-director" || template.key.startsWith("labs-") && template.key.endsWith("-developer")) {
+        if (["aira-administrative-officer", "startup-admissions-officer", "nicejobs-director"].includes(template.key) || template.key.startsWith("labs-") && template.key.endsWith("-developer")) {
           const allowed = new Set<string>(template.permissions);
           const assigned = await db.rolePermission.findMany({ where: { roleId: saved.id }, select: { permissionId: true, permission: { select: { key: true } } } });
           const revoked = assigned.filter(grant => !allowed.has(grant.permission.key)).map(grant => grant.permissionId);

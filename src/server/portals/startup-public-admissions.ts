@@ -10,6 +10,7 @@ const answerSchema = z.object({
   mobile: z.union([z.string().trim().regex(/^\+[1-9]\d{7,14}$/), z.literal("")]).optional(),
   email: z.union([z.email().max(254), z.literal("")]).optional(),
   state: z.string().trim().max(100).optional(),
+  city: z.string().trim().max(100).optional(),
   district: z.string().trim().max(100).optional(),
   preferredCentre: z.string().trim().max(160).optional(),
   programPreference: z.union([z.enum(["PBA_30_DAYS", "PBA_180_DAYS"]), z.literal("")]).optional(),
@@ -22,9 +23,9 @@ const sendOtpSchema = z.object({ mobile: z.string().trim().regex(/^\+[1-9]\d{7,1
 const verifySchema = z.object({ challengeId: z.uuid(), code: z.string().regex(/^\d{6}$/) }).strict();
 const submitSchema = answerSchema.extend({
   fullName: z.string().trim().min(2).max(120), mobile: z.string().trim().regex(/^\+[1-9]\d{7,14}$/),
-  email: z.union([z.email().max(254), z.literal("")]), state: z.string().trim().min(2).max(100), district: z.string().trim().min(2).max(100),
-  programPreference: z.enum(["PBA_30_DAYS", "PBA_180_DAYS"]), entrepreneurialStage: z.string().trim().min(3).max(500),
-  businessInterest: z.string().trim().min(8).max(1500), goals: z.string().trim().min(8).max(1500), consent: z.literal(true)
+  email: z.union([z.email().max(254), z.literal("")]), state: z.string().trim().min(2).max(100), city: z.string().trim().min(2).max(100).optional(), district: z.string().trim().min(2).max(100),
+  programPreference: z.enum(["PBA_30_DAYS", "PBA_180_DAYS"]).optional(), entrepreneurialStage: z.string().trim().min(3).max(500).optional(),
+  businessInterest: z.string().trim().min(8).max(1500).optional(), goals: z.string().trim().min(8).max(1500).optional(), consent: z.literal(true)
 }).strict();
 export const startupPublicDraftInput = answerSchema;
 export const startupPublicSubmissionInput = submitSchema;
@@ -254,8 +255,10 @@ export function createStartupPublicAdmissions(client: PrismaClient = prisma, opt
     if (row.status !== "DRAFT" || row.expiresAt <= now()) throw new StartupPublicAccessError("This application draft has expired.");
     if (!row.phoneVerifiedAt || row.normalizedMobile !== normalizeMobile(input.mobile)) throw new StartupPublicAccessError("Verify the mobile number on this application before submitting.");
     if (row.mobile !== input.mobile) throw new StartupPublicAccessError("The verified mobile number changed. Verify it again.");
-    const availability = await intakes.publicAvailability(now());
-    if (!availability.programs.some(program => program.code === input.programPreference)) throw new StartupPublicAccessError("This PBA intake is not currently open. Please check back when applications reopen.");
+    if (input.programPreference) {
+      const availability = await intakes.publicAvailability(now());
+      if (!availability.programs.some(program => program.code === input.programPreference)) throw new StartupPublicAccessError("This PBA intake is not currently open. Please check back when applications reopen.");
+    }
     const referral = await resolveReferral(client, referralToken, row.organizationId);
     const snapshot = JSON.stringify({ version: 1, ...(input.referralInfo ? { applicantProvided: input.referralInfo } : {}), ...(referral ? { verifiedReferral: referral } : {}) });
     const updated = await client.$transaction(async db => {
@@ -289,7 +292,7 @@ function toApplicantData(input: StartupPublicAnswers) {
     ...(input.fullName !== undefined ? { fullName: input.fullName || null } : {}),
     ...(input.mobile !== undefined ? { mobile: input.mobile ? normalizeMobile(input.mobile) : null } : {}),
     ...(input.email !== undefined ? { email: input.email || null } : {}),
-    ...(input.state !== undefined ? { state: input.state } : {}), ...(input.district !== undefined ? { district: input.district } : {}),
+    ...(input.state !== undefined ? { state: input.state } : {}), ...(input.city !== undefined ? { city: input.city } : {}), ...(input.district !== undefined ? { district: input.district } : {}),
     ...(input.preferredCentre !== undefined ? { preferredCentre: input.preferredCentre || null } : {}),
     ...(input.programPreference !== undefined ? { programPreference: input.programPreference || null } : {}),
     ...(input.entrepreneurialStage !== undefined ? { entrepreneurialStage: input.entrepreneurialStage || null } : {}),
@@ -298,10 +301,10 @@ function toApplicantData(input: StartupPublicAnswers) {
     ...(input.referralInfo !== undefined ? { referralSnapshot: JSON.stringify({ version: 1, applicantProvided: input.referralInfo }) } : {})
   };
 }
-function answersFrom(row: { fullName: string | null; mobile: string | null; email: string | null; state: string | null; district: string | null; preferredCentre: string | null; programPreference: string | null; entrepreneurialStage: string | null; businessInterest: string | null; goals: string | null; referralSnapshot: string | null }): StartupPublicAnswers {
+function answersFrom(row: { fullName: string | null; mobile: string | null; email: string | null; state: string | null; city: string | null; district: string | null; preferredCentre: string | null; programPreference: string | null; entrepreneurialStage: string | null; businessInterest: string | null; goals: string | null; referralSnapshot: string | null }): StartupPublicAnswers {
   let referralInfo = "";
   try { referralInfo = JSON.parse(row.referralSnapshot ?? "{}").applicantProvided ?? ""; } catch { /* legacy or corrupt snapshot is omitted from applicant form */ }
-  return answerSchema.parse({ fullName: row.fullName ?? "", mobile: row.mobile ?? "", email: row.email ?? "", state: row.state ?? "", district: row.district ?? "", preferredCentre: row.preferredCentre ?? "", programPreference: row.programPreference ?? undefined, entrepreneurialStage: row.entrepreneurialStage ?? "", businessInterest: row.businessInterest ?? "", goals: row.goals ?? "", referralInfo });
+  return answerSchema.parse({ fullName: row.fullName ?? "", mobile: row.mobile ?? "", email: row.email ?? "", state: row.state ?? "", city: row.city ?? "", district: row.district ?? "", preferredCentre: row.preferredCentre ?? "", programPreference: row.programPreference ?? undefined, entrepreneurialStage: row.entrepreneurialStage ?? "", businessInterest: row.businessInterest ?? "", goals: row.goals ?? "", referralInfo });
 }
 function receipt(row: { reference: string; fullName: string | null; programPreference: string | null; status: string; submittedAt: Date | null }, duplicate: boolean) {
   if (!row.submittedAt) throw new StartupPublicUnavailable();

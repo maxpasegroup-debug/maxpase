@@ -10,6 +10,7 @@ import Lenis from "lenis";
 import "lenis/dist/lenis.css";
 import "./startup.css";
 import { StartupSiaAssistant } from "./sia-assistant";
+import { StartupApplyButton } from "./startup-apply-dialog";
 
 const sans = localFont({ src: [
   { path: "../fonts/instrument-sans-latin.woff2", weight: "400 700", style: "normal" },
@@ -220,7 +221,7 @@ export function StartupLanding({
           ))}
         </nav>
         <div className="ax-nav-end">
-          <Link className="ax-pill" href={signup}>Apply to Startup Skool</Link>
+          <StartupApplyButton label="Join Now" />
           <button className="ax-menu" type="button" aria-label="Menu" aria-expanded={menu} onClick={() => setMenu(value => !value)}>
             <span /><span /><span />
           </button>
@@ -231,7 +232,7 @@ export function StartupLanding({
           {nav.map(([label, id]) => (
             <a key={id} href={`#${id}`} onClick={() => setMenu(false)}>{label}</a>
           ))}
-          <Link href={signup} onClick={() => setMenu(false)}>Apply to Startup Skool</Link>
+          <StartupApplyButton label="Join Now" className="ax-pill" />
         </div>
       )}
 
@@ -239,7 +240,7 @@ export function StartupLanding({
         <div className="ax-hero-copy">
           <p>{name}</p>
           <h1>Explore beyond the ordinary</h1>
-          <Link className="ax-pill ax-start" href={signup}>Get Started</Link>
+            <StartupApplyButton label="Join Now" className="ax-pill ax-start" />
         </div>
         <div className="ax-guide">
           <div className="ax-guide-bob">
@@ -338,7 +339,7 @@ export function StartupLanding({
           <h2>Your idea deserves to enter the world.</h2>
           <p>Learn how to validate your idea, present your product, connect with customers and take your first steps into the market. The school does not promise a company, funding, or revenue.</p>
           <p className="ax-now">Your journey starts now.</p>
-          <Link className="ax-pill" href={signup}>Apply to Startup Skool</Link>
+            <StartupApplyButton label="Join Now" />
         </div>
         <div className="ax-launch-art" aria-hidden="true">
           <article>
@@ -398,7 +399,7 @@ export function StartupLanding({
         <h2>Your next big idea starts here.</h2>
         <p>Explore AIRA Startup Skool and take your first step towards building something meaningful.</p>
         <div className="ax-actions">
-          <Link className="ax-pill" href={signup}>Apply to Startup Skool</Link>
+            <StartupApplyButton label="Join Now" />
           <a className="ax-pill ax-pill-ghost" href="#programs">Explore programs</a>
         </div>
       </section>

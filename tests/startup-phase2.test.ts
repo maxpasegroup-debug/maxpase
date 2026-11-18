@@ -23,6 +23,7 @@ runInNewContext(compiled, { module: moduleTarget, exports: moduleTarget.exports,
   "next/font/local": { __esModule: true, default: () => ({ className: "test-font", variable: "test-display" }) },
   "lenis/dist/lenis.css": {},
   "./startup.css": {},
+  "./startup-apply-dialog": { StartupApplyButton: ({ label }: { label?: string }) => createElement("button", null, label ?? "Join Now") },
   "lucide-react": { ArrowDown: Icon, ArrowRight: Icon, ArrowUpRight: Icon },
   "./sia-assistant": { StartupSiaAssistant: () => createElement("span", null, "SIA guidance") }
 } as Record<string, unknown>)[name] ?? localRequire(name) });
@@ -76,9 +77,9 @@ describe("Startup Skool application entry", () => {
     const site = siteById("startup")!;
     const paths = portalPaths(site, true);
     const html = renderToStaticMarkup(createElement(StartupLanding, { home: paths.home, login: paths.login, signup: "/apply", name: site.name, description: site.description, image: site.image, ecosystem: "https://airaskillcity.com", focus: site.focus, faqs: [] }));
-    expect(html).toContain("/apply");
+    expect(html).not.toContain("/apply");
     expect(html).toContain("SIA guidance");
-    expect(html).toContain("Apply to Startup Skool");
+    expect(html.match(/Join Now/g)?.length).toBeGreaterThan(0);
     expect(html).toContain("AIRA Skill City Private Limited");
     expect(html).not.toContain("₹35,000");
     expect(html).not.toContain("Pay now");

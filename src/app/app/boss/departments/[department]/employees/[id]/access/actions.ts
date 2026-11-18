@@ -62,7 +62,8 @@ export async function accessAction(_previous: AccessState, form: FormData): Prom
         const options = await staffOnboardingService.options(session.userId, organizationId);
         const role = options.roles.find(item => item.id === value("roleId"));
         const assignment = target.brandId ? employee.assignments.find(item => item.brand.id === target.brandId && item.status === "ACTIVE") : null;
-        const expectedRole = target.name === "NICEJOBS Director workspace" ? "NICEJOBS Director" : !target.brandId ? "Administrative Officer" : employee.designation === "Director" ? "Division Director" : employee.designation === "Academic Advisor" ? "Junior Academic Advisor" : employee.designation;
+        const targetOrganization = await prisma.organization.findUnique({ where: { id: organizationId }, select: { slug: true } });
+        const expectedRole = target.name === "NICEJOBS Director workspace" ? "NICEJOBS Director" : targetOrganization?.slug === "aira-startup-school" && employee.designation === "Administrative Officer" ? "Startup Skool Administrative Officer" : !target.brandId ? "Administrative Officer" : employee.designation === "Director" ? "Division Director" : employee.designation === "Academic Advisor" ? "Junior Academic Advisor" : employee.designation;
         if (!options.canPrepare || !role || role.name !== expectedRole || target.brandId && !assignment) throw new AccessError("Prepared role unavailable in this employee scope");
         if (role.name === "NICEJOBS Director") {
           const appointment = await hrAccess.prepareNiceJobsDirector(session.userId, { employmentId, organizationId, roleId: role.id, country: value("country"), nationalNumber: value("nationalNumber"), decisionReference: value("scopeDecisionReference") });
