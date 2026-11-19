@@ -29,7 +29,11 @@ function HireEmployeeForm({ companies, brands, reportingChoices, initialCompanyI
   const availableBrands = brands.filter(item => item.organizationId === companyId && item.slug !== "aira-skill-city");
   const selectedBrand = availableBrands.find(item => item.id === brandId);
   const positionOptions = positions(company?.slug ?? "", selectedBrand?.slug);
-  const reporters = reportingChoices.filter(choice => choice.brandId === brandId || !brandId && choice.brandId === null);
+  const startupAoAppointment = selectedBrand?.slug === "startup-school" && position === "Administrative Officer";
+  const reporters = reportingChoices.filter(choice =>
+    (choice.brandId === brandId || !brandId && choice.brandId === null) &&
+    (!startupAoAppointment || /\bdirector\b/i.test(choice.title))
+  );
 
   useEffect(() => {
     if (!pending) { setSlowRequest(false); return; }
@@ -79,14 +83,14 @@ function HireEmployeeForm({ companies, brands, reportingChoices, initialCompanyI
         <label>Company<select value={companyId} onChange={event => { setCompanyId(event.target.value); setBrandId(""); setPosition(""); }} required><option value="">Choose a company</option>{companies.map(item => <option key={item.organizationId} value={item.organizationId}>{item.legalName ?? item.displayName}</option>)}</select></label>
         <label>Brand or work area<select value={brandId} onChange={event => { setBrandId(event.target.value); setPosition(""); }}><option value="">Company-wide</option>{availableBrands.map(item => <option key={item.id} value={item.id}>{item.parentName ? `${item.parentName} / ` : ""}{item.slug === "startup-school" ? "Startup Skool" : item.name}</option>)}</select></label>
         <label>Position<select value={position} onChange={event => setPosition(event.target.value)} required><option value="">Choose a position</option>{positionOptions.map(option => <option key={option} value={option}>{option}</option>)}</select></label>
-        <label>Reports to<select name="reportToUserId" required defaultValue=""><option value="">Choose Boss, Director or Manager</option>{reporters.map(person => <option key={person.userId} value={person.userId}>{person.name} · {person.title}</option>)}</select></label>
+        <label>Reports to<select name="reportToUserId" required defaultValue=""><option value="">{startupAoAppointment ? "Choose Startup Skool Director" : "Choose Boss, Director or Manager"}</option>{reporters.map(person => <option key={person.userId} value={person.userId}>{person.name} · {person.title}</option>)}</select></label>
         <label>Full name<input name="displayName" autoComplete="name" maxLength={200} required/></label>
         <label>Work email<input name="email" type="email" autoComplete="email" maxLength={254} required/></label>
         <label>Mobile number<input name="phone" type="tel" autoComplete="tel" inputMode="tel" placeholder="+91 98765 43210" maxLength={24} required/></label>
         <label>Joining date<input name="joiningDate" type="date" required/></label>
       </div>
       {!positionOptions.length && <p className="boss-hr-hire-note">No approved dashboard position is configured for this work area.</p>}
-      {positionOptions.length > 0 && !reporters.length && <p className="boss-hr-hire-note">No active, verified reporting person is available for this work area. Ask the Boss to activate a Director or Manager first.</p>}
+      {positionOptions.length > 0 && !reporters.length && <p className="boss-hr-hire-note">{startupAoAppointment ? "No active, verified Startup Skool Director is available. Add and activate the Director first, then appoint the AO." : "No active, verified reporting person is available for this work area. Ask the Boss to activate a Director or Manager first."}</p>}
       <p className="boss-hr-hire-note">Submitting creates the employee record, assigns the role-based workspace and emails secure setup instructions. The employee verifies their email and sets their own password or PIN.</p>
     </div>
     {(formError || state.error) && <p role="alert" className="boss-hr-hire-error">{formError || state.error}</p>}

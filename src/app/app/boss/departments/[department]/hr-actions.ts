@@ -23,6 +23,25 @@ async function appoint(actorId: string, form: FormData): Promise<HrState> {
   try {
     const reportingPerson = await prisma.user.findUnique({ where: { id: data.reportToUserId }, select: { personId: true, status: true, emailVerifiedAt: true } });
     if (!reportingPerson?.personId || reportingPerson.status !== "ACTIVE" || !reportingPerson.emailVerifiedAt) throw new AccessError("The selected reporting person is no longer active. Choose another person.");
+    const requestedStartupAo = data.designation === "Administrative Officer" && !!data.brandId;
+    if (requestedStartupAo) {
+      const [startupBrand, startupDivision] = await Promise.all([
+        prisma.brand.findFirst({ where: { id: data.brandId, organizationId: data.companyId, slug: "startup-school" }, select: { id: true } }),
+        prisma.organization.findFirst({ where: { slug: "aira-startup-school", parentId: data.companyId, type: "DIVISION", status: "ACTIVE" }, select: { id: true } })
+      ]);
+      if (!startupBrand || !startupDivision) throw new AccessError("Startup Skool AO appointments must be assigned to the active Startup Skool work area.");
+      const directorMembership = await prisma.membership.findFirst({
+        where: {
+          personId: reportingPerson.personId,
+          organizationId: startupDivision.id,
+          projectId: null,
+          status: "ACTIVE",
+          roles: { some: { role: { organizationId: startupDivision.id, key: "startup-division-director", status: "ACTIVE" } } }
+        },
+        select: { id: true }
+      });
+      if (!directorMembership) throw new AccessError("A Startup Skool Administrative Officer must report to an active Startup Skool Director.");
+    }
     employmentId = await hrEmploymentService.create(actorId, { companyId: data.companyId, displayName: data.displayName, email: data.email, phone: data.phone, designation: data.designation, joiningDate: data.joiningDate, initialBrandIds: data.brandId ? [data.brandId] : [], ...(data.brandId ? { initialManagerPersonId: reportingPerson.personId } : {}), assignmentDecisionReference: data.brandId ? reference : undefined, activateImmediately: true, decisionReference: reference });
     const employee = await hrEmploymentService.get(actorId, employmentId);
     const overview = await hrAccess.overview(actorId, employmentId);
