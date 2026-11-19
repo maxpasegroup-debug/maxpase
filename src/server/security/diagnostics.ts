@@ -18,7 +18,7 @@ export function failureReason(error: unknown, stage: FailureStage, env: NodeJS.P
   return stage === "session_cookie" ? "session_cookie_failed" : "operation_failed";
 }
 
-export function safeDiagnostic(code: "authentication_failed" | "readiness_failed" | "operation_failed", correlationId: string = randomUUID(), detail?: { stage: FailureStage; reason: ReturnType<typeof failureReason> }) {
+export function safeDiagnostic(code: "authentication_failed" | "readiness_failed" | "operation_failed", correlationId: string = randomUUID(), detail?: { stage: FailureStage; reason: ReturnType<typeof failureReason>; errorName?: string; prismaCode?: string }) {
   console.error(JSON.stringify({ level: "error", code, correlationId, timestamp: new Date().toISOString(), ...detail }));
   return correlationId;
 }

@@ -12,7 +12,7 @@ import { staffOnboardingService } from "@/server/skillcity/staff-onboarding";
 import { staffInvite } from "@/server/skillcity/staff-invite";
 import { niceJobsDirectorInvite } from "@/server/auth/nicejobs-director-invite";
 import { prisma } from "@/server/db";
-import { safeDiagnostic } from "@/server/security/diagnostics";
+import { failureReason, safeDiagnostic } from "@/server/security/diagnostics";
 
 export type HrState = { message?: string; error?: string; employmentId?: string; inviteSent?: boolean; activationUrl?: string; shareMessage?: string; shareEmail?: string; removed?: boolean };
 async function appoint(actorId: string, form: FormData): Promise<HrState> {
@@ -108,8 +108,18 @@ export async function hrAction(_state: HrState, form: FormData): Promise<HrState
   } catch (error) {
     if (error instanceof AccessError) return { error: error.message };
     if (error instanceof ZodError) return { error: "Check the required fields and dates." };
-    safeDiagnostic("operation_failed");
-    return { error: "The HR change could not be saved." };
+    const rawCode = error && typeof error === "object" && "code" in error ? error.code : undefined;
+    const prismaCode = typeof rawCode === "string" && /^P\d{4}$/.test(rawCode) ? rawCode : undefined;
+    const errorName = error instanceof Error ? error.name.slice(0, 80) : "UnknownError";
+    const reference = safeDiagnostic("operation_failed", undefined, { stage: "readiness", reason: failureReason(error, "readiness"), errorName, ...(prismaCode ? { prismaCode } : {}) });
+    const message = prismaCode === "P2002"
+      ? "This email or employee record may already exist. Check the employee list before trying again."
+      : prismaCode === "P2021" || prismaCode === "P2022"
+        ? "The HR database setup is incomplete. The system owner must finish the database update before adding employees."
+        : prismaCode === "P1000" || prismaCode === "P1001" || prismaCode === "P1003"
+          ? "The application could not connect to its database. Please retry after service is restored."
+          : "The appointment could not be saved. Share this support reference with the system owner.";
+    return { error: `${message} Reference: ${reference}` };
   }
   const redirectTarget = removedRedirect;
   if (typeof redirectTarget === "string") redirect(redirectTarget);
