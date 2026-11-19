@@ -38,7 +38,67 @@ const templates = [
   { scope: "aira-media-company", key: "media-ai-video-expert", name: "AI Video Expert", permissions: ["organization.read", "project.read", "task.read", "task.manage", "blocker.manage"] }
 ] as const;
 
+export function resolveStaffRoleTemplate(scopeSlug: string, designation: string) {
+  let key: string | undefined;
+  if (designation === "Director") {
+    key = scopeSlug === "aira-skill-city" ? "aira-03" : scopeSlug === "aira-startup-school" ? "startup-division-director" : scopeSlug === "aira-labs" ? "labs-division-director" : scopeSlug === "aira-skill-studio" ? "studio-division-director" : scopeSlug === "aira-career-hub" ? "career-division-director" : undefined;
+  } else if (designation === "Administrative Officer") {
+    key = scopeSlug === "aira-skill-city" ? "aira-administrative-officer" : scopeSlug === "aira-startup-school" ? "startup-admissions-officer" : undefined;
+  } else {
+    key = templates.find(item => item.scope === scopeSlug && item.name === designation)?.key;
+  }
+  const template = templates.find(item => item.scope === scopeSlug && item.key === key);
+  if (!template) throw new AccessError("No dashboard role is configured for this employee's work area");
+  return { scopeSlug: template.scope, roleKey: template.key, roleName: template.name };
+}
+
 export function createSkillCityRoleTemplates(client: PrismaClient = prisma) {
+  async function ensureForAppointment(bossUserId: string, companyId: string, scopeSlug: string, roleKey: string) {
+    const template = templates.find(item => item.scope === scopeSlug && item.key === roleKey);
+    if (!template) throw new AccessError("This employee role is not configured for the selected work area");
+    return client.$transaction(async db => {
+      await createBossService(client).authority(bossUserId, db);
+      const company = await db.organization.findUnique({ where: { id: companyId }, select: { id: true, slug: true, type: true, status: true } });
+      if (!company || company.slug !== "aira-skill-city" || company.type !== "COMPANY" || company.status !== "ACTIVE") throw new AccessError("AIRA Skill City company is unavailable");
+      let scope = await db.organization.findFirst({ where: { slug: scopeSlug, parentId: company.id, type: "DIVISION" }, select: { id: true, slug: true, status: true } });
+      if (!scope) {
+        const name = scopeSlug === "aira-startup-school" ? "AIRA Startup Skool" : scopeSlug === "aira-labs" ? "AIRA Labs" : scopeSlug === "aira-skill-studio" ? "AIRA Skill Studio" : scopeSlug === "aira-career-hub" ? "AIRA Career Hub" : scopeSlug === "aira-media-company" ? "AIRA Media Company" : null;
+        if (!name) throw new AccessError("Employee workspace is not configured");
+        const organization = await db.organization.create({ data: { slug: scopeSlug, name, type: "DIVISION", parentId: company.id, metadata: JSON.stringify({ canonicalStructure: true, createdFrom: "BOSS_HR_APPOINTMENT" }) }, select: { id: true, slug: true, status: true } });
+        scope = organization;
+      }
+      if (scope.status !== "ACTIVE") throw new AccessError("Employee workspace is inactive");
+      // Build a fresh authorization context after creating a missing division so
+      // the Boss's scoped delegation checks include that division.
+      const { ctx } = await createBossService(client).authority(bossUserId, db);
+      await ctx.requireAccess("role.create", { organizationId: scope.id });
+      await ctx.requireAccess("permission.assign", { organizationId: scope.id });
+      let role = await db.role.findUnique({ where: { organizationId_key: { organizationId: scope.id, key: template.key } }, select: { id: true, name: true, principalType: true, status: true } });
+      if (role && (role.name !== template.name || role.principalType !== "HUMAN" || role.status !== "ACTIVE")) throw new AccessError("The configured role conflicts with the approved employee role");
+      if (role && await db.membershipRole.count({ where: { roleId: role.id } }) > 0) {
+        const current = await db.rolePermission.findMany({ where: { roleId: role.id }, select: { permission: { select: { key: true } } } });
+        const currentKeys = current.map(item => item.permission.key).sort();
+        const expectedKeys = [...template.permissions].sort();
+        if (currentKeys.length !== expectedKeys.length || currentKeys.some((key, index) => key !== expectedKeys[index])) throw new AccessError("This role is already assigned and needs a Boss review before its permissions can change");
+        return { organizationId: scope.id, roleId: role.id, roleName: template.name };
+      }
+      if (!role) role = await db.role.create({ data: { organizationId: scope.id, key: template.key, name: template.name, principalType: "HUMAN", category: "Skill City staff", status: "ACTIVE" }, select: { id: true, name: true, principalType: true, status: true } });
+      const definitions = new Map(workforcePermissions.map(permission => [permission.key, permission]));
+      const expected = new Set<string>(template.permissions);
+      const assigned = await db.rolePermission.findMany({ where: { roleId: role.id }, select: { permissionId: true, permission: { select: { key: true } } } });
+      const extras = assigned.filter(item => !expected.has(item.permission.key)).map(item => item.permissionId);
+      if (extras.length) await db.rolePermission.deleteMany({ where: { roleId: role.id, permissionId: { in: extras } } });
+      for (const key of template.permissions) {
+        const definition = definitions.get(key);
+        const permission = definition ? await db.permission.upsert({ where: { key }, create: definition, update: {} }) : await db.permission.findUnique({ where: { key } });
+        if (!permission || permission.scope === "GLOBAL") throw new AccessError("A required employee capability is unavailable");
+        await ctx.requireDelegation(permission, { organizationId: scope.id }, false);
+        await db.rolePermission.upsert({ where: { roleId_permissionId: { roleId: role.id, permissionId: permission.id } }, create: { roleId: role.id, permissionId: permission.id }, update: {} });
+      }
+      await operationalEvent(db, { actorUserId: bossUserId, actorPersonId: ctx.user!.personId, organizationId: scope.id, action: "staff.role_template_prepared_for_appointment", entityType: "Role", entityId: role.id, result: "SUCCESS", metadata: { roleKey: template.key, roleName: template.name } });
+      return { organizationId: scope.id, roleId: role.id, roleName: template.name };
+    });
+  }
   async function prepare(bossUserId: string, reviewedExistingDirectors: boolean) {
     return client.$transaction(async db => {
       const { ctx, root } = await createBossService(client).authority(bossUserId, db);
@@ -77,7 +137,7 @@ export function createSkillCityRoleTemplates(client: PrismaClient = prisma) {
       return { configured };
     });
   }
-  return { prepare };
+  return { prepare, ensureForAppointment };
 }
 
 export const skillCityRoleTemplates = createSkillCityRoleTemplates();

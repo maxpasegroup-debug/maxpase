@@ -10,6 +10,8 @@ import { hrAccess } from "@/server/group/hr-access";
 import { createBossService } from "@/server/group/boss-service";
 import { staffOnboardingService } from "@/server/skillcity/staff-onboarding";
 import { staffInvite } from "@/server/skillcity/staff-invite";
+import { skillCityRoleTemplates, resolveStaffRoleTemplate } from "@/server/skillcity/role-templates";
+import { marketingDivisionSlug } from "@/server/group/brand-marketing-scope";
 import { niceJobsDirectorInvite } from "@/server/auth/nicejobs-director-invite";
 import { prisma } from "@/server/db";
 import { failureReason, safeDiagnostic } from "@/server/security/diagnostics";
@@ -48,24 +50,20 @@ async function appoint(actorId: string, form: FormData): Promise<HrState> {
     }
     employmentId = await hrEmploymentService.create(actorId, { companyId: data.companyId, displayName: data.displayName, email: data.email, phone: data.phone, designation: data.designation, joiningDate: data.joiningDate, initialBrandIds: data.brandId ? [data.brandId] : [], ...(data.brandId ? { initialManagerPersonId: reportingPerson.personId } : {}), assignmentDecisionReference: data.brandId ? reference : undefined, activateImmediately: true, decisionReference: reference });
     const employee = await hrEmploymentService.get(actorId, employmentId);
-    const overview = await hrAccess.overview(actorId, employmentId);
-    const target = overview.targets.find(item => data.brandId ? item.brandId === data.brandId : item.id === data.companyId && !item.brandId);
-    if (!target) throw new AccessError("The selected dashboard workspace is not configured for appointments");
-    const targetOrganization = await prisma.organization.findUnique({ where: { id: target.id }, select: { slug: true } });
-    const expected = data.designation === "Director"
-      ? "Division Director"
-      : targetOrganization?.slug === "aira-startup-school" && data.designation === "Administrative Officer"
-        ? "Startup Skool Administrative Officer"
-        : data.designation;
-    const role = overview.roles.find(item => item.organizationId === target.id && item.name === expected);
-    if (!role) throw new AccessError("The dashboard role is not configured for this workspace. The employee record is saved; access remains pending.");
+    const assignment = employee.assignments.find(item => item.status === "ACTIVE");
+    const scopeSlug = assignment ? marketingDivisionSlug(assignment.brand.slug) : "aira-skill-city";
+    if (!scopeSlug) throw new AccessError("The selected team does not have an employee dashboard yet.");
+    const roleSpec = resolveStaffRoleTemplate(scopeSlug, data.designation);
+    const preparedRole = await skillCityRoleTemplates.ensureForAppointment(actorId, data.companyId, roleSpec.scopeSlug, roleSpec.roleKey);
+    const target = await prisma.organization.findUnique({ where: { id: preparedRole.organizationId }, select: { id: true, name: true } });
+    if (!target) throw new AccessError("The employee workspace could not be prepared.");
     let delivery: { sent: boolean; activationUrl?: string };
     if (data.designation === "NICEJOBS Director") {
       const nationalNumber = data.phone.replace(/\D/g, "").replace(/^91(?=\d{10}$)/, "");
-      const appointment = await hrAccess.prepareNiceJobsDirector(actorId, { employmentId, organizationId: target.id, roleId: role.id, country: "IN", nationalNumber, decisionReference: reference });
+      const appointment = await hrAccess.prepareNiceJobsDirector(actorId, { employmentId, organizationId: target.id, roleId: preparedRole.roleId, country: "IN", nationalNumber, decisionReference: reference });
       delivery = await niceJobsDirectorInvite.send(actorId, { userId: appointment.userId });
     } else {
-    const draft = await staffOnboardingService.prepare(actorId, { organizationId: target.id, existingPersonId: employee.person.id, roleId: role.id, managerUserId: reportingUserId, managerDecisionReference: reference, scopeDecisionReference: reference });
+    const draft = await staffOnboardingService.prepare(actorId, { organizationId: target.id, existingPersonId: employee.person.id, roleId: preparedRole.roleId, managerUserId: reportingUserId, managerDecisionReference: reference, scopeDecisionReference: reference });
       delivery = await staffInvite.send(actorId, { userId: draft.id, verificationEvidence: "Boss-approved appointment recorded in HR." });
     }
     revalidatePath("/app/boss/departments/hr");
