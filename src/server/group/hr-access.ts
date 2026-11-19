@@ -30,7 +30,7 @@ export function createHrAccess(client: PrismaClient = prisma) {
     ]);
     const challenge = invitations[0] ?? null;
     const account = row.person.users.find(item => item.email === row.person.email) ?? null;
-    const assignments = await client.hrAssignment.findMany({ where: { employmentId, status: "ACTIVE", brand: { status: "ACTIVE" } }, include: { brand: { select: { name: true, slug: true, parentBrandId: true } } }, take: 100 });
+    const assignments = await client.hrAssignment.findMany({ where: { employmentId, status: "ACTIVE", brand: { status: "ACTIVE" } }, select: { brandId: true, brand: { select: { name: true, slug: true, parentBrandId: true } } }, take: 100 });
     const targets: { id: string; name: string; brandId: string | null }[] = [];
     if (row.company.slug === "aira-skill-city") {
       targets.push({ id: row.companyId, name: "AIRA Skill City company", brandId: null as string | null });
@@ -66,7 +66,7 @@ export function createHrAccess(client: PrismaClient = prisma) {
       const user = row.person.users.find(u => u.status === "ACTIVE" && u.emailVerifiedAt && u.email === row.person.email && accountPortalRealm(u.person?.metadata) === requiredRealm && (requiredRealm !== "jobs" || !!u.jobsPhone && !!u.jobsPinHash && u.jobsPhone === row.person.phone));
       if (!user) throw new AccessError(requiredRealm === "jobs" ? "A verified NICEJOBS account with an active PIN for this employee is required before appointing the Director" : `Verified ${requiredRealm === "labs" ? "AIRA Labs" : "Skill City"} employee account required`);
       if (input.brandId) {
-        const assignment = await db.hrAssignment.findFirst({ where: { employmentId: row.id, brandId: input.brandId, status: "ACTIVE", brand: { organizationId: row.companyId, parentBrandId: null, status: "ACTIVE" } }, include: { brand: { select: { slug: true } } } });
+        const assignment = await db.hrAssignment.findFirst({ where: { employmentId: row.id, brandId: input.brandId, status: "ACTIVE", brand: { organizationId: row.companyId, parentBrandId: null, status: "ACTIVE" } }, select: { brand: { select: { slug: true } } } });
         if (!assignment || marketingDivisionSlug(assignment.brand.slug) !== target.slug) throw new AccessError("Verified brand assignment required");
       }
       for (const key of ["membership.manage", "membership.assign_role"]) await ctx.requireAccess(key, { organizationId: target.id });
@@ -160,7 +160,7 @@ export function createHrAccess(client: PrismaClient = prisma) {
         const roles = await db.membershipRole.findMany({ where: { membershipId: member.id }, include: { role: { include: { permissions: { include: { permission: true } } } } } });
         if (!organization || !roles.length || roles.some(item => item.role.status !== "ACTIVE" || item.role.organizationId !== member.organizationId || !isPreparedStaffRole(item.role.key, organization.slug) || !hasStaffWorkspaceCapabilities(item.role.key, item.role.permissions.map(p => p.permission.key)))) throw new AccessError("A current approved role is required");
         if (member.organizationId !== row.companyId) {
-          const active = await db.hrAssignment.findMany({ where: { employmentId: row.id, status: "ACTIVE", brand: { parentBrandId: null, status: "ACTIVE" } }, include: { brand: { select: { slug: true } } }, take: 100 });
+          const active = await db.hrAssignment.findMany({ where: { employmentId: row.id, status: "ACTIVE", brand: { parentBrandId: null, status: "ACTIVE" } }, select: { brandId: true, brand: { select: { slug: true } } }, take: 100 });
           if (!active.some(item => marketingDivisionSlug(item.brand.slug) === organization.slug)) throw new AccessError("Active brand assignment required");
         }
       }

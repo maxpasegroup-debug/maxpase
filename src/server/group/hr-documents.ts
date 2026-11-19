@@ -59,7 +59,7 @@ export function createHrDocuments(client: PrismaClient = prisma, storage = hrClo
     const worker = await employment(client, employmentId);
     await scope(client, actorId, worker.companyId, brandId ?? null, true);
     if (worker.status === "ENDED") throw new AccessError("Employment has ended");
-    if (brandId && !(await client.hrAssignment.findFirst({ where: { employmentId, brandId, status: "ACTIVE" } }))) throw new AccessError("Active brand assignment required");
+    if (brandId && !(await client.hrAssignment.findFirst({ where: { employmentId, brandId, status: "ACTIVE" }, select: { id: true } }))) throw new AccessError("Active brand assignment required");
   }
   async function canManage(actorId: string, employmentId: string) {
     const worker = await employment(client, employmentId);

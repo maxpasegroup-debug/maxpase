@@ -45,7 +45,7 @@ export function createStaffInvite(client: PrismaClient = prisma, env: Record<str
       const memberScope = await db.organization.findUnique({ where: { id: membership.organizationId }, select: { parentId: true, slug: true } });
       if (!company || !(membership.organizationId === company.id || memberScope?.parentId === company.id)) throw new AccessError("Staff scope unavailable");
       if (!(await db.employment.findFirst({ where: { personId: user.personId!, companyId: company.id, status: "ACTIVE" } }))) throw new AccessError("Active company employment required before invitation");
-      if (metadata.authenticationRealm === "labs" && !(await db.hrAssignment.findFirst({ where: { employment: { personId: user.personId!, companyId: company.id, status: "ACTIVE" }, status: "ACTIVE", brand: { organizationId: company.id, slug: "aira-labs", status: "ACTIVE" } } }))) throw new AccessError("Active AIRA Labs brand assignment required before invitation");
+      if (metadata.authenticationRealm === "labs" && !(await db.hrAssignment.findFirst({ where: { employment: { personId: user.personId!, companyId: company.id, status: "ACTIVE" }, status: "ACTIVE", brand: { organizationId: company.id, slug: "aira-labs", status: "ACTIVE" } }, select: { id: true } }))) throw new AccessError("Active AIRA Labs brand assignment required before invitation");
       const ctx = await createAccessContext(actorUserId, db, undefined, { organizationId: membership.organizationId });
       for (const permission of ["user.update", "person.update", "membership.manage", "membership.assign_role"]) await ctx.requireAccess(permission, { organizationId: membership.organizationId });
       const role = membership.roles[0]?.role;

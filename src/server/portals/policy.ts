@@ -67,7 +67,7 @@ export async function requirePortalAccess(db: Prisma.TransactionClient, userId: 
     const metadata = JSON.parse(user?.person?.metadata ?? "{}");
     if (accountPortalRealm(user?.person?.metadata) !== "labs" || user?.status !== "ACTIVE" || !user.emailVerifiedAt) throw new AccessError("Verified Labs account required");
     if (metadata.credentialKind === "STAFF_PASSWORD") {
-      if (metadata.staffOnboarding !== "ACTIVE" || !user.personId || !(await db.employment.findFirst({ where: { personId: user.personId, companyId: division.parent.id, status: "ACTIVE" } })) || !(await db.hrAssignment.findFirst({ where: { employment: { personId: user.personId, companyId: division.parent.id, status: "ACTIVE" }, status: "ACTIVE", brand: { slug: "aira-labs", organizationId: division.parent.id, status: "ACTIVE" } } }))) throw new AccessError("Active Labs employee appointment required");
+      if (metadata.staffOnboarding !== "ACTIVE" || !user.personId || !(await db.employment.findFirst({ where: { personId: user.personId, companyId: division.parent.id, status: "ACTIVE" } })) || !(await db.hrAssignment.findFirst({ where: { employment: { personId: user.personId, companyId: division.parent.id, status: "ACTIVE" }, status: "ACTIVE", brand: { slug: "aira-labs", organizationId: division.parent.id, status: "ACTIVE" } }, select: { id: true } }))) throw new AccessError("Active Labs employee appointment required");
       const membership = await db.membership.findFirst({
         where: { personId: user.personId, organizationId: division.id, status: "ACTIVE" },
         include: { roles: { include: { role: { include: { permissions: { include: { permission: true } } } } } } }

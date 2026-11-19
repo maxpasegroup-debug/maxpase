@@ -153,7 +153,7 @@ export function createHrEmploymentService(client: PrismaClient = prisma) {
         const managerAssignment = await db.hrAssignment.findFirst({ where: { employmentId: manager?.id ?? "", brandId: input.brandId, status: "ACTIVE" }, select: { id: true } });
         if (!manager || !verified || !managerAssignment) throw new AccessError("Verified manager with an active assignment to this brand required");
       }
-      if (await db.hrAssignment.findFirst({ where: { employmentId: employment.id, brandId: input.brandId, status: { in: ["DRAFT", "ACTIVE"] } } })) throw new AccessError("Open brand assignment already exists");
+      if (await db.hrAssignment.findFirst({ where: { employmentId: employment.id, brandId: input.brandId, status: { in: ["DRAFT", "ACTIVE"] } }, select: { id: true } })) throw new AccessError("Open brand assignment already exists");
       const row = await db.hrAssignment.create({ data: { employmentId: employment.id, brandId: input.brandId, departmentId: input.departmentId, managerPersonId: input.managerPersonId, designation: input.designation, startDate: input.startDate, decisionReference: input.decisionReference } });
       await operationalEvent(db, { actorUserId: actorId, actorPersonId: ctx.user!.personId, organizationId: employment.companyId, action: "hr.assignment_drafted", entityType: "HrAssignment", entityId: row.id, result: "SUCCESS", metadata: { decisionReference: input.decisionReference, brandId: input.brandId } });
       return row.id;
@@ -162,7 +162,7 @@ export function createHrEmploymentService(client: PrismaClient = prisma) {
   async function changeAssignment(actorId: string, raw: unknown) {
     const input = z.object({ assignmentId: id, action: z.enum(["activate", "transfer", "end", "edit"]), decisionReference: reference, nextBrandId: id.optional(), endDate: z.coerce.date().optional(), designation: z.string().trim().min(2).max(120).optional(), departmentId: id.optional(), managerPersonId: id.optional() }).strict().parse(raw);
     return client.$transaction(async db => {
-      const row = await db.hrAssignment.findUnique({ where: { id: input.assignmentId }, include: { employment: true } });
+      const row = await db.hrAssignment.findUnique({ where: { id: input.assignmentId }, select: { id: true, employmentId: true, brandId: true, designation: true, status: true, startDate: true, employment: { select: { companyId: true, personId: true, status: true } } } });
       if (!row) throw new AccessError("Assignment unavailable");
       const ctx = await authorized(actorId, db, row.employment.companyId, "person.update");
       const at = input.endDate ?? new Date();
@@ -187,7 +187,7 @@ export function createHrEmploymentService(client: PrismaClient = prisma) {
         if (input.action === "transfer") {
           if (!input.nextBrandId || input.nextBrandId === row.brandId) throw new AccessError("Choose another brand");
           const target = await db.brand.findFirst({ where: { id: input.nextBrandId, organizationId: row.employment.companyId, status: "ACTIVE" }, select: { id: true } });
-          if (!target || await db.hrAssignment.findFirst({ where: { employmentId: row.employmentId, brandId: target.id, status: { in: ["DRAFT", "ACTIVE"] } } })) throw new AccessError("Target brand unavailable");
+          if (!target || await db.hrAssignment.findFirst({ where: { employmentId: row.employmentId, brandId: target.id, status: { in: ["DRAFT", "ACTIVE"] } }, select: { id: true } })) throw new AccessError("Target brand unavailable");
           // A destination brand requires fresh department and manager decisions.
           await db.hrAssignment.create({ data: { employmentId: row.employmentId, brandId: target.id, departmentId: null, managerPersonId: null, designation: row.designation, status: "ACTIVE", startDate: at, decisionReference: input.decisionReference } });
         }
