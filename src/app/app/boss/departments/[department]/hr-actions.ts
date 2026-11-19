@@ -25,7 +25,8 @@ async function appoint(actorId: string, form: FormData): Promise<HrState> {
   let employmentId: string | undefined;
   try {
     const reportingPerson = await prisma.user.findUnique({ where: { id: reportingUserId }, select: { personId: true, status: true, emailVerifiedAt: true } });
-    if (!reportingPerson?.personId || reportingPerson.status !== "ACTIVE" || !reportingPerson.emailVerifiedAt) throw new AccessError("The selected reporting person is no longer active. Choose another person.");
+    const bossReportsDirector = data.designation === "Director" && reportingUserId === actorId;
+    if (!reportingPerson?.personId || reportingPerson.status !== "ACTIVE" || !bossReportsDirector && !reportingPerson.emailVerifiedAt) throw new AccessError("The reporting person must have an active account and employee profile. Other reporting people must also verify their email.");
     const requestedStartupAo = data.designation === "Administrative Officer" && !!data.brandId;
     if (requestedStartupAo) {
       const [startupBrand, startupDivision] = await Promise.all([

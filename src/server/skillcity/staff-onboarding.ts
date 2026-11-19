@@ -60,7 +60,7 @@ export function createStaffOnboardingService(client: PrismaClient = prisma) {
       if (input.managerUserId) {
         const manager = await db.user.findUnique({ where: { id: input.managerUserId }, select: { personId: true, status: true, emailVerifiedAt: true } });
         const isAppointingBoss = input.managerUserId === actorUserId && groupBossAppointment;
-        if (!manager?.personId || manager.status !== "ACTIVE" || !manager.emailVerifiedAt || !isAppointingBoss && !(await db.membership.findFirst({ where: { personId: manager.personId, status: "ACTIVE", OR: [{ organizationId: scope.id }, { organizationId: company.id, scope: "DESCENDANTS" }] } }))) throw new AccessError("Verified manager appointment required");
+        if (!manager?.personId || manager.status !== "ACTIVE" || !isAppointingBoss && (!manager.emailVerifiedAt || !(await db.membership.findFirst({ where: { personId: manager.personId, status: "ACTIVE", OR: [{ organizationId: scope.id }, { organizationId: company.id, scope: "DESCENDANTS" }] } })))) throw new AccessError("Verified manager appointment required");
       }
       let person;
       if (input.existingPersonId) {
@@ -109,7 +109,8 @@ export function createStaffOnboardingService(client: PrismaClient = prisma) {
       let managerPersonId: string | null = null;
       if (input.managerUserId) {
         const manager = await db.user.findUnique({ where: { id: input.managerUserId }, select: { personId: true, status: true, emailVerifiedAt: true } });
-        if (!manager?.personId || manager.personId === user.personId || manager.status !== "ACTIVE" || !manager.emailVerifiedAt || !(await db.membership.findFirst({ where: { personId: manager.personId, status: "ACTIVE", OR: [{ organizationId: membership.organizationId }, { organizationId: (await db.organization.findUniqueOrThrow({ where: { slug: "aira-skill-city" }, select: { id: true } })).id, scope: "DESCENDANTS" }] } }))) throw new AccessError("Verified manager appointment required");
+        const isAppointingBoss = input.managerUserId === actorUserId;
+        if (!manager?.personId || manager.personId === user.personId || manager.status !== "ACTIVE" || !isAppointingBoss && (!manager.emailVerifiedAt || !(await db.membership.findFirst({ where: { personId: manager.personId, status: "ACTIVE", OR: [{ organizationId: membership.organizationId }, { organizationId: (await db.organization.findUniqueOrThrow({ where: { slug: "aira-skill-city" }, select: { id: true } })).id, scope: "DESCENDANTS" }] } })))) throw new AccessError("Verified manager appointment required");
         managerPersonId = manager.personId;
         await db.reportingRelationship.updateMany({ where: { organizationId: membership.organizationId, personId: user.personId!, status: "INACTIVE", managerPersonId: { not: managerPersonId } }, data: { status: "ARCHIVED" } });
         await db.reportingRelationship.upsert({ where: { organizationId_personId_managerPersonId: { organizationId: membership.organizationId, personId: user.personId!, managerPersonId } }, create: { organizationId: membership.organizationId, personId: user.personId!, managerPersonId, status: "INACTIVE", metadata: JSON.stringify({ decisionReference: input.managerDecisionReference }) }, update: { status: "INACTIVE", metadata: JSON.stringify({ decisionReference: input.managerDecisionReference }) } });
