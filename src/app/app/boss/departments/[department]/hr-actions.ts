@@ -28,7 +28,12 @@ async function appoint(actorId: string, form: FormData): Promise<HrState> {
     const overview = await hrAccess.overview(actorId, employmentId);
     const target = overview.targets.find(item => data.brandId ? item.brandId === data.brandId : item.id === data.companyId && !item.brandId);
     if (!target) throw new AccessError("The selected dashboard workspace is not configured for appointments");
-    const expected = data.designation === "Director" ? "Division Director" : data.designation;
+    const targetOrganization = await prisma.organization.findUnique({ where: { id: target.id }, select: { slug: true } });
+    const expected = data.designation === "Director"
+      ? "Division Director"
+      : targetOrganization?.slug === "aira-startup-school" && data.designation === "Administrative Officer"
+        ? "Startup Skool Administrative Officer"
+        : data.designation;
     const role = overview.roles.find(item => item.organizationId === target.id && item.name === expected);
     if (!role) throw new AccessError("The dashboard role is not configured for this workspace. The employee record is saved; access remains pending.");
     let delivery: { sent: boolean; activationUrl?: string };
@@ -43,7 +48,8 @@ async function appoint(actorId: string, form: FormData): Promise<HrState> {
     revalidatePath("/app/boss/departments/hr");
     revalidatePath("/app/boss/departments/hr/employees/" + encodeURIComponent(employmentId));
     const activationUrl = delivery.activationUrl;
-    const workArea = employee.assignments.find(item => item.status === "ACTIVE")?.brand.name ?? employee.company.name;
+    const assignedBrand = employee.assignments.find(item => item.status === "ACTIVE")?.brand.name;
+    const workArea = assignedBrand === "Startup School" ? "Startup Skool" : assignedBrand ?? employee.company.name;
     const shareMessage = activationUrl ? `Hello ${data.displayName}, your ${data.designation} workspace with ${workArea} is ready for setup. Start here: ${activationUrl}. We have emailed your verification code to ${data.email}. Enter that code on the setup page and create your own sign-in credential. Please do not share your verification code.` : undefined;
     return { employmentId, inviteSent: delivery.sent, activationUrl, shareMessage, shareEmail: data.email, message: "Employee record and role-based access are prepared. Setup instructions were emailed; access activates after the employee verifies their identity and creates their own sign-in credential." };
   } catch (error) {

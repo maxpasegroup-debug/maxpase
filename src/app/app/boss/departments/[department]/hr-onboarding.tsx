@@ -12,7 +12,7 @@ const initial: HrState = {};
 
 function positions(companySlug: string, brandSlug?: string) {
   if (brandSlug === "aira-labs") return ["Director", "Full Stack Developer"];
-  if (brandSlug === "startup-school") return ["Director"];
+  if (brandSlug === "startup-school") return ["Director", "Administrative Officer"];
   if (brandSlug === "aira-media-company") return ["Digital Marketing Manager", "Graphic Designer", "Video and Audio Editor", "AI Video Expert"];
   if (companySlug === "aira-skill-city" && !brandSlug) return ["Administrative Officer"];
   return [];
@@ -77,7 +77,7 @@ function HireEmployeeForm({ companies, brands, reportingChoices, initialCompanyI
     <div className="boss-hr-hire-fields">
       <div className="boss-hr-hire-grid">
         <label>Company<select value={companyId} onChange={event => { setCompanyId(event.target.value); setBrandId(""); setPosition(""); }} required><option value="">Choose a company</option>{companies.map(item => <option key={item.organizationId} value={item.organizationId}>{item.legalName ?? item.displayName}</option>)}</select></label>
-        <label>Brand or work area<select value={brandId} onChange={event => { setBrandId(event.target.value); setPosition(""); }}><option value="">Company-wide</option>{availableBrands.map(item => <option key={item.id} value={item.id}>{item.parentName ? `${item.parentName} / ` : ""}{item.name}</option>)}</select></label>
+        <label>Brand or work area<select value={brandId} onChange={event => { setBrandId(event.target.value); setPosition(""); }}><option value="">Company-wide</option>{availableBrands.map(item => <option key={item.id} value={item.id}>{item.parentName ? `${item.parentName} / ` : ""}{item.slug === "startup-school" ? "Startup Skool" : item.name}</option>)}</select></label>
         <label>Position<select value={position} onChange={event => setPosition(event.target.value)} required><option value="">Choose a position</option>{positionOptions.map(option => <option key={option} value={option}>{option}</option>)}</select></label>
         <label>Reports to<select name="reportToUserId" required defaultValue=""><option value="">Choose Boss, Director or Manager</option>{reporters.map(person => <option key={person.userId} value={person.userId}>{person.name} · {person.title}</option>)}</select></label>
         <label>Full name<input name="displayName" autoComplete="name" maxLength={200} required/></label>
