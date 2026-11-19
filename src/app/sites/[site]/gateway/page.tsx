@@ -64,7 +64,13 @@ export default async function Gateway({ params, searchParams }: { params: Promis
   if (site.id === "skillcity" && view === "director-report") return <DirectorReportWorkspace userId={session.userId} email={session.email} base={paths.gateway} divisionId={typeof query.divisionId === "string" ? query.divisionId : ""} kind={typeof query.kind === "string" ? query.kind : ""} cursor={typeof query.cursor === "string" ? query.cursor : undefined}/>;
   if (site.id === "skillcity" && (!query.view || employeeViews.includes(view as typeof employeeViews[number]))) {
     let data;
-    try { data = await skillCityEmployeeDashboard.dashboard(session.userId, typeof query.view === "string" ? view : undefined); }
+      try { data = await skillCityEmployeeDashboard.dashboard(session.userId, typeof query.view === "string" ? view : undefined, {
+        period: typeof query.period === "string" ? query.period : undefined,
+        state: typeof query.state === "string" ? query.state : undefined,
+        district: typeof query.district === "string" ? query.district : undefined,
+        centre: typeof query.centre === "string" ? query.centre : undefined,
+        department: typeof query.department === "string" ? query.department : undefined,
+      }); }
     catch (error) {
       if (!(error instanceof AccessError)) throw error;
       redirect(typeof query.view === "string" ? paths.gateway : paths.login);

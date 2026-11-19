@@ -5,7 +5,7 @@ import { accountPortalRealm } from "@/server/auth/account-realm";
 import { labsStaffRoleKeys, hasStaffWorkspaceCapabilities } from "@/server/skillcity/staff-roles";
 import { hasActiveNiceJobsDirectorRole, isActiveNiceJobsDirectorIdentity } from "./nicejobs-director-access";
 
-const skillCityStaffRoles = new Set(["Director", "Division Director", "Business Development & Operations Manager", "Senior Academic Advisor", "Junior Academic Advisor", "Administrative Officer", "Software Developer", "Full Stack Developer", "Junior Developer"]);
+const skillCityStaffRoles = new Set(["Director", "Division Director", "Business Development & Operations Manager", "Senior Academic Advisor", "Junior Academic Advisor", "Administrative Officer", "Software Developer", "Full Stack Developer", "Junior Developer", "Startup Skool Administrative Officer", "Startup Skool Centre Manager", "Startup Skool Department Submitter", "Startup Skool Admissions Caller", "Startup Skool HR Manager"]);
 
 export async function requirePortalAccess(db: Prisma.TransactionClient, userId: string, id: PortalId, credentialSetup = false) {
   const site = siteById(id);

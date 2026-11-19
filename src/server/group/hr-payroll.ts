@@ -91,9 +91,9 @@ export function createHrPayrollService(client: PrismaClient = prisma, now: () =>
     const input = z.object({ companyId: id, ruleSetId: id, accountantName: z.string().trim().min(3).max(120), accountantReviewReference: reference }).strict().parse(raw);
     return client.$transaction(async db => {
       const { ctx } = await scope(db, userId, input.companyId, "person.update");
-      const target = await db.hrPayrollRuleSet.findFirst({ where: { id: input.ruleSetId, companyId: input.companyId, status: "DRAFT" } });
+      const target = await db.hrPayrollRuleSet.findFirst({ where: { id: input.ruleSetId, companyId: input.companyId, brandId: null, status: "DRAFT" } });
       if (!target) throw new AccessError("Draft payroll rules unavailable");
-      await db.hrPayrollRuleSet.updateMany({ where: { companyId: input.companyId, status: "ACTIVE" }, data: { status: "RETIRED" } });
+      await db.hrPayrollRuleSet.updateMany({ where: { companyId: input.companyId, brandId: null, status: "ACTIVE" }, data: { status: "RETIRED" } });
       const updated = await db.hrPayrollRuleSet.update({ where: { id: target.id }, data: { status: "ACTIVE", accountantName: input.accountantName, accountantReviewReference: input.accountantReviewReference, accountantReviewedAt: now() } });
       await operationalEvent(db, { actorUserId: userId, actorPersonId: ctx.user!.personId, organizationId: input.companyId, action: "hr.payroll_rules_accountant_review_recorded", entityType: "HrPayrollRuleSet", entityId: updated.id, result: "SUCCESS", metadata: { accountantName: updated.accountantName, accountantReviewReference: updated.accountantReviewReference } });
       return updated.id;
@@ -123,9 +123,9 @@ export function createHrPayrollService(client: PrismaClient = prisma, now: () =>
     try {
       return await client.$transaction(async db => {
         const { ctx } = await scope(db, userId, input.companyId, "person.update");
-        const existing = await db.hrPayrollRun.findFirst({ where: { companyId: input.companyId, period: input.period, status: { not: "VOID" } }, select: { id: true } });
+        const existing = await db.hrPayrollRun.findFirst({ where: { companyId: input.companyId, brandId: null, period: input.period, status: { not: "VOID" } }, select: { id: true } });
         if (existing) return { runId: existing.id, existing: true };
-        const rules = await db.hrPayrollRuleSet.findFirst({ where: { companyId: input.companyId, status: "ACTIVE" }, orderBy: { accountantReviewedAt: "desc" } });
+        const rules = await db.hrPayrollRuleSet.findFirst({ where: { companyId: input.companyId, brandId: null, status: "ACTIVE" }, orderBy: { accountantReviewedAt: "desc" } });
         if (!rules || !rules.accountantName || !rules.accountantReviewReference || !rules.accountantReviewedAt) throw new AccessError("Record the accountant's written review of payroll rules before preparing a register");
         const components = JSON.parse(rules.componentsSnapshot) as PayrollComponent[];
         const employments = await db.employment.findMany({ where: { companyId: input.companyId, status: { in: ["ACTIVE", "ENDED"] } }, include: { person: { select: { displayName: true } }, compensationRecords: { where: { effectiveFrom: { lte: dates.end } }, orderBy: { effectiveFrom: "desc" }, take: 1 } }, orderBy: { createdAt: "asc" }, take: 1001 });
@@ -166,7 +166,7 @@ export function createHrPayrollService(client: PrismaClient = prisma, now: () =>
       });
     } catch (error) {
       if (error && typeof error === "object" && "code" in error && error.code === "P2002") {
-        const existing = await client.hrPayrollRun.findFirst({ where: { companyId: input.companyId, period: input.period, status: { not: "VOID" } }, select: { id: true } });
+        const existing = await client.hrPayrollRun.findFirst({ where: { companyId: input.companyId, brandId: null, period: input.period, status: { not: "VOID" } }, select: { id: true } });
         if (existing) return { runId: existing.id, existing: true };
       }
       throw error;
@@ -176,7 +176,7 @@ export function createHrPayrollService(client: PrismaClient = prisma, now: () =>
     const input = z.object({ companyId: id, runId: id, reviewReference: reference }).strict().parse(raw);
     return client.$transaction(async db => {
       const { ctx } = await scope(db, userId, input.companyId, "person.update");
-      const changed = await db.hrPayrollRun.updateMany({ where: { id: input.runId, companyId: input.companyId, status: "DRAFT" }, data: { status: "REVIEWED", reviewReference: input.reviewReference, reviewedByUserId: userId, reviewedAt: now() } });
+      const changed = await db.hrPayrollRun.updateMany({ where: { id: input.runId, companyId: input.companyId, brandId: null, status: "DRAFT" }, data: { status: "REVIEWED", reviewReference: input.reviewReference, reviewedByUserId: userId, reviewedAt: now() } });
       if (changed.count !== 1) throw new AccessError("Draft payroll register unavailable");
       await operationalEvent(db, { actorUserId: userId, actorPersonId: ctx.user!.personId, organizationId: input.companyId, action: "hr.payroll_register_reviewed", entityType: "HrPayrollRun", entityId: input.runId, result: "SUCCESS", metadata: { reviewReference: input.reviewReference } });
       return "REVIEWED";
@@ -186,7 +186,7 @@ export function createHrPayrollService(client: PrismaClient = prisma, now: () =>
     const input = z.object({ companyId: id, runId: id, voidReference: reference }).strict().parse(raw);
     return client.$transaction(async db => {
       const { ctx } = await scope(db, userId, input.companyId, "person.update");
-      const changed = await db.hrPayrollRun.updateMany({ where: { id: input.runId, companyId: input.companyId, status: "DRAFT" }, data: { status: "VOID", voidReference: input.voidReference, voidedAt: now(), voidedByUserId: userId } });
+      const changed = await db.hrPayrollRun.updateMany({ where: { id: input.runId, companyId: input.companyId, brandId: null, status: "DRAFT" }, data: { status: "VOID", voidReference: input.voidReference, voidedAt: now(), voidedByUserId: userId } });
       if (changed.count !== 1) throw new AccessError("Only an unreleased draft register can be voided");
       await operationalEvent(db, { actorUserId: userId, actorPersonId: ctx.user!.personId, organizationId: input.companyId, action: "hr.payroll_draft_voided", entityType: "HrPayrollRun", entityId: input.runId, result: "SUCCESS", metadata: { voidReference: input.voidReference } });
       return "VOID";
@@ -201,9 +201,9 @@ export function createHrPayrollService(client: PrismaClient = prisma, now: () =>
     if (paidAt > now()) throw new AccessError("Payment date cannot be in the future");
     return client.$transaction(async db => {
       const { ctx } = await scope(db, userId, input.companyId, "person.update");
-      const line = await db.hrPayrollLine.findFirst({ where: { id: input.lineId, run: { companyId: input.companyId, status: "REVIEWED" } }, include: { payment: true } });
+      const line = await db.hrPayrollLine.findFirst({ where: { id: input.lineId, run: { companyId: input.companyId, brandId: null, status: "REVIEWED" } }, include: { payment: true } });
       if (!line) throw new AccessError("Reviewed payroll row unavailable");
-      const runLock = await db.hrPayrollRun.updateMany({ where: { id: line.runId, companyId: input.companyId, status: "REVIEWED" }, data: { updatedAt: now() } });
+      const runLock = await db.hrPayrollRun.updateMany({ where: { id: line.runId, companyId: input.companyId, brandId: null, status: "REVIEWED" }, data: { updatedAt: now() } });
       if (runLock.count !== 1) throw new AccessError("Payroll register has already been reconciled");
       const payment = await db.hrPayrollPayment.upsert({ where: { lineId: line.id }, create: { lineId: line.id, amountPaise: amount, paymentReference: input.paymentReference, evidenceReference: input.evidenceReference, paidAt, recordedByUserId: userId }, update: { amountPaise: amount, paymentReference: input.paymentReference, evidenceReference: input.evidenceReference, paidAt, status: "RECORDED", reconciledAt: null, recordedByUserId: userId } });
       await operationalEvent(db, { actorUserId: userId, actorPersonId: ctx.user!.personId, organizationId: input.companyId, action: "hr.payroll_payment_recorded", entityType: "HrPayrollPayment", entityId: payment.id, result: "SUCCESS", metadata: { lineId: line.id, paymentReference: input.paymentReference, amountPaise: amount.toString() } });
@@ -214,9 +214,9 @@ export function createHrPayrollService(client: PrismaClient = prisma, now: () =>
     const input = z.object({ companyId: id, runId: id, reconciliationReference: reference }).strict().parse(raw);
     return client.$transaction(async db => {
       const { ctx } = await scope(db, userId, input.companyId, "person.update");
-      const run = await db.hrPayrollRun.findFirst({ where: { id: input.runId, companyId: input.companyId, status: "REVIEWED" }, select: { id: true, companyId: true, totalNetPaise: true, period: true } });
+      const run = await db.hrPayrollRun.findFirst({ where: { id: input.runId, companyId: input.companyId, brandId: null, status: "REVIEWED" }, select: { id: true, companyId: true, totalNetPaise: true, period: true } });
       if (!run) throw new AccessError("Reviewed payroll register unavailable");
-      const changed = await db.hrPayrollRun.updateMany({ where: { id: run.id, status: "REVIEWED" }, data: { status: "RECONCILED", reconciliationReference: input.reconciliationReference, reconciledAt: now(), reconciledByUserId: userId } });
+      const changed = await db.hrPayrollRun.updateMany({ where: { id: run.id, brandId: null, status: "REVIEWED" }, data: { status: "RECONCILED", reconciliationReference: input.reconciliationReference, reconciledAt: now(), reconciledByUserId: userId } });
       if (changed.count !== 1) throw new AccessError("Payroll register changed during reconciliation");
       const lines = await db.hrPayrollLine.findMany({ where: { runId: run.id }, include: { payment: true } });
       const missing = lines.filter(line => !line.payment);
@@ -229,14 +229,14 @@ export function createHrPayrollService(client: PrismaClient = prisma, now: () =>
     });
   }
   async function payslip(actorId: string, lineId: string) {
-    const line = await client.hrPayrollLine.findUnique({ where: { id: lineId }, include: { run: { include: { company: { select: { name: true } } } } } });
+    const line = await client.hrPayrollLine.findFirst({ where: { id: lineId, run: { brandId: null } }, include: { run: { include: { company: { select: { name: true } } } } } });
     if (!line || !["REVIEWED", "RECONCILED"].includes(line.run.status) || !line.run.reviewReference) throw new AccessError("Reviewed payslip unavailable");
     await scope(client, actorId, line.run.companyId, "person.update");
     const components = JSON.parse(line.componentsSnapshot) as PayslipComponent[];
     return { bytes: buildHrPayslipPdf({ companyName: line.run.company.name, period: line.run.period, employeeName: line.employeeName, designation: line.designation, components, grossPaise: line.grossPaise.toString(), deductionsPaise: line.deductionsPaise.toString(), netPaise: line.netPaise.toString(), reviewReference: line.run.reviewReference }), filename: `payslip-${line.run.period}-${line.id}.pdf` };
   }
   async function storePayslip(actorId: string, lineId: string) {
-    const line = await client.hrPayrollLine.findUnique({ where: { id: lineId }, include: { run: true } });
+    const line = await client.hrPayrollLine.findFirst({ where: { id: lineId, run: { brandId: null } }, include: { run: true } });
     if (!line || !["REVIEWED", "RECONCILED"].includes(line.run.status)) throw new AccessError("Reviewed payslip unavailable");
     await scope(client, actorId, line.run.companyId, "person.update");
     if (line.payslipDocumentId) return true;

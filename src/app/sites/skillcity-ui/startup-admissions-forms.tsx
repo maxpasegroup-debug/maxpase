@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
-import { assignAdmissionsOfficer, assignBossAdmissionsOfficer, completeAdmissionsFollowup, forwardAdmissionsApplication, recordAdmissionsFollowup, recordStartupLeadershipDecision, type AdmissionsActionState } from "./startup-admissions-actions";
+import { assignAdmissionsOfficer, assignBossAdmissionsOfficer, completeAdmissionsFollowup, forwardAdmissionsApplication, recordAdmissionsFollowup, recordStartupLeadershipDecision, reviewProspectLeadMatch, type AdmissionsActionState } from "./startup-admissions-actions";
 
 function FormStatus({ state }: { state: AdmissionsActionState }) { return state.error ? <p className="sad-error" role="alert">{state.error}</p> : state.message ? <p className="sad-success" role="status">{state.message}</p> : null; }
 const initial: AdmissionsActionState = {};
@@ -20,6 +20,11 @@ export function AssignmentForm({ caseId, officers, assignedUserId, bossBrandId }
   const bossAction = bossBrandId ? assignBossAdmissionsOfficer.bind(null, bossBrandId) : null;
   const [state, action, pending] = useActionState(bossAction ?? assignAdmissionsOfficer, initial);
   return <form action={action} className="sad-form sad-assignment"><input type="hidden" name="caseId" value={caseId}/><label>Assigned officer<select name="assignedUserId" defaultValue={assignedUserId ?? ""}><option value="">Unassigned</option>{officers.map(o=><option key={o.id} value={o.id}>{o.name}</option>)}</select></label><label>Reason for assignment or change<input name="reason" minLength={8} maxLength={500} required placeholder="For example, assigned for first contact."/></label><FormStatus state={state}/><button disabled={pending}>{pending ? "Saving…" : "Save assignment"}</button></form>;
+}
+
+export function ProspectLinkReviewForm({ caseId, leadId }: { caseId: string; leadId: string }) {
+  const [state, action, pending] = useActionState(reviewProspectLeadMatch, initial);
+  return <form action={action} className="sad-form"><input type="hidden" name="caseId" value={caseId}/><input type="hidden" name="leadId" value={leadId}/><label>Review this possible match<select name="decision" defaultValue="" required><option value="" disabled>Choose an action</option><option value="LINK">Link this lead to the application</option><option value="NOT_A_MATCH">This is a different person</option></select></label><label>Reason<textarea name="reason" required minLength={8} maxLength={500} placeholder="For example, confirmed by the applicant during follow-up."/></label><FormStatus state={state}/><button disabled={pending}>{pending ? "Saving…" : "Save match review"}</button><small>Linking connects the records only. It does not merge them or change the admission decision.</small></form>;
 }
 
 export function LeadershipDecisionForm({ caseId, version, status, bossBrandId }: { caseId: string; version: number; status: string; bossBrandId: string | null }) {

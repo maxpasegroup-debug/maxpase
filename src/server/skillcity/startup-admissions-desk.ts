@@ -18,7 +18,7 @@ const parseCaseId = (id: string) => { const split = id.indexOf(":"); if (split <
 const jsonObject = (raw: string | null) => { try { const value: unknown = JSON.parse(raw ?? "{}"); return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {}; } catch { return {}; } };
 const validRangeDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional();
 
-type Scope = { userId: string; companyId: string; divisionId: string; personId: string; canManage: boolean; mode: "PORTAL" | "BOSS" };
+type Scope = { userId: string; companyId: string; divisionId: string; personId: string; canManage: boolean; canLinkLeads: boolean; mode: "PORTAL" | "BOSS" };
 type Filters = { program?: string; from?: string; to?: string; status?: string; district?: string; referral?: string; search?: string; page?: number; sort?: "newest" | "oldest" };
 
 export function createStartupAdmissionsDesk(client: PrismaClient = prisma) {
@@ -40,7 +40,8 @@ export function createStartupAdmissionsDesk(client: PrismaClient = prisma) {
       await ctx.requireAccess("organization.read", { organizationId: startup.id });
       await ctx.requireAccess("program.manage", { organizationId: startup.id });
     } else await ctx.requireAccess("startup.application.read", { organizationId: startup.id });
-    return { userId, companyId, divisionId: startup.id, personId, canManage, mode: "PORTAL" };
+    const canLinkLeads = (await ctx.decide("startup.lead.manage", { organizationId: startup.id })).allowed;
+    return { userId, companyId, divisionId: startup.id, personId, canManage, canLinkLeads, mode: "PORTAL" };
   }
 
   async function bossScope(userId: string, brandId: string): Promise<Scope> {
@@ -51,7 +52,7 @@ export function createStartupAdmissionsDesk(client: PrismaClient = prisma) {
     if (!division || !ctx.user?.personId) throw new AccessError("Startup Skool admissions scope unavailable");
     await ctx.requireAccess("program.manage", { organizationId: division.id });
     await ctx.requireAccess("startup.application.read", { organizationId: division.id });
-    return { userId, companyId: brand.organizationId, divisionId: division.id, personId: ctx.user.personId, canManage: true, mode: "BOSS" };
+    return { userId, companyId: brand.organizationId, divisionId: division.id, personId: ctx.user.personId, canManage: true, canLinkLeads: false, mode: "BOSS" };
   }
 
   async function activeAssignments(scope: Scope) {
@@ -130,7 +131,8 @@ export function createStartupAdmissionsDesk(client: PrismaClient = prisma) {
       const assigned = row.assignments.some(a => a.status === "ACTIVE" && a.assignedUserId === scope.userId);
       if (!scope.canManage && !assigned) throw new AccessError("Application is not assigned to this officer");
       const referral = jsonObject(row.referralSnapshot);
-      return { id, source: "PUBLIC_SIA" as const, reference: row.reference, applicantName: row.fullName ?? "Applicant", mobile: row.mobile ?? "", email: row.email ?? "", program: row.programPreference ?? "", state: row.state ?? "", city: row.city ?? "", district: row.district ?? "", preferredCentre: row.preferredCentre ?? "", situation: row.entrepreneurialStage ?? "", idea: row.businessInterest ?? "", goals: row.goals ?? "", referral: typeof referral.verifiedReferral === "object" && referral.verifiedReferral ? "Verified referral" : referral.applicantProvided ? "Applicant provided" : "Not recorded", referralInfo: typeof referral.applicantProvided === "string" ? referral.applicantProvided : "", status: row.status, version: row.version, submittedAt: row.submittedAt, verification: { mobile: !!row.phoneVerifiedAt, consentVersion: row.consentVersion, consentedAt: row.consentedAt }, history: row.events.map(e => ({ actorUserId: e.actorUserId, action: e.action, reason: e.reason ?? "", createdAt: e.createdAt })), assignments: row.assignments, followups: row.followups };
+      const detail = { id, source: "PUBLIC_SIA" as const, reference: row.reference, applicantName: row.fullName ?? "Applicant", mobile: row.mobile ?? "", email: row.email ?? "", program: row.programPreference ?? "", state: row.state ?? "", city: row.city ?? "", district: row.district ?? "", preferredCentre: row.preferredCentre ?? "", situation: row.entrepreneurialStage ?? "", idea: row.businessInterest ?? "", goals: row.goals ?? "", referral: typeof referral.verifiedReferral === "object" && referral.verifiedReferral ? "Verified referral" : referral.applicantProvided ? "Applicant provided" : "Not recorded", referralInfo: typeof referral.applicantProvided === "string" ? referral.applicantProvided : "", status: row.status, version: row.version, submittedAt: row.submittedAt, verification: { mobile: !!row.phoneVerifiedAt, consentVersion: row.consentVersion, consentedAt: row.consentedAt }, history: row.events.map(e => ({ actorUserId: e.actorUserId, action: e.action, reason: e.reason ?? "", createdAt: e.createdAt })), assignments: row.assignments, followups: row.followups };
+      return { ...detail, leadMatches: await prospectMatches(scope, "PUBLIC_SIA", row.id, row.mobile ?? "", row.email ?? "") };
     }
     const row = await client.executiveRecord.findFirst({ where: { id: parsed.id, organizationId: scope.divisionId, kind: "STARTUP_APPLICATION", sourceKey: { startsWith: "startup:application:" }, status: { in: [...statuses] } }, select: { id: true, ownerPersonId: true, status: true, version: true, payload: true, createdAt: true, owner: { select: { displayName: true, email: true, phone: true, users: { select: { emailVerifiedAt: true }, take: 1 } } }, history: { select: { actorUserId: true, fromStatus: true, toStatus: true, reason: true, createdAt: true }, orderBy: { createdAt: "desc" }, take: 50 } } });
     if (!row) throw new AccessError("Application unavailable");
@@ -139,7 +141,101 @@ export function createStartupAdmissionsDesk(client: PrismaClient = prisma) {
     if (!scope.canManage && !caseAssignments.some(a => a.status === "ACTIVE" && a.assignedUserId === scope.userId)) throw new AccessError("Application is not assigned to this officer");
     const payload = parseStartupApplicationPayload(row.payload);
     const notes = (await client.executiveRecord.findMany({ where: { organizationId: scope.divisionId, kind: "STARTUP_ADMISSION_FOLLOW_UP" }, select: { id: true, status: true, payload: true, dueAt: true, createdAt: true, updatedAt: true, version: true }, orderBy: { createdAt: "desc" }, take: 500 })).filter(item => jsonObject(item.payload).applicationId === row.id).map(item => ({ id: item.id, actorUserId: String(jsonObject(item.payload).actorUserId ?? ""), contactMethod: String(jsonObject(item.payload).contactMethod ?? "OTHER"), outcome: String(jsonObject(item.payload).outcome ?? "Not recorded"), note: String(jsonObject(item.payload).note ?? ""), nextFollowUpAt: item.dueAt, status: item.status, createdAt: item.createdAt, updatedAt: item.updatedAt }));
-    return { id, source: "LEGACY" as const, reference: row.id, applicantName: row.owner.displayName, mobile: row.owner.phone ?? "", email: row.owner.email ?? "", program: payload.tier, state: payload.location, district: "", preferredCentre: "", situation: payload.experience, idea: payload.idea, goals: payload.goal, referral: payload.referral ? "Verified referral" : "Not recorded", referralInfo: "", status: row.status, version: row.version, submittedAt: row.createdAt, verification: { mobile: false, consentVersion: `Legacy notice ${payload.noticeVersion}`, consentedAt: null }, history: row.history.map(e => ({ actorUserId: e.actorUserId, action: e.toStatus, reason: e.reason, createdAt: e.createdAt })), assignments: caseAssignments, followups: notes };
+    const detail = { id, source: "LEGACY" as const, reference: row.id, applicantName: row.owner.displayName, mobile: row.owner.phone ?? "", email: row.owner.email ?? "", program: payload.tier, state: payload.location, district: "", preferredCentre: "", situation: payload.experience, idea: payload.idea, goals: payload.goal, referral: payload.referral ? "Verified referral" : "Not recorded", referralInfo: "", status: row.status, version: row.version, submittedAt: row.createdAt, verification: { mobile: false, consentVersion: `Legacy notice ${payload.noticeVersion}`, consentedAt: null }, history: row.history.map(e => ({ actorUserId: e.actorUserId, action: e.toStatus, reason: e.reason, createdAt: e.createdAt })), assignments: caseAssignments, followups: notes };
+    return { ...detail, leadMatches: await prospectMatches(scope, "LEGACY", row.id, row.owner.phone ?? "", row.owner.email ?? "") };
+  }
+
+  function contactDigits(value: string) { return value.replace(/\D/g, ""); }
+  function applicationLeadLinkKey(source: "PUBLIC_SIA" | "LEGACY", applicationId: string) { return `startup:lead-application:${source}:${applicationId}`; }
+  async function prospectMatches(scope: Scope, source: "PUBLIC_SIA" | "LEGACY", applicationId: string, mobile: string, email: string) {
+    const [leadRows, linkRecord] = await Promise.all([
+      client.executiveRecord.findMany({ where: { organizationId: scope.divisionId, kind: "STARTUP_PROSPECT_LEAD" }, select: { id: true, title: true, status: true, payload: true, updatedAt: true }, orderBy: { updatedAt: "desc" }, take: 1000 }),
+      client.executiveRecord.findUnique({ where: { sourceKey: applicationLeadLinkKey(source, applicationId) }, select: { id: true, status: true, payload: true, version: true, history: { select: { actorUserId: true, toStatus: true, reason: true, createdAt: true, actor: { select: { email: true } } }, orderBy: { createdAt: "desc" }, take: 30 } } }),
+    ]);
+    const linkPayload = linkRecord ? jsonObject(linkRecord.payload) : {};
+    const priorCandidates = Array.isArray(linkPayload.candidates) ? linkPayload.candidates as Record<string, unknown>[] : [];
+    const emailKey = email.trim().toLowerCase();
+    const candidates = leadRows.flatMap(row => {
+      const payload = jsonObject(row.payload);
+      const phoneMatch = !!mobile && contactDigits(String(payload.phone ?? "")) === contactDigits(mobile);
+      const emailMatch = !!emailKey && String(payload.email ?? "").trim().toLowerCase() === emailKey;
+      const prior = priorCandidates.find(candidate => candidate.leadId === row.id);
+      if (!phoneMatch && !emailMatch && !prior) return [];
+      const dispositions = prior && Array.isArray(prior.decisions) ? prior.decisions as Record<string, unknown>[] : [];
+      return [{ id: row.id, name: String(payload.name ?? row.title), status: row.status, source: String(payload.source ?? ""), campaign: String(payload.campaign ?? ""), programme: String(payload.programme ?? "UNDECIDED"), centre: String(payload.centre ?? ""), district: String(payload.district ?? ""), assignedCallerUserId: String(payload.assignedCallerUserId ?? ""), mobileMatch: phoneMatch, emailMatch, linked: linkPayload.linkedLeadId === row.id, dismissed: dispositions.some(decision => decision.decision === "NOT_A_MATCH"), callHistory: [] as { method: string; outcome: string; notes: string; createdAt: Date; caller: string }[] }];
+    });
+    const leadIds = candidates.map(candidate => candidate.id);
+    if (leadIds.length) {
+      const activities = await client.executiveRecord.findMany({ where: { organizationId: scope.divisionId, kind: "STARTUP_LEAD_ACTIVITY" }, select: { payload: true, status: true, createdAt: true, owner: { select: { displayName: true } } }, orderBy: { createdAt: "desc" }, take: 2000 });
+      const activityByLead = new Map<string, typeof candidates[number]["callHistory"]>();
+      for (const activity of activities) {
+        const payload = jsonObject(activity.payload), leadId = typeof payload.leadId === "string" ? payload.leadId : "";
+        if (!leadIds.includes(leadId)) continue;
+        const rows = activityByLead.get(leadId) ?? [];
+        rows.push({ method: String(payload.method ?? ""), outcome: String(payload.outcome ?? activity.status), notes: String(payload.notes ?? ""), createdAt: activity.createdAt, caller: activity.owner.displayName });
+        activityByLead.set(leadId, rows);
+      }
+      for (const candidate of candidates) candidate.callHistory = activityByLead.get(candidate.id) ?? [];
+    }
+    return { linkedLeadId: typeof linkPayload.linkedLeadId === "string" ? linkPayload.linkedLeadId : null, recordId: linkRecord?.id ?? null, version: linkRecord?.version ?? 0, history: linkRecord?.history ?? [], candidates };
+  }
+
+  async function reviewLeadApplicationLink(userId: string, raw: unknown) {
+    const scope = await portalScope(userId);
+    if (!scope.canLinkLeads) throw new AccessError("Only an authorized Startup Skool AO or Director can review a lead match");
+    const input = z.object({ caseId: z.string().min(8).max(180), leadId: z.string().min(10).max(100), decision: z.enum(["LINK", "NOT_A_MATCH"]), reason: z.string().trim().min(8).max(500) }).strict().parse(raw);
+    const application = await detailById(scope, input.caseId);
+    if (!application.leadMatches.candidates.some(candidate => candidate.id === input.leadId)) throw new AccessError("This lead is not an exact phone/email match for the application");
+    const source = application.source;
+    const rawApplicationId = application.id.split(":").at(-1)!;
+    const key = applicationLeadLinkKey(source, rawApplicationId);
+    return client.$transaction(async db => {
+      const existing = await db.executiveRecord.findUnique({ where: { sourceKey: key }, select: { id: true, status: true, payload: true, version: true } });
+      const payload = existing ? jsonObject(existing.payload) : { schemaVersion: 1, applicationSource: source, applicationId: rawApplicationId, applicationReference: application.reference, candidates: [] as Record<string, unknown>[] };
+      if (payload.linkedLeadId && payload.linkedLeadId !== input.leadId) throw new AccessError("This application is already linked to another prospect");
+      if (input.decision === "LINK") {
+        const otherLinks = await db.executiveRecord.findMany({ where: { organizationId: scope.divisionId, kind: "STARTUP_LEAD_APPLICATION_LINK", status: "LINKED" }, select: { id: true, payload: true }, take: 2000 });
+        if (otherLinks.some(link => { const p = jsonObject(link.payload); return p.linkedLeadId === input.leadId && p.applicationId !== rawApplicationId; })) throw new AccessError("This prospect is already linked to another application. Ask the AO to review the existing link.");
+        payload.linkedLeadId = input.leadId;
+      }
+      const candidates = Array.isArray(payload.candidates) ? payload.candidates as Record<string, unknown>[] : [];
+      const current = candidates.find(candidate => candidate.leadId === input.leadId);
+      const decisions = current && Array.isArray(current.decisions) ? current.decisions as Record<string, unknown>[] : [];
+      decisions.push({ decision: input.decision === "LINK" ? "LINKED" : "NOT_A_MATCH", reason: input.reason, actorUserId: userId, at: new Date().toISOString() });
+      payload.candidates = [...candidates.filter(candidate => candidate.leadId !== input.leadId), { leadId: input.leadId, decisions }];
+      const nextStatus = payload.linkedLeadId ? "LINKED" : "REVIEWED";
+      const row = existing ? await db.executiveRecord.update({ where: { id: existing.id }, data: { payload: JSON.stringify(payload), status: nextStatus, version: { increment: 1 } } }) : await db.executiveRecord.create({ data: { kind: "STARTUP_LEAD_APPLICATION_LINK", organizationId: scope.divisionId, ownerPersonId: scope.personId, title: `Lead match review · ${application.reference}`, status: nextStatus, sourceKey: key, payload: JSON.stringify(payload) } });
+      await db.executiveHistory.create({ data: { recordId: row.id, actorUserId: userId, fromStatus: existing?.status ?? null, toStatus: nextStatus, reason: `${input.decision === "LINK" ? "Linked prospect" : "Marked not the same person"}: ${input.reason}` } });
+      if (source === "PUBLIC_SIA") await db.startupApplicationEvent.create({ data: { applicantId: rawApplicationId, actorUserId: userId, action: input.decision === "LINK" ? "PUBLIC_PROSPECT_LINKED" : "PUBLIC_PROSPECT_MATCH_DISMISSED", reason: input.reason, metadata: JSON.stringify({ leadId: input.leadId }) } });
+      else await db.executiveHistory.create({ data: { recordId: rawApplicationId, actorUserId: userId, fromStatus: application.status, toStatus: application.status, reason: `${input.decision === "LINK" ? "Prospect linked" : "Possible prospect match dismissed"}: ${input.reason}` } });
+      await operationalEvent(db, { actorUserId: userId, actorPersonId: scope.personId, organizationId: scope.divisionId, action: input.decision === "LINK" ? "startup.admissions.prospect_linked" : "startup.admissions.prospect_match_dismissed", entityType: "ExecutiveRecord", entityId: row.id, result: "SUCCESS", metadata: { applicationSource: source, leadId: input.leadId, applicationReference: application.reference } });
+      return { linked: input.decision === "LINK" };
+    }, { isolationLevel: "Serializable" });
+  }
+
+  async function possibleLeadMatchCounts(scope: Scope, cases: Awaited<ReturnType<typeof allCases>>["cases"]): Promise<Map<string, { possible: number; linked: boolean }>> {
+    if (!cases.length) return new Map();
+    const [leads, linkRecords] = await Promise.all([
+      client.executiveRecord.findMany({ where: { organizationId: scope.divisionId, kind: "STARTUP_PROSPECT_LEAD" }, select: { id: true, payload: true }, take: 1000 }),
+      client.executiveRecord.findMany({ where: { organizationId: scope.divisionId, kind: "STARTUP_LEAD_APPLICATION_LINK" }, select: { payload: true }, take: 2000 }),
+    ]);
+    const counts = new Map<string, { possible: number; linked: boolean }>();
+    for (const row of cases) {
+      const source = row.id.startsWith("public:") ? "PUBLIC_SIA" : "LEGACY", applicationId = row.id.split(":").at(-1) ?? row.id;
+      const association = linkRecords.map(record => jsonObject(record.payload)).find(payload => payload.applicationSource === source && payload.applicationId === applicationId);
+      const decisions = association && Array.isArray(association.candidates) ? association.candidates as Record<string, unknown>[] : [];
+      const linked = typeof association?.linkedLeadId === "string";
+      const count = linked ? 0 : leads.filter(lead => {
+        const payload = jsonObject(lead.payload);
+        const phoneMatch = !!row.mobile && contactDigits(String(payload.phone ?? "")) === contactDigits(row.mobile);
+        const emailMatch = !!row.email && String(payload.email ?? "").trim().toLowerCase() === row.email.trim().toLowerCase();
+        const prior = decisions.find(candidate => candidate.leadId === lead.id);
+        const dismissed = !!prior && Array.isArray(prior.decisions) && (prior.decisions as Record<string, unknown>[]).some(decision => decision.decision === "NOT_A_MATCH");
+        return !dismissed && (phoneMatch || emailMatch);
+      }).length;
+      counts.set(row.id, { possible: count, linked });
+    }
+    return counts;
   }
 
   async function assign(scope: Scope, raw: unknown) {
@@ -242,6 +338,7 @@ export function createStartupAdmissionsDesk(client: PrismaClient = prisma) {
     const filters = { ...raw, page: Number.isFinite(requestedPage) ? Math.max(1, Math.min(500, Math.trunc(requestedPage))) : 1 };
     const { cases, assignmentMap } = await allCases(scope, filters), pageSize = 20, start = (filters.page - 1) * pageSize;
     const selected = filters.caseId ? await detailById(scope, filters.caseId) : null;
+    const leadMatchCounts = await possibleLeadMatchCounts(scope, cases);
     const nameCases = await allCases(scope, {}).then(result => result.cases);
     const followups = await allFollowups(scope, scope.canManage ? undefined : new Set(nameCases.map(row => row.id)), scope.canManage);
     const followupsWithNames = followups.map(item => ({ ...item, applicantName: nameCases.find(row => row.id === item.caseId)?.applicantName ?? "Assigned applicant" }));
@@ -252,9 +349,9 @@ export function createStartupAdmissionsDesk(client: PrismaClient = prisma) {
     const today = new Date(); today.setHours(0,0,0,0); const tomorrow = new Date(today); tomorrow.setDate(tomorrow.getDate()+1);
     const tasks = followupsWithNames.filter(i => filters.tasks === "completed" ? i.status === "COMPLETED" : i.status !== "COMPLETED").filter(i => filters.tasks === "overdue" ? !!i.dueAt && i.dueAt < today : filters.tasks === "upcoming" ? !!i.dueAt && i.dueAt >= tomorrow : filters.tasks === "completed" ? true : filters.tasks === "all" ? true : !!i.dueAt && i.dueAt >= today && i.dueAt < tomorrow);
     const taskCounts = { today: followups.filter(i => i.status !== "COMPLETED" && !!i.dueAt && i.dueAt >= today && i.dueAt < tomorrow).length, overdue: followups.filter(i => i.status !== "COMPLETED" && !!i.dueAt && i.dueAt < today).length, upcoming: followups.filter(i => i.status !== "COMPLETED" && !!i.dueAt && i.dueAt >= tomorrow).length, completed: followups.filter(i => i.status === "COMPLETED").length };
-    return { scope, filters, overview: await overview(scope, filters), cases: cases.slice(start,start+pageSize).map(row=>{ const assignedUserId=assignmentMap.get(row.id)?.userId??null; const latest=recentByCase.get(row.id); return {...row,assignedUserId,assignedOfficer:assignedUserId?(officerNames.get(assignedUserId)??(assignedUserId===scope.userId?"You":"Assigned officer")):null,latestFollowup:latest?{outcome:latest.outcome,note:latest.note,createdAt:latest.createdAt}:null}; }), totalCases: cases.length, page: filters.page, pageSize, selected, followups: followupsWithNames, tasks, taskView: filters.tasks ?? "today", taskCounts, officers, canManage: scope.canManage };
+    return { scope, filters, overview: await overview(scope, filters), cases: cases.slice(start,start+pageSize).map(row=>{ const assignedUserId=assignmentMap.get(row.id)?.userId??null; const latest=recentByCase.get(row.id); const match=leadMatchCounts.get(row.id); return {...row,assignedUserId,assignedOfficer:assignedUserId?(officerNames.get(assignedUserId)??(assignedUserId===scope.userId?"You":"Assigned officer")):null,latestFollowup:latest?{outcome:latest.outcome,note:latest.note,createdAt:latest.createdAt}:null,leadMatchCount:match?.possible??0,leadLinked:match?.linked??false}; }), totalCases: cases.length, page: filters.page, pageSize, selected, followups: followupsWithNames, tasks, taskView: filters.tasks ?? "today", taskCounts, officers, canManage: scope.canManage, canLinkLeads: scope.canLinkLeads };
   }
-  return { page, pageForBoss, assignPortal: async (userId: string, raw: unknown) => assign(await portalScope(userId), raw), assignBoss: async (userId: string, brandId: string, raw: unknown) => assign(await bossScope(userId, brandId), raw), addFollowup: async (userId: string, raw: unknown) => addFollowup(await portalScope(userId), raw), completeFollowup: async (userId: string, raw: unknown) => completeFollowup(await portalScope(userId), raw), forward: async (userId: string, raw: unknown) => forward(await portalScope(userId), raw) };
+  return { page, pageForBoss, assignPortal: async (userId: string, raw: unknown) => assign(await portalScope(userId), raw), assignBoss: async (userId: string, brandId: string, raw: unknown) => assign(await bossScope(userId, brandId), raw), addFollowup: async (userId: string, raw: unknown) => addFollowup(await portalScope(userId), raw), completeFollowup: async (userId: string, raw: unknown) => completeFollowup(await portalScope(userId), raw), forward: async (userId: string, raw: unknown) => forward(await portalScope(userId), raw), reviewLeadApplicationLink };
 }
 
 export const startupAdmissionsDesk = createStartupAdmissionsDesk();

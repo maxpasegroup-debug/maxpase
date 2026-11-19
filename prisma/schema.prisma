@@ -2197,6 +2197,8 @@ model TeamProfile {
 }
 
 model Brand {
+  startupPayrollRules HrPayrollRuleSet[] @relation("StartupPayrollRuleBrand")
+  startupPayrollRuns HrPayrollRun[] @relation("StartupPayrollRunBrand")
   hrDocuments HrDocument[]
   hrAssignments  HrAssignment[]
   hrCandidates HrCandidate[]
@@ -2412,6 +2414,7 @@ model HrAssignment {
   brandId         String
   departmentId    String?
   managerPersonId String?
+  operatingCentreId String?
   designation     String
   status          HrAssignmentState @default(DRAFT)
   startDate       DateTime
@@ -2427,6 +2430,7 @@ model HrAssignment {
   @@index([employmentId, status])
   @@index([brandId, status])
   @@index([managerPersonId])
+  @@index([operatingCentreId, status])
 }
 
 model HrCandidate {
@@ -2548,7 +2552,9 @@ model HrCompensation {
 model HrPayrollRuleSet {
   id String @id @default(uuid())
   companyId String
+  brandId String?
   company Organization @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  brand Brand? @relation("StartupPayrollRuleBrand", fields: [brandId], references: [id], onDelete: Restrict)
   name String
   currency String @default("INR")
   componentsSnapshot String
@@ -2560,13 +2566,15 @@ model HrPayrollRuleSet {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   runs HrPayrollRun[]
-  @@index([companyId, status, createdAt])
+  @@index([companyId, brandId, status, createdAt])
 }
 
 model HrPayrollRun {
   id String @id @default(uuid())
   companyId String
+  brandId String?
   company Organization @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  brand Brand? @relation("StartupPayrollRunBrand", fields: [brandId], references: [id], onDelete: Restrict)
   period String
   status HrPayrollRunStatus @default(DRAFT)
   ruleSetId String
@@ -2589,7 +2597,7 @@ model HrPayrollRun {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   lines HrPayrollLine[]
-  @@index([companyId, status, period])
+  @@index([companyId, brandId, status, period])
 }
 
 model HrPayrollLine {

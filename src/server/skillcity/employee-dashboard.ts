@@ -9,8 +9,16 @@ import { createStaffInvite } from "./staff-invite";
 import { createSkillCityDeveloperDesk } from "./developer-desk";
 import { createLabsService } from "@/server/labs/service";
 import { createSkillCityAdministrativeDesk } from "./administrative-desk";
+import { startupOperationsDesk } from "./startup-operations-desk";
+import { startupCentreDesk } from "./startup-centre-desk";
+import { startupAdmissionsDesk } from "./startup-admissions-desk";
+import { startupLeadsDesk } from "./startup-leads-desk";
+import { startupRecordsGrievancesDesk } from "./startup-records-grievances-desk";
+import { startupFinanceDesk } from "./startup-finance-desk";
+import { startupHrDesk } from "./startup-hr-desk";
+import { startupReportsDesk } from "./startup-reports-desk";
 
-export const employeeViews = ["advisor", "director", "manager", "administrative-officer", "startup-admissions", "developer", "business-development", "media"] as const;
+export const employeeViews = ["advisor", "director", "manager", "administrative-officer", "startup-operations", "startup-leads", "startup-admissions", "startup-hr", "startup-reports", "developer", "business-development", "media"] as const;
 export type EmployeeView = typeof employeeViews[number];
 
 export function createSkillCityEmployeeDashboard(client: PrismaClient = prisma) {
@@ -19,7 +27,7 @@ export function createSkillCityEmployeeDashboard(client: PrismaClient = prisma) 
   const staffInvite = createStaffInvite(client);
   const skillCityLabsService = createLabsService(client, () => new Date(), "skillcity");
   const administrativeDesk = createSkillCityAdministrativeDesk(client);
-  async function dashboard(userId: string, requested?: string) {
+  async function dashboard(userId: string, requested?: string, reportFilters?: unknown) {
     const access = await requirePortalAccess(client, userId, "skillcity");
     const { ctx, companyId } = access;
     const personId = ctx.user?.personId;
@@ -33,20 +41,39 @@ export function createSkillCityEmployeeDashboard(client: PrismaClient = prisma) 
       manager: hasRole([companyId, ...divisions.map(d => d.id)], "Director", "Division Director", "Business Development & Operations Manager", "Administrative Officer", "Digital Marketing Manager") && (await Promise.all([companyId, ...divisions.map(d => d.id)].map(async id => await can("reporting.read", id) && await can("person.read", id) && await can("responsibility.read", id)))).some(Boolean),
       "administrative-officer": hasRole([companyId], "Administrative Officer") && await can("organization.read", companyId) && await can("company.read", companyId) && await can("skillcity.administrative.read", companyId) && await can("skillcity.administrative.task.perform", companyId) && await can("task.read", companyId) && !!labs && await can("labs.billing.status.read", labs.id) && await can("labs.billing.customer.read", labs.id) && await can("labs.billing.customer.manage", labs.id),
       "startup-admissions": !!divisions.find(d => d.slug === "aira-startup-school") && hasRole([divisions.find(d => d.slug === "aira-startup-school")!.id], "Startup Skool Administrative Officer") && await can("startup.application.read", divisions.find(d => d.slug === "aira-startup-school")!.id) && await can("startup.application.triage", divisions.find(d => d.slug === "aira-startup-school")!.id),
+      "startup-operations": !!divisions.find(d => d.slug === "aira-startup-school") && (await can("startup.operations.read", divisions.find(d => d.slug === "aira-startup-school")!.id) || await can("startup.operations.submit", divisions.find(d => d.slug === "aira-startup-school")!.id) || await can("startup.operations.manage", divisions.find(d => d.slug === "aira-startup-school")!.id)),
+      "startup-leads": !!divisions.find(d => d.slug === "aira-startup-school") && (await can("startup.lead.read", divisions.find(d => d.slug === "aira-startup-school")!.id) || await can("startup.lead.manage", divisions.find(d => d.slug === "aira-startup-school")!.id)),
+      "startup-hr": !!divisions.find(d => d.slug === "aira-startup-school") && (await can("startup.hr.people.read", divisions.find(d => d.slug === "aira-startup-school")!.id) || await can("startup.hr.people.manage", divisions.find(d => d.slug === "aira-startup-school")!.id) || await can("startup.hr.input.submit", divisions.find(d => d.slug === "aira-startup-school")!.id) || await can("startup.hr.input.review", divisions.find(d => d.slug === "aira-startup-school")!.id) || await can("startup.hr.payroll.read", divisions.find(d => d.slug === "aira-startup-school")!.id) || await can("startup.hr.payroll.review", divisions.find(d => d.slug === "aira-startup-school")!.id)),
+      "startup-reports": !!divisions.find(d => d.slug === "aira-startup-school") && await can("startup.reports.read", divisions.find(d => d.slug === "aira-startup-school")!.id),
       advisor: hasRole([companyId, ...divisions.map(d => d.id)], "Senior Academic Advisor", "Junior Academic Advisor") && (await Promise.all(divisions.map(async d => d.slug === "aira-labs" ? await can("labs.sales.self", d.id) : await can("aira.crm.self", d.id)))).some(Boolean),
       developer: !!labs && hasRole([companyId, labs.id], "Software Developer", "Full Stack Developer", "Junior Developer") && await can("labs.delivery.assignee", labs.id) && await can("organization.read", labs.id),
       "business-development": !!labs && hasRole([labs.id], "Business Development Manager") && await can("labs.sales.read", labs.id) && await can("organization.read", labs.id),
       media: !!divisions.find(d => d.slug === "aira-media-company") && hasRole([divisions.find(d => d.slug === "aira-media-company")!.id], "Digital Marketing Manager", "Graphic Designer", "Video and Audio Editor", "AI Video Expert") && await can("task.read", divisions.find(d => d.slug === "aira-media-company")!.id) && await can("organization.read", divisions.find(d => d.slug === "aira-media-company")!.id)
     };
     if (allowed["startup-admissions"]) allowed["administrative-officer"] = false;
-    const available = employeeViews.filter(view => allowed[view]);
+    const available = employeeViews.filter(view => allowed[view] && !(view === "startup-admissions" && allowed["startup-operations"]));
     if (requested && !employeeViews.includes(requested as EmployeeView)) throw new AccessError("Employee view unavailable");
     if (requested && !allowed[requested as EmployeeView]) throw new AccessError("Employee view unavailable");
-    const view = (requested as EmployeeView | undefined) ?? (allowed.director ? "director" : allowed["startup-admissions"] ? "startup-admissions" : allowed["administrative-officer"] ? "administrative-officer" : available[0]);
+    const view = (requested as EmployeeView | undefined) ?? (allowed.director ? "director" : allowed["startup-operations"] ? "startup-operations" : allowed["startup-hr"] ? "startup-hr" : allowed["startup-leads"] ? "startup-leads" : allowed["startup-admissions"] ? "startup-admissions" : allowed["administrative-officer"] ? "administrative-officer" : available[0]);
     if (!view) return { view: null, available, companyId, name: ctx.user?.id ?? "", data: null };
 
     if (view === "manager") return { view, available, companyId, name: "Manager", data: {} };
     if (view === "administrative-officer") return { view, available, companyId, name: "Administrative Officer", data: await administrativeDesk.workspace(userId) };
+    if (view === "startup-operations") {
+      const data = await startupOperationsDesk.workspace(userId);
+      const centres = await startupCentreDesk.workspace(userId);
+      const governance = await startupRecordsGrievancesDesk.workspace(userId);
+      const finance = await startupFinanceDesk.workspace(userId);
+      const startup = divisions.find(d => d.slug === "aira-startup-school");
+      const admissionsAccess = !!startup && await can("startup.application.read", startup.id) && await can("startup.application.triage", startup.id);
+      return { view, available, companyId, name: data.canManage ? "Startup Skool Administrative Officer" : "Startup Skool Centre Manager", data: { ...data, centres, governance, finance, admissions: admissionsAccess ? await startupAdmissionsDesk.page(userId) : null, admissionsHref: "/sites/skillcity/admissions" } };
+    }
+    if (view === "startup-leads") {
+      const data = await startupLeadsDesk.page(userId);
+      return { view, available, companyId, name: data.canManage ? "Startup Skool AO" : "Admissions Caller", data };
+    }
+    if (view === "startup-hr") return { view, available, companyId, name: "Startup Skool HR & Payroll", data: await startupHrDesk.workspace(userId) };
+    if (view === "startup-reports") return { view, available, companyId, name: "Startup Skool Director Reports", data: await startupReportsDesk.workspace(userId, reportFilters) };
     if (view === "startup-admissions") return { view, available, companyId, name: "Startup Skool Administrative Officer", data: { divisionId: divisions.find(d => d.slug === "aira-startup-school")!.id } };
     if (view === "media") {
       const media = divisions.find(d => d.slug === "aira-media-company");

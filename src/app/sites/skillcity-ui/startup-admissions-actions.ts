@@ -56,6 +56,14 @@ export async function assignAdmissionsOfficer(_state: AdmissionsActionState, for
     return { message: assigned.assigned ? "Application assigned." : "Application unassigned." };
   } catch (error) { return result(error, "Assignment could not be saved."); }
 }
+export async function reviewProspectLeadMatch(_state: AdmissionsActionState, form: FormData): Promise<AdmissionsActionState> {
+  try {
+    const session = await context();
+    const outcome = await startupAdmissionsDesk.reviewLeadApplicationLink(session.userId, { caseId: field(form, "caseId"), leadId: field(form, "leadId"), decision: field(form, "decision"), reason: field(form, "reason") });
+    revalidatePath("/sites/skillcity/admissions"); revalidatePath("/admissions"); revalidatePath("/gateway?view=startup-leads");
+    return { message: outcome.linked ? "Prospect linked to this application. The lead and all call history remain available." : "Possible match marked as a different person. No records were merged." };
+  } catch (error) { return result(error, "Prospect match could not be saved. Refresh and review the current application."); }
+}
 export async function assignBossAdmissionsOfficer(brandId: string, _state: AdmissionsActionState, form: FormData): Promise<AdmissionsActionState> {
   try {
     const session = await requireSession();

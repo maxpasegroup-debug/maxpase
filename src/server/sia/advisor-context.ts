@@ -7,7 +7,7 @@ import { resultSchema, type SiaResponse } from "./registry";
 export async function advisorContext(client: PrismaClient, userId: string, scope: Selection): Promise<SiaResponse> {
   if (scope.projectId) throw new AccessError("Advisor briefing requires the assigned Labs division");
   const desk = await createSkillCityEmployeeDashboard(client).dashboard(userId, "advisor");
-  if (!desk.data || !("leads" in desk.data) || !Array.isArray(desk.data.leads) || desk.data.labsId !== scope.organizationId) throw new AccessError("Advisor scope unavailable");
+  if (!desk.data || !("labsId" in desk.data) || !("leads" in desk.data) || !Array.isArray(desk.data.leads) || desk.data.labsId !== scope.organizationId) throw new AccessError("Advisor scope unavailable");
   const now = new Date();
   const leads = desk.data.leads.slice(0, 30);
   const due = leads.filter(lead => {
