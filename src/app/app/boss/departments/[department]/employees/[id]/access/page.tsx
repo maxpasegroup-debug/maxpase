@@ -1,7 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 
 export default async function HrAccessPage({ params }: { params: Promise<{ department: string; id: string }> }) {
-  const { department, id } = await params;
+  const { department } = await params;
   if (department !== "hr") notFound();
-  redirect(`/app/boss/departments/hr/employees/${encodeURIComponent(id)}?tab=access`);
+  redirect("/app/boss/departments/hr?view=people");
 }

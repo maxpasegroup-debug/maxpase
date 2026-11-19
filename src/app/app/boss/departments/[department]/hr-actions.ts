@@ -16,7 +16,7 @@ import { niceJobsDirectorInvite } from "@/server/auth/nicejobs-director-invite";
 import { prisma } from "@/server/db";
 import { failureReason, safeDiagnostic } from "@/server/security/diagnostics";
 
-export type HrState = { message?: string; error?: string; employmentId?: string; inviteSent?: boolean; activationUrl?: string; shareMessage?: string; shareEmail?: string; removed?: boolean };
+export type HrState = { message?: string; error?: string; employmentId?: string; inviteSent?: boolean; dashboardReady?: boolean; activationUrl?: string; shareMessage?: string; shareEmail?: string; removed?: boolean };
 async function appoint(actorId: string, form: FormData): Promise<HrState> {
   const val = (key: string) => String(form.get(key) ?? "").trim();
   const data = z.object({ companyId: z.string().min(1), brandId: z.string().optional(), designation: z.string().trim().min(2).max(120), displayName: z.string().trim().min(2).max(200), email: z.email().max(254).transform(v => v.toLowerCase()), phone: z.string().trim().regex(/^\+?[0-9().\-\s]{7,24}$/), joiningDate: z.coerce.date(), reportToUserId: z.string().optional() }).strict().refine(input => input.designation === "Director" || !!input.reportToUserId, { path: ["reportToUserId"], message: "Choose who the employee reports to" }).parse({ companyId: val("companyId"), ...(val("brandId") ? { brandId: val("brandId") } : {}), designation: val("designation"), displayName: val("displayName"), email: val("email"), phone: val("phone"), joiningDate: val("joiningDate"), reportToUserId: val("reportToUserId") || undefined });
@@ -57,14 +57,14 @@ async function appoint(actorId: string, form: FormData): Promise<HrState> {
     const preparedRole = await skillCityRoleTemplates.ensureForAppointment(actorId, data.companyId, roleSpec.scopeSlug, roleSpec.roleKey);
     const target = await prisma.organization.findUnique({ where: { id: preparedRole.organizationId }, select: { id: true, name: true } });
     if (!target) throw new AccessError("The employee workspace could not be prepared.");
-    let delivery: { sent: boolean; activationUrl?: string };
+    let delivery: { sent: boolean; activationUrl?: string } = { sent: false };
     if (data.designation === "NICEJOBS Director") {
       const nationalNumber = data.phone.replace(/\D/g, "").replace(/^91(?=\d{10}$)/, "");
       const appointment = await hrAccess.prepareNiceJobsDirector(actorId, { employmentId, organizationId: target.id, roleId: preparedRole.roleId, country: "IN", nationalNumber, decisionReference: reference });
       delivery = await niceJobsDirectorInvite.send(actorId, { userId: appointment.userId });
     } else {
     const draft = await staffOnboardingService.prepare(actorId, { organizationId: target.id, existingPersonId: employee.person.id, roleId: preparedRole.roleId, managerUserId: reportingUserId, managerDecisionReference: reference, scopeDecisionReference: reference });
-      delivery = await staffInvite.send(actorId, { userId: draft.id, verificationEvidence: "Boss-approved appointment recorded in HR." });
+      if (staffInvite.deliveryReady()) delivery = await staffInvite.send(actorId, { userId: draft.id, verificationEvidence: "Boss-approved appointment recorded in HR." });
     }
     revalidatePath("/app/boss/departments/hr");
     revalidatePath("/app/boss/departments/hr/employees/" + encodeURIComponent(employmentId));
@@ -72,7 +72,7 @@ async function appoint(actorId: string, form: FormData): Promise<HrState> {
     const assignedBrand = employee.assignments.find(item => item.status === "ACTIVE")?.brand.name;
     const workArea = assignedBrand === "Startup School" ? "Startup Skool" : assignedBrand ?? employee.company.name;
     const shareMessage = activationUrl ? `Hello ${data.displayName}, your ${data.designation} workspace with ${workArea} is ready for setup. Start here: ${activationUrl}. We have emailed your verification code to ${data.email}. Enter that code on the setup page and create your own sign-in credential. Please do not share your verification code.` : undefined;
-    return { employmentId, inviteSent: delivery.sent, activationUrl, shareMessage, shareEmail: data.email, message: "Employee record and role-based access are prepared. Setup instructions were emailed; access activates after the employee verifies their identity and creates their own sign-in credential." };
+    return { employmentId, inviteSent: delivery.sent, dashboardReady: true, activationUrl, shareMessage, shareEmail: data.email, message: delivery.sent ? "Employee and role-based dashboard are set up. The employee activates sign-in by verifying their email and creating their own credential." : "Employee and role-based dashboard are set up. Email delivery is not configured yet, so sign-in stays inactive until secure setup email can be sent and verified." };
   } catch (error) {
     if (employmentId) { revalidatePath("/app/boss/departments/hr"); return { employmentId, message: "The employee record is saved. Dashboard access remains pending until the setup invitation is completed.", error: error instanceof AccessError ? error.message : "Setup access could not be prepared. Open the employee record to review it." }; }
     throw error;
@@ -88,6 +88,39 @@ export async function hrAction(_state: HrState, form: FormData): Promise<HrState
   try {
     if (value("intent") === "appoint") return await appoint(session.userId, form);
     switch (value("intent")) {
+      case "connect-dashboard": {
+        employmentId = value("employmentId");
+        const employee = await hrEmploymentService.get(session.userId, employmentId);
+        const company = await prisma.organization.findUnique({ where: { id: employee.companyId }, select: { slug: true } });
+        if (company?.slug !== "aira-skill-city" || employee.status !== "ACTIVE" || !employee.person.email) throw new AccessError("An active AIRA Skill City employee with a work email is required");
+        let linked = await prisma.user.findFirst({ where: { personId: employee.person.id }, select: { id: true, status: true, passwordHash: true, emailVerifiedAt: true, person: { select: { metadata: true } } } });
+        if (linked?.status === "ACTIVE") throw new AccessError("This employee already has an active account");
+        if (linked) {
+          let metadata: Record<string, unknown>;
+          try { metadata = JSON.parse(linked.person?.metadata ?? "{}"); } catch { throw new AccessError("This existing account needs identity review; it was not changed"); }
+          if (linked.passwordHash || linked.emailVerifiedAt || metadata.authenticationRealm !== "skillcity" || !["DRAFT", "INVITED"].includes(String(metadata.staffOnboarding))) throw new AccessError("This existing account needs identity review; it was not changed");
+          if (staffInvite.deliveryReady()) await staffInvite.send(session.userId, { userId: linked.id, verificationEvidence: "Boss-approved HR appointment recorded in HR." });
+        } else {
+          const assignment = employee.assignments.find(row => row.status === "ACTIVE");
+          const scopeSlug = assignment ? marketingDivisionSlug(assignment.brand.slug) : "aira-skill-city";
+          if (!scopeSlug) throw new AccessError("This work area does not have an employee dashboard configured");
+          const roleSpec = resolveStaffRoleTemplate(scopeSlug, assignment?.designation ?? employee.designation ?? "");
+          const preparedRole = await skillCityRoleTemplates.ensureForAppointment(session.userId, employee.companyId, roleSpec.scopeSlug, roleSpec.roleKey);
+          let managerUserId = session.userId;
+          if (!["Director", "Division Director"].includes(roleSpec.roleName)) {
+            const managerPersonId = assignment?.managerPersonId;
+            const manager = managerPersonId ? await prisma.user.findFirst({ where: { personId: managerPersonId, status: "ACTIVE", emailVerifiedAt: { not: null } }, select: { id: true } }) : null;
+            if (!manager) throw new AccessError("Choose an active, verified reporting person on the employee's work assignment first");
+            managerUserId = manager.id;
+          }
+          const draft = await staffOnboardingService.prepare(session.userId, { organizationId: preparedRole.organizationId, existingPersonId: employee.person.id, roleId: preparedRole.roleId, managerUserId, managerDecisionReference: "Boss-approved HR appointment", scopeDecisionReference: "Boss-approved HR appointment" });
+          linked = { id: draft.id, status: "INACTIVE", passwordHash: null, emailVerifiedAt: null, person: { metadata: null } };
+          if (staffInvite.deliveryReady()) await staffInvite.send(session.userId, { userId: linked.id, verificationEvidence: "Boss-approved HR appointment recorded in HR." });
+        }
+        revalidatePath("/app/boss/departments/hr");
+        revalidatePath(`/app/boss/departments/hr/employees/${encodeURIComponent(employmentId)}`);
+        return { employmentId, dashboardReady: true, inviteSent: staffInvite.deliveryReady(), message: staffInvite.deliveryReady() ? "Startup Skool dashboard role connected and secure setup email sent. The Director activates sign-in after verifying email and creating their own credential." : "Startup Skool dashboard role and pending account connected. Email delivery is not configured, so sign-in remains inactive until the secure setup email is sent and verified." };
+      }
       case "create": employmentId = await hrEmploymentService.create(session.userId, { companyId: value("companyId"), ...(optional("personId") ? { personId: value("personId") } : { displayName: value("displayName"), email: value("email"), phone: optional("phone"), linkExisting: value("linkExisting") === "on" }), contactEmail: optional("contactEmail"), contactPhone: optional("contactPhone"), emergencyContactName: optional("emergencyContactName"), emergencyContactRelationship: optional("emergencyContactRelationship"), emergencyContactPhone: optional("emergencyContactPhone"), emergencyContactEmail: optional("emergencyContactEmail"), designation: optional("designation"), employmentType: optional("employmentType"), joiningDate: optional("joiningDate"), initialBrandIds: form.getAll("initialBrandIds").map(String), initialDepartmentId: optional("initialDepartmentId"), initialManagerPersonId: optional("initialManagerPersonId"), assignmentDecisionReference: optional("assignmentDecisionReference") }); break;
       case "assign": await hrEmploymentService.addAssignment(session.userId, { employmentId: value("employmentId"), brandId: value("brandId"), departmentId: optional("departmentId"), managerPersonId: optional("managerPersonId"), designation: value("designation"), startDate: value("startDate"), decisionReference: value("decisionReference") }); break;
       case "employment": await hrEmploymentService.changeEmployment(session.userId, { employmentId: value("employmentId"), action: value("transition"), decisionReference: value("decisionReference"), designation: optional("designation"), employmentType: optional("employmentType"), joiningDate: optional("joiningDate") }); break;

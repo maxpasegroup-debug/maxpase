@@ -1,7 +1,6 @@
 "use client";
 
 import { useActionState, useEffect, useRef, useState } from "react";
-import Link from "next/link";
 import { ArrowRight, UserPlus, X } from "lucide-react";
 import { hrAction, type HrState } from "./hr-actions";
 
@@ -48,7 +47,7 @@ function HireEmployeeForm({ companies, brands, reportingChoices, initialCompanyI
     const email = state.shareEmail ?? "";
     return <section className="boss-hr-hire-result" role="status" aria-live="polite">
       <span className="eyebrow">EMPLOYEE APPOINTMENT</span>
-      <h3>{state.inviteSent ? "Employee added. Setup email sent." : "Employee record saved."}</h3>
+      <h3>{state.dashboardReady ? "Employee added. Dashboard connected." : state.inviteSent ? "Employee added. Setup email sent." : "Employee record saved."}</h3>
       <p>{state.message}</p>
       {state.error && <p role="alert">{state.error}</p>}
       {state.activationUrl && <>
@@ -60,7 +59,7 @@ function HireEmployeeForm({ companies, brands, reportingChoices, initialCompanyI
         </div>
         <p className="boss-hr-hire-note">The verification code is sent to the employee’s work email. Do not forward the code.</p>
       </>}
-      <div className="boss-hr-hire-actions"><Link className="button secondary" href={`/app/boss/departments/hr/employees/${encodeURIComponent(state.employmentId)}`}>View employee</Link><button type="button" className="button" onClick={onClose}>Done</button></div>
+      <div className="boss-hr-hire-actions"><button type="button" className="button" onClick={onClose}>Done</button></div>
     </section>;
   }
 
