@@ -29,11 +29,13 @@ function HireEmployeeForm({ companies, brands, reportingChoices, initialCompanyI
   const availableBrands = brands.filter(item => item.organizationId === companyId && item.slug !== "aira-skill-city");
   const selectedBrand = availableBrands.find(item => item.id === brandId);
   const positionOptions = positions(company?.slug ?? "", selectedBrand?.slug);
+  const directorAppointment = position === "Director";
   const startupAoAppointment = selectedBrand?.slug === "startup-school" && position === "Administrative Officer";
   const reporters = reportingChoices.filter(choice =>
     (choice.brandId === brandId || !brandId && choice.brandId === null) &&
     (!startupAoAppointment || /\bdirector\b/i.test(choice.title))
   );
+  const requiresReporter = position !== "" && !directorAppointment;
 
   useEffect(() => {
     if (!pending) { setSlowRequest(false); return; }
@@ -64,9 +66,10 @@ function HireEmployeeForm({ companies, brands, reportingChoices, initialCompanyI
 
   function validate(event: React.FormEvent<HTMLFormElement>) {
     const data = new FormData(event.currentTarget);
-    const required = [companyId, position, String(data.get("reportToUserId") ?? ""), String(data.get("displayName") ?? "").trim(), String(data.get("email") ?? "").trim(), String(data.get("phone") ?? "").trim(), String(data.get("joiningDate") ?? "")];
-    if (required.some(value => !value)) { event.preventDefault(); setFormError("Complete the company, role, reporting person and four employee details."); return; }
-    if (!reporters.some(person => person.userId === String(data.get("reportToUserId")))) { event.preventDefault(); setFormError("Choose a reporting person for the selected work area."); return; }
+    const required = [companyId, position, String(data.get("displayName") ?? "").trim(), String(data.get("email") ?? "").trim(), String(data.get("phone") ?? "").trim(), String(data.get("joiningDate") ?? "")];
+    if (required.some(value => !value)) { event.preventDefault(); setFormError("Choose the company, team and role, then complete the four employee details."); return; }
+    if (requiresReporter && !String(data.get("reportToUserId") ?? "")) { event.preventDefault(); setFormError("Choose who this employee reports to."); return; }
+    if (requiresReporter && !reporters.some(person => person.userId === String(data.get("reportToUserId")))) { event.preventDefault(); setFormError("Choose an available reporting person for this team."); return; }
     setFormError("");
   }
 
@@ -77,25 +80,26 @@ function HireEmployeeForm({ companies, brands, reportingChoices, initialCompanyI
     {brandId && <input type="hidden" name="brandId" value={brandId}/>}
     {brandId && <input type="hidden" name="initialBrandIds" value={brandId}/>}
     {brandId && <input type="hidden" name="assignmentDecisionReference" value="Boss HR appointment"/>}
-    <header className="boss-hr-hire-step-heading"><span>ONE SIMPLE FORM</span><h3>Employee details</h3><p>Select the role, reporting person and basic details.</p></header>
+    <header className="boss-hr-hire-step-heading"><span>ONE SIMPLE FORM</span><h3>Employee details</h3><p>Choose their team and role, then enter their basic details.</p></header>
     <div className="boss-hr-hire-fields">
       <div className="boss-hr-hire-grid">
         <label>Company<select value={companyId} onChange={event => { setCompanyId(event.target.value); setBrandId(""); setPosition(""); }} required><option value="">Choose a company</option>{companies.map(item => <option key={item.organizationId} value={item.organizationId}>{item.legalName ?? item.displayName}</option>)}</select></label>
-        <label>Brand or work area<select value={brandId} onChange={event => { setBrandId(event.target.value); setPosition(""); }}><option value="">Company-wide</option>{availableBrands.map(item => <option key={item.id} value={item.id}>{item.parentName ? `${item.parentName} / ` : ""}{item.slug === "startup-school" ? "Startup Skool" : item.name}</option>)}</select></label>
-        <label>Position<select value={position} onChange={event => setPosition(event.target.value)} required><option value="">Choose a position</option>{positionOptions.map(option => <option key={option} value={option}>{option}</option>)}</select></label>
-        <label>Reports to<select name="reportToUserId" required defaultValue=""><option value="">{startupAoAppointment ? "Choose Startup Skool Director" : "Choose Boss, Director or Manager"}</option>{reporters.map(person => <option key={person.userId} value={person.userId}>{person.name} · {person.title}</option>)}</select></label>
+        <label>Team / work area<select value={brandId} onChange={event => { setBrandId(event.target.value); setPosition(""); }}><option value="">Company-wide</option>{availableBrands.map(item => <option key={item.id} value={item.id}>{item.parentName ? `${item.parentName} / ` : ""}{item.slug === "startup-school" ? "Startup Skool" : item.name}</option>)}</select></label>
+        <label>Role<select value={position} onChange={event => setPosition(event.target.value)} required><option value="">Choose a role</option>{positionOptions.map(option => <option key={option} value={option}>{option}</option>)}</select></label>
+        {requiresReporter && <label>Reports to<select name="reportToUserId" required defaultValue=""><option value="">{startupAoAppointment ? "Choose Startup Skool Director" : "Choose a reporting person"}</option>{reporters.map(person => <option key={person.userId} value={person.userId}>{person.name} · {person.title}</option>)}</select></label>}
+        {directorAppointment && <p className="boss-hr-hire-note" role="status">Reports directly to the MAXPASE Boss.</p>}
         <label>Full name<input name="displayName" autoComplete="name" maxLength={200} required/></label>
         <label>Work email<input name="email" type="email" autoComplete="email" maxLength={254} required/></label>
         <label>Mobile number<input name="phone" type="tel" autoComplete="tel" inputMode="tel" placeholder="+91 98765 43210" maxLength={24} required/></label>
         <label>Joining date<input name="joiningDate" type="date" required/></label>
       </div>
       {!positionOptions.length && <p className="boss-hr-hire-note">No approved dashboard position is configured for this work area.</p>}
-      {positionOptions.length > 0 && !reporters.length && <p className="boss-hr-hire-note">{startupAoAppointment ? "No active, verified Startup Skool Director is available. Add and activate the Director first, then appoint the AO." : "No active, verified reporting person is available for this work area. Ask the Boss to activate a Director or Manager first."}</p>}
+      {requiresReporter && !reporters.length && <p className="boss-hr-hire-note">{startupAoAppointment ? "No active, verified Startup Skool Director is available. Add and activate the Director first, then appoint the AO." : "No active, verified reporting person is available for this team. Activate a Director or Manager first."}</p>}
       <p className="boss-hr-hire-note">Submitting creates the employee record, assigns the role-based workspace and emails secure setup instructions. The employee verifies their email and sets their own password or PIN.</p>
     </div>
     {(formError || state.error) && <p role="alert" className="boss-hr-hire-error">{formError || state.error}</p>}
     {pending && slowRequest && <p role="status" className="boss-hr-hire-note">Still working. Do not submit again; check the employee directory before retrying.</p>}
-    <footer className="boss-hr-hire-actions"><button className="button" disabled={pending || !positionOptions.length || !reporters.length}>{pending ? slowRequest ? "Still adding employee…" : "Adding employee…" : "Add employee and share setup"} <ArrowRight size={16}/></button></footer>
+    <footer className="boss-hr-hire-actions"><button className="button" disabled={pending || !positionOptions.length || (requiresReporter && !reporters.length)}>{pending ? slowRequest ? "Still adding employee…" : "Adding employee…" : "Add employee and share setup"} <ArrowRight size={16}/></button></footer>
   </form>;
 }
 
@@ -104,7 +108,7 @@ export function HrOnboarding({ companies, brands, reportingChoices, initialCompa
   const [formKey, setFormKey] = useState(0);
   function close() { dialog.current?.close(); }
   return <>
-    <button type="button" className="boss-hr-action-primary" onClick={() => dialog.current?.showModal()}><UserPlus/><strong>Add team member</strong><small>Pick their workspace, manager and position</small><ArrowRight/></button>
+    <button type="button" className="boss-hr-action-primary" onClick={() => dialog.current?.showModal()}><UserPlus/><strong>Add team member</strong><small>Choose their team and role, then add basic details</small><ArrowRight/></button>
     <dialog ref={dialog} className="boss-hr-hire-dialog" aria-labelledby="boss-hr-hire-title" onClose={() => setFormKey(key => key + 1)}>
       <header className="boss-hr-hire-dialog-header"><div><p className="eyebrow">BOSS DASHBOARD / PEOPLE</p><h2 id="boss-hr-hire-title">Add team member</h2></div><button type="button" aria-label="Close" onClick={close}><X size={20}/></button></header>
       <HireEmployeeForm key={formKey} companies={companies} brands={brands} reportingChoices={reportingChoices} initialCompanyId={initialCompanyId} onClose={close}/>

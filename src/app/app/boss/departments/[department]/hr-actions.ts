@@ -7,6 +7,7 @@ import { AccessError } from "@/server/authorization/engine";
 import { hrEmploymentService } from "@/server/group/hr-employment";
 import { hrCompanyConfig } from "@/server/group/hr-company-config";
 import { hrAccess } from "@/server/group/hr-access";
+import { createBossService } from "@/server/group/boss-service";
 import { staffOnboardingService } from "@/server/skillcity/staff-onboarding";
 import { staffInvite } from "@/server/skillcity/staff-invite";
 import { niceJobsDirectorInvite } from "@/server/auth/nicejobs-director-invite";
@@ -16,12 +17,14 @@ import { safeDiagnostic } from "@/server/security/diagnostics";
 export type HrState = { message?: string; error?: string; employmentId?: string; inviteSent?: boolean; activationUrl?: string; shareMessage?: string; shareEmail?: string; removed?: boolean };
 async function appoint(actorId: string, form: FormData): Promise<HrState> {
   const val = (key: string) => String(form.get(key) ?? "").trim();
-  const data = z.object({ companyId: z.string().min(1), brandId: z.string().optional(), designation: z.string().trim().min(2).max(120), displayName: z.string().trim().min(2).max(200), email: z.email().max(254).transform(v => v.toLowerCase()), phone: z.string().trim().regex(/^\+?[0-9().\-\s]{7,24}$/), joiningDate: z.coerce.date(), reportToUserId: z.string().min(1) }).strict().parse({ companyId: val("companyId"), ...(val("brandId") ? { brandId: val("brandId") } : {}), designation: val("designation"), displayName: val("displayName"), email: val("email"), phone: val("phone"), joiningDate: val("joiningDate"), reportToUserId: val("reportToUserId") });
+  const data = z.object({ companyId: z.string().min(1), brandId: z.string().optional(), designation: z.string().trim().min(2).max(120), displayName: z.string().trim().min(2).max(200), email: z.email().max(254).transform(v => v.toLowerCase()), phone: z.string().trim().regex(/^\+?[0-9().\-\s]{7,24}$/), joiningDate: z.coerce.date(), reportToUserId: z.string().optional() }).strict().refine(input => input.designation === "Director" || !!input.reportToUserId, { path: ["reportToUserId"], message: "Choose who the employee reports to" }).parse({ companyId: val("companyId"), ...(val("brandId") ? { brandId: val("brandId") } : {}), designation: val("designation"), displayName: val("displayName"), email: val("email"), phone: val("phone"), joiningDate: val("joiningDate"), reportToUserId: val("reportToUserId") || undefined });
   const reference = "Boss HR appointment";
   if (data.designation === "NICEJOBS Director") throw new AccessError("NICEJOBS administration is managed from the Boss NICEJOBS module.");
+  const reportingUserId = data.designation === "Director" ? actorId : data.reportToUserId!;
+  if (data.designation === "Director") await createBossService(prisma).authority(actorId);
   let employmentId: string | undefined;
   try {
-    const reportingPerson = await prisma.user.findUnique({ where: { id: data.reportToUserId }, select: { personId: true, status: true, emailVerifiedAt: true } });
+    const reportingPerson = await prisma.user.findUnique({ where: { id: reportingUserId }, select: { personId: true, status: true, emailVerifiedAt: true } });
     if (!reportingPerson?.personId || reportingPerson.status !== "ACTIVE" || !reportingPerson.emailVerifiedAt) throw new AccessError("The selected reporting person is no longer active. Choose another person.");
     const requestedStartupAo = data.designation === "Administrative Officer" && !!data.brandId;
     if (requestedStartupAo) {
@@ -61,7 +64,7 @@ async function appoint(actorId: string, form: FormData): Promise<HrState> {
       const appointment = await hrAccess.prepareNiceJobsDirector(actorId, { employmentId, organizationId: target.id, roleId: role.id, country: "IN", nationalNumber, decisionReference: reference });
       delivery = await niceJobsDirectorInvite.send(actorId, { userId: appointment.userId });
     } else {
-      const draft = await staffOnboardingService.prepare(actorId, { organizationId: target.id, existingPersonId: employee.person.id, roleId: role.id, managerUserId: data.reportToUserId, managerDecisionReference: reference, scopeDecisionReference: reference });
+    const draft = await staffOnboardingService.prepare(actorId, { organizationId: target.id, existingPersonId: employee.person.id, roleId: role.id, managerUserId: reportingUserId, managerDecisionReference: reference, scopeDecisionReference: reference });
       delivery = await staffInvite.send(actorId, { userId: draft.id, verificationEvidence: "Boss-approved appointment recorded in HR." });
     }
     revalidatePath("/app/boss/departments/hr");
