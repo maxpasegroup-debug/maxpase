@@ -39,8 +39,9 @@ function HireEmployeeForm({ companies, brands, initialCompanyId, onClose }: { co
     const message = state.shareMessage ?? "";
     const email = state.shareEmail ?? "";
     return <section className="boss-hr-hire-result" role="status" aria-live="polite">
-      <span className="eyebrow">EMPLOYEE APPOINTMENT</span>
-      <h3>{state.dashboardReady ? "Employee added. Dashboard role assigned." : state.inviteSent ? "Employee added. Setup email sent." : "Employee record saved."}</h3>
+      <span className="eyebrow">EMPLOYEE ADDED</span>
+      <h3>{state.dashboardReady ? "Employee added. Dashboard assigned." : "Employee record saved."}</h3>
+      <dl className="boss-hr-hire-outcome"><div><dt>Employment</dt><dd>{state.dashboardReady ? "Active" : "Saved"}</dd></div><div><dt>Dashboard</dt><dd>{state.dashboardReady ? "Role assigned" : "Needs setup"}</dd></div><div><dt>Invitation</dt><dd>{state.inviteSent ? "Email sent" : state.activationUrl ? "Ready to share" : "Not sent"}</dd></div><div><dt>Sign-in</dt><dd>{state.inviteSent ? "Employee verifies email and sets their own credential" : "Available after secure invitation"}</dd></div></dl>
       <p>{state.message}</p>
       {state.error && <p role="alert">{state.error}</p>}
       {state.activationUrl && <>
@@ -97,9 +98,9 @@ export function HrOnboarding({ companies, brands, initialCompanyId }: { companie
   const [formKey, setFormKey] = useState(0);
   function close() { dialog.current?.close(); }
   return <>
-    <button type="button" className="boss-hr-action-primary" onClick={() => dialog.current?.showModal()}><UserPlus/><strong>Add team member</strong><small>Choose their team and role, then add basic details</small><ArrowRight/></button>
+    <button type="button" className="boss-hr-action-primary" onClick={() => dialog.current?.showModal()}><UserPlus/><strong>Add Employee</strong><small>Choose a role, enter four details, and assign their dashboard</small><ArrowRight/></button>
     <dialog ref={dialog} className="boss-hr-hire-dialog" aria-labelledby="boss-hr-hire-title" onClose={() => setFormKey(key => key + 1)}>
-      <header className="boss-hr-hire-dialog-header"><div><p className="eyebrow">BOSS DASHBOARD / PEOPLE</p><h2 id="boss-hr-hire-title">Add team member</h2></div><button type="button" aria-label="Close" onClick={close}><X size={20}/></button></header>
+      <header className="boss-hr-hire-dialog-header"><div><p className="eyebrow">BOSS DASHBOARD / PEOPLE</p><h2 id="boss-hr-hire-title">Add Employee</h2></div><button type="button" aria-label="Close" onClick={close}><X size={20}/></button></header>
       <HireEmployeeForm key={formKey} companies={companies} brands={brands} initialCompanyId={initialCompanyId} onClose={close}/>
     </dialog>
   </>;

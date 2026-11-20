@@ -23,12 +23,13 @@ export function hrProfileCompleteness(profile: { displayName?: string | null; em
 
 export function createHrEmploymentService(client: PrismaClient = prisma) {
   const boss = createBossService(client);
-  async function authorized(actorId: string, db: Prisma.TransactionClient, companyId: string, action = "person.read") {
+  async function authorized(actorId: string, db: Prisma.TransactionClient, companyId: string, action = "person.read", bossAppointment = false) {
     const { ctx, root } = await boss.authority(actorId, db);
     const company = await db.organization.findFirst({ where: { id: companyId, type: "COMPANY", parentId: root.id }, select: { id: true, status: true } });
     if (!company) throw new AccessError("Company unavailable");
     if (action === "person.create" && company.status !== "ACTIVE") throw new AccessError("Company is not active");
-    await ctx.requireAccess(action, { organizationId: companyId });
+    if (bossAppointment) await boss.authority(actorId, db);
+    else await ctx.requireAccess(action, { organizationId: companyId });
     return ctx;
   }
   async function list(actorId: string, query: { companyId?: string; brandId?: string; departmentId?: string; status?: string; search?: string; page?: number } = {}) {
@@ -81,11 +82,11 @@ export function createHrEmploymentService(client: PrismaClient = prisma) {
     if (!initialBrandIds.length && (input.initialDepartmentId || input.initialManagerPersonId || input.assignmentDecisionReference)) throw new AccessError("Select a brand before configuring an assignment");
     if (initialBrandIds.length && (!input.designation || !input.joiningDate || !input.assignmentDecisionReference)) throw new AccessError("Designation, joining date and decision reference are required for brand assignments");
     return client.$transaction(async db => {
-      const ctx = await authorized(actorId, db, input.companyId, "person.create");
+      const ctx = await authorized(actorId, db, input.companyId, "person.create", input.activateImmediately === true);
       let groupBossAppointment = false;
       if (input.activateImmediately) { await boss.authority(actorId, db); groupBossAppointment = true; }
       if (initialBrandIds.length) {
-        await ctx.requireAccess("person.update", { organizationId: input.companyId });
+        if (!groupBossAppointment) await ctx.requireAccess("person.update", { organizationId: input.companyId });
         const found = await db.brand.findMany({ where: { id: { in: initialBrandIds }, organizationId: input.companyId, status: "ACTIVE" }, select: { id: true } });
         if (found.length !== initialBrandIds.length) throw new AccessError("An assignment brand is unavailable in this company");
         if (input.initialDepartmentId) {

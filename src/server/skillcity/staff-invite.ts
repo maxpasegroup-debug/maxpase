@@ -47,14 +47,17 @@ export function createStaffInvite(client: PrismaClient = prisma, env: Record<str
       if (!(await db.employment.findFirst({ where: { personId: user.personId!, companyId: company.id, status: "ACTIVE" } }))) throw new AccessError("Active company employment required before invitation");
       if (metadata.authenticationRealm === "labs" && !(await db.hrAssignment.findFirst({ where: { employment: { personId: user.personId!, companyId: company.id, status: "ACTIVE" }, status: "ACTIVE", brand: { organizationId: company.id, slug: "aira-labs", status: "ACTIVE" } }, select: { id: true } }))) throw new AccessError("Active AIRA Labs brand assignment required before invitation");
       const ctx = await createAccessContext(actorUserId, db, undefined, { organizationId: membership.organizationId });
-      for (const permission of ["user.update", "person.update", "membership.manage", "membership.assign_role"]) await ctx.requireAccess(permission, { organizationId: membership.organizationId });
+      const bossAppointment = metadata.appointmentAuthority === "GROUP_BOSS";
+      if (bossAppointment) await createBossService(client).authority(actorUserId, db);
+      else for (const permission of ["user.update", "person.update", "membership.manage", "membership.assign_role"]) await ctx.requireAccess(permission, { organizationId: membership.organizationId });
       const role = membership.roles[0]?.role;
       if (!role || !memberScope || role.key === "nicejobs-director" || !isPreparedStaffRole(role.key, memberScope.slug) || metadata.authenticationRealm !== staffPortalForRole(role.key) || metadata.credentialKind !== "STAFF_PASSWORD" || role.organizationId !== membership.organizationId || !hasStaffWorkspaceCapabilities(role.key, role.permissions.map(item => item.permission.key))) throw new AccessError("Role permissions are not prepared");
       if (role.name === "Director" || role.name === "Division Director") {
         await createBossService(client).authority(actorUserId, db);
         if (membership.scope !== (role.name === "Director" ? "DESCENDANTS" : "ORGANIZATION") || !role.permissions.some(item => item.permission.key === "decision.decide")) throw new AccessError("Director authority is not prepared");
-      } else if (metadata.appointmentAuthority === "GROUP_BOSS") {
-        await createBossService(client).authority(actorUserId, db);
+      } else if (bossAppointment) {
+        // Boss authority was checked above; scoped manager delegation is not
+        // required for a role created from the fixed HR appointment templates.
       } else {
         const manager = await db.reportingRelationship.findFirst({
           where: {

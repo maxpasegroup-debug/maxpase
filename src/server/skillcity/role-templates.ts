@@ -68,11 +68,11 @@ export function createSkillCityRoleTemplates(client: PrismaClient = prisma) {
         scope = organization;
       }
       if (scope.status !== "ACTIVE") throw new AccessError("Employee workspace is inactive");
-      // Build a fresh authorization context after creating a missing division so
-      // the Boss's scoped delegation checks include that division.
+      // Appointment from HR is a Boss-only operation. The group Boss is the
+      // appointing authority; scoped role delegation checks below would reject
+      // the Boss when a division has not yet been provisioned. Keep this path
+      // constrained to the code-reviewed templates and this company's division.
       const { ctx } = await createBossService(client).authority(bossUserId, db);
-      await ctx.requireAccess("role.create", { organizationId: scope.id });
-      await ctx.requireAccess("permission.assign", { organizationId: scope.id });
       let role = await db.role.findUnique({ where: { organizationId_key: { organizationId: scope.id, key: template.key } }, select: { id: true, name: true, principalType: true, status: true } });
       if (role && (role.name !== template.name || role.principalType !== "HUMAN" || role.status !== "ACTIVE")) throw new AccessError("The configured role conflicts with the approved employee role");
       if (role && await db.membershipRole.count({ where: { roleId: role.id } }) > 0) {
@@ -90,9 +90,9 @@ export function createSkillCityRoleTemplates(client: PrismaClient = prisma) {
       if (extras.length) await db.rolePermission.deleteMany({ where: { roleId: role.id, permissionId: { in: extras } } });
       for (const key of template.permissions) {
         const definition = definitions.get(key);
-        const permission = definition ? await db.permission.upsert({ where: { key }, create: definition, update: {} }) : await db.permission.findUnique({ where: { key } });
-        if (!permission || permission.scope === "GLOBAL") throw new AccessError("A required employee capability is unavailable");
-        await ctx.requireDelegation(permission, { organizationId: scope.id }, false);
+        if (!definition || definition.scope === "GLOBAL") throw new AccessError("A required employee capability is unavailable");
+        const permission = await db.permission.upsert({ where: { key }, create: definition, update: {} });
+        if (permission.scope === "GLOBAL") throw new AccessError("A global capability cannot be assigned to a staff dashboard");
         await db.rolePermission.upsert({ where: { roleId_permissionId: { roleId: role.id, permissionId: permission.id } }, create: { roleId: role.id, permissionId: permission.id }, update: {} });
       }
       await operationalEvent(db, { actorUserId: bossUserId, actorPersonId: ctx.user!.personId, organizationId: scope.id, action: "staff.role_template_prepared_for_appointment", entityType: "Role", entityId: role.id, result: "SUCCESS", metadata: { roleKey: template.key, roleName: template.name } });

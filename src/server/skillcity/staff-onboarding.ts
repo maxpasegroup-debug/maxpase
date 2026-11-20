@@ -47,6 +47,9 @@ export function createStaffOnboardingService(client: PrismaClient = prisma) {
       let groupBossAppointment = false;
       try { await boss.authority(actorUserId, db); groupBossAppointment = true; }
       catch (error) { if (!(error instanceof AccessError)) throw error; }
+      if (!groupBossAppointment) {
+        for (const permission of ["person.create", "user.create", "membership.manage", "membership.assign_role"]) await ctx.requireAccess(permission, { organizationId: scope.id });
+      }
       const role = await db.role.findUnique({ where: { id: input.roleId }, select: { id: true, key: true, name: true, organizationId: true, principalType: true, status: true, permissions: { select: { permission: { select: { key: true } } } } } });
       if (!role || !isPreparedStaffRole(role.key, scope.slug) || !hasStaffWorkspaceCapabilities(role.key, role.permissions.map(item => item.permission.key)) || role.organizationId !== scope.id || role.principalType !== "HUMAN" || role.status !== "ACTIVE") throw new AccessError("Role unavailable in this scope");
       if (role.key === "nicejobs-director") throw new AccessError("NICEJOBS Director access must be granted to an existing verified NICEJOBS account through the HR access review");
@@ -55,7 +58,7 @@ export function createStaffOnboardingService(client: PrismaClient = prisma) {
         await boss.authority(actorUserId, db);
       }
       const descendantScope = scope.id === company.id && ["Director", "Senior Academic Advisor", "Administrative Officer"].includes(role.name);
-      if (descendantScope) await ctx.requireAccess("membership.scope.manage", { organizationId: scope.id });
+      if (descendantScope && !groupBossAppointment) await ctx.requireAccess("membership.scope.manage", { organizationId: scope.id });
       if (["Software Developer", "Full Stack Developer", "Junior Developer"].includes(role.name) && (await db.organization.findUnique({ where: { slug: "aira-labs" }, select: { id: true } }))?.id !== scope.id) throw new AccessError("Developer assignment requires Labs scope");
       if (input.managerUserId) {
         const manager = await db.user.findUnique({ where: { id: input.managerUserId }, select: { personId: true, status: true, emailVerifiedAt: true } });
@@ -79,7 +82,15 @@ export function createStaffOnboardingService(client: PrismaClient = prisma) {
       }
       const user = await db.user.create({ data: { email: person.email!, personId: person.id, status: "INACTIVE" } });
       const membership = await db.membership.create({ data: { personId: person.id, organizationId: scope.id, scope: descendantScope ? "DESCENDANTS" : "ORGANIZATION", status: "INVITED", title: role.name } });
-      await setHumanMembershipRole(db, ctx, membership.id, role.id, true);
+      if (groupBossAppointment) {
+        // The signed-in group Boss may assign only the prepared, active role
+        // template validated above. Role permissions are constrained by the
+        // reviewed template and cannot include global capabilities.
+        await db.membershipRole.create({ data: { membershipId: membership.id, roleId: role.id } });
+        await operationalEvent(db, { actorUserId, actorPersonId: ctx.user!.personId, organizationId: scope.id, action: "staff.dashboard_role_assigned_by_boss", entityType: "Membership", entityId: membership.id, result: "SUCCESS", metadata: { roleKey: role.key, roleId: role.id } });
+      } else {
+        await setHumanMembershipRole(db, ctx, membership.id, role.id, true);
+      }
       if (input.managerUserId) {
         const manager = await db.user.findUniqueOrThrow({ where: { id: input.managerUserId }, select: { personId: true } });
         if (manager.personId === person.id) throw new AccessError("Employee cannot report to themself");
