@@ -3264,6 +3264,19 @@ a.nj-director-metric:hover { transform: translateY(-1px); box-shadow: 0 12px 24p
 .boss-hr-remove-error { color: #a11; font-weight: 600; }
 .boss-hr-remove-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
 .danger-button { border-color: #8b1828 !important; background: #8b1828 !important; color: white !important; }
+.boss-hr-directory-table th:last-child { width: 150px; }
+.boss-hr-row-actions { display: flex; align-items: center; gap: 6px; }
+.boss-hr-row-edit,
+.boss-hr-remove-trigger.is-compact { min-height: 30px; padding: 4px 9px; border-radius: 7px; font-size: 11px; line-height: 1.2; }
+.boss-hr-remove-trigger.is-compact { border-color: #e5c9cd; color: #8b1828; }
+.boss-hr-remove-trigger.is-compact:hover { border-color: #8b1828; background: #fff5f5; }
+.boss-hr-employee-profile-page { max-width: 1260px; margin-inline: auto; }
+.boss-hr-profile-heading { align-items: center; }
+.boss-hr-profile-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin: 18px 0; }
+.boss-hr-profile-summary > div { display: grid; gap: 5px; min-width: 0; padding: 14px; border: 1px solid var(--line); border-radius: 10px; }
+.boss-hr-profile-summary small { color: var(--muted); font-size: 11px; }
+.boss-hr-profile-summary strong { overflow-wrap: anywhere; font-size: 13px; }
+@media (max-width: 760px) { .boss-hr-profile-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); } .boss-hr-row-actions { align-items: flex-start; flex-direction: column; } }
 .sc-governance-stack { display: grid; gap: 18px; }
 .sc-record-filters { display: grid; grid-template-columns: minmax(240px, 1fr) minmax(160px, 240px); gap: 12px; margin: 16px 0; }
 .sc-record-filters label, .sc-ops-form label, .sc-centre-mini-form label { display: grid; gap: 6px; color: var(--muted, #65616d); font-size: 13px; }

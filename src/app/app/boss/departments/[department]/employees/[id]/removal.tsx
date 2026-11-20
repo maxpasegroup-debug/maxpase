@@ -3,14 +3,14 @@
 import { useActionState, useState } from "react";
 import { hrAction, type HrState } from "../../hr-actions";
 
-export function EmployeeRemoval({ employmentId, employeeName, canArchive, canDeletePermanently }: { employmentId: string; employeeName: string; canArchive: boolean; canDeletePermanently: boolean }) {
+export function EmployeeRemoval({ employmentId, employeeName, canArchive, canDeletePermanently, compact = false }: { employmentId: string; employeeName: string; canArchive: boolean; canDeletePermanently: boolean; compact?: boolean }) {
   const [state, action, pending] = useActionState(hrAction, {} as HrState);
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<"archive" | "permanent">(canArchive ? "archive" : "permanent");
   if (!canArchive && !canDeletePermanently) return null;
 
   return <>
-    <button type="button" className="button secondary boss-hr-remove-trigger" onClick={() => setOpen(true)}>Remove employee</button>
+    <button type="button" className={`button secondary boss-hr-remove-trigger${compact ? " is-compact" : ""}`} onClick={() => setOpen(true)}>{compact ? "Remove" : "Remove employee"}</button>
     {open && <div className="boss-hr-remove-backdrop" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget && !pending) setOpen(false); }}>
       <section className="boss-hr-remove-dialog" role="dialog" aria-modal="true" aria-labelledby="hr-remove-title">
         <button type="button" className="boss-hr-remove-close" aria-label="Close" disabled={pending} onClick={() => setOpen(false)}>×</button>
