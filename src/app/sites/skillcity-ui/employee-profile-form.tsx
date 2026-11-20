@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 
-type ProfileValues = { employmentId: string; displayName: string; workEmail: string; contactEmail: string | null; contactPhone: string | null; emergencyContactName: string | null; emergencyContactRelationship: string | null; emergencyContactPhone: string | null; emergencyContactEmail: string | null };
+type ProfileValues = { employmentId: string; displayName: string; workEmail: string; address: string; contactEmail: string | null; contactPhone: string | null; emergencyContactName: string | null; emergencyContactRelationship: string | null; emergencyContactPhone: string | null; emergencyContactEmail: string | null };
 const inputStyle = { width: "100%", minHeight: 44, border: "1px solid #d8c9ef", borderRadius: 10, padding: "10px 12px", background: "rgba(255,255,255,.82)", color: "#211535" } as const;
 export function EmployeeProfileForm({ profile }: { profile: ProfileValues }) {
   const [message, setMessage] = useState(""); const [saving, setSaving] = useState(false);
@@ -18,6 +18,7 @@ export function EmployeeProfileForm({ profile }: { profile: ProfileValues }) {
     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))", gap: 14 }}>
       {field("Full name", "displayName", profile.displayName, { required: true })}
       {field("Work email (sign-in identity)", "workEmail", profile.workEmail, { readOnly: true })}
+      <label style={{ display: "grid", gap: 6, fontWeight: 600 }}>Home address<textarea style={{ ...inputStyle, minHeight: 88, resize: "vertical" }} name="address" defaultValue={profile.address} maxLength={1000}/></label>
       {field("Preferred contact email", "contactEmail", profile.contactEmail, { type: "email" })}
       {field("Contact mobile", "contactPhone", profile.contactPhone, { type: "tel" })}
       {field("Emergency contact name", "emergencyContactName", profile.emergencyContactName)}

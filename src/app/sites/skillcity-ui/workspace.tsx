@@ -23,16 +23,22 @@ import { StartupOperationsWorkspace } from "./startup-operations-workspace";
 import { StartupLeadsWorkspace } from "./startup-leads-workspace";
 import { StartupHrWorkspace } from "./startup-hr-workspace";
 import { StartupReportsWorkspace } from "./startup-reports-workspace";
+import { hrSelf } from "@/server/skillcity/hr-self";
+import { hrProfileCompleteness } from "@/server/group/hr-employment";
 
 type Dashboard = Awaited<ReturnType<typeof skillCityEmployeeDashboard.dashboard>>;
 const labels: Record<EmployeeView,string> = { advisor: "Advisory", director: "Director", manager: "Manager desk", "administrative-officer": "Administration", "startup-operations": "Startup Skool operations", "startup-leads": "Startup Skool leads", "startup-admissions": "Startup Skool admissions", "startup-hr": "Startup Skool HR & Payroll", "startup-reports": "Startup Skool reports", developer: "Labs delivery", "business-development": "Labs business development", media: "AIRA Media" };
 const leadNext: Record<string,string[]> = { NEW: ["NEW", "CONTACTED", "LOST"], CONTACTED: ["CONTACTED", "QUALIFIED", "LOST"], QUALIFIED: ["QUALIFIED", "AUDIT", "LOST"], AUDIT: ["AUDIT", "QUOTATION_READY", "LOST"], QUOTATION_READY: ["QUOTATION_READY", "LOST"] };
 const date = (value: Date | string | null | undefined) => value ? new Date(value).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" }) + " IST" : "Not scheduled";
 
-export function SkillCityWorkspace({ data, email, userId, base, home }: { data: Dashboard; email: string; userId: string; base: string; home: string }) {
+export async function SkillCityWorkspace({ data, email, userId, base, home }: { data: Dashboard; email: string; userId: string; base: string; home: string }) {
+  const self = await hrSelf.profile(userId);
+  const activeEmployment = self.employment.find(row => row.status === "ACTIVE");
+  const profileProgress = activeEmployment ? hrProfileCompleteness({ ...activeEmployment, displayName: self.name, email: self.email }) : null;
   return <main className="portal-workspace portal-skillcity sc-workspace">
     <a className="sc-skip" href="#skillcity-work">Skip to work</a>
     <header className="portal-header"><Link className="portal-wordmark" href={home}><SkillCityLogo size={48} /><span>AIRA Skill City<span>EMPLOYEE WORKPLACE</span></span></Link><div className="sc-account"><Link href={`${base}?view=my-profile`}>My profile</Link><span>{email}</span><form action={portalLogoutAction}><input type="hidden" name="site" value="skillcity"/><button title="Sign out" aria-label="Sign out"><LogOut size={18}/></button></form></div></header>
+    {profileProgress && profileProgress.percent < 100 && <section className="sc-section" aria-label="Profile completion reminder"><strong>Complete My Profile</strong><p>Your employee profile is {profileProgress.percent}% complete. You can finish it when convenient; this does not block your dashboard.</p><Link href={`${base}?view=my-profile`}>Complete profile</Link></section>}
     {data.available.some(view=>view.startsWith("startup-"))?<nav className="sc-nav sc-startup-nav" aria-label="Startup Skool workspace">
       {([
         ["Overview", "startup-operations", ""], ["Leads & Calling", "startup-leads", ""], ["Admissions", "startup-admissions", ""],
