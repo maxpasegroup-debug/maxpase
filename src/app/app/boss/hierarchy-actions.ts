@@ -7,6 +7,7 @@ import { BusinessError, businessService } from "@/server/domain/business-service
 import { bossRegistry } from "@/server/group/boss-registry";
 import { bossService } from "@/server/group/boss-service";
 import { safeDiagnostic } from "@/server/security/diagnostics";
+import { brandWorkspaceService } from "@/server/group/brand-workspaces";
 
 export type HierarchySaveState = { error?: string; success?: string };
 const fields = z.object({
@@ -15,7 +16,7 @@ const fields = z.object({
   slug: z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/).max(120),
   legalName: z.string().trim().max(200).optional(), description: z.string().trim().max(4000).optional(),
   website: z.union([z.literal(""), z.url().refine(value => /^https?:\/\//.test(value))]).optional(),
-  status: z.enum(["ACTIVE", "INACTIVE"]).default("INACTIVE")
+  status: z.enum(["ACTIVE", "INACTIVE", "ARCHIVED"]).default("INACTIVE")
 });
 function field(form: FormData, name: string) { const value = form.get(name); return typeof value === "string" && value !== "" ? value : undefined; }
 function json(value: string | null) { return value ? JSON.parse(value) as Record<string, unknown> : undefined; }
@@ -48,6 +49,7 @@ export async function saveBossHierarchyRecord(_previous: HierarchySaveState, for
       await bossRegistry.company(session.userId, data.organizationId);
       const existing = data.recordId ? await bossRegistry.brand(session.userId, data.recordId) : null;
       if (existing && existing.row.organizationId !== data.organizationId) throw new AccessError("Brand unavailable");
+      if (!existing && data.parentBrandId) throw new AccessError("Create brands directly under their registered company. Existing parent-brand relationships are preserved as legacy groupings.");
       const parentBrandId = existing ? existing.row.parentBrandId : data.parentBrandId;
       if (parentBrandId) {
         const parent = await bossRegistry.brand(session.userId, parentBrandId);
@@ -68,5 +70,19 @@ export async function saveBossHierarchyRecord(_previous: HierarchySaveState, for
     if (error instanceof SyntaxError) return { error: "Existing record metadata needs review before editing." };
     if (error && typeof error === "object" && "code" in error && error.code === "P2002") return { error: "That identity is already in use." };
     return { error: `Could not save this record. Reference: ${safeDiagnostic("operation_failed")}` };
+  }
+}
+
+export async function prepareBossBrandWorkspace(_previous: HierarchySaveState, form: FormData): Promise<HierarchySaveState> {
+  const session = await requireSession();
+  const id = z.string().min(1).max(200).safeParse(form.get("brandId"));
+  if (!id.success) return { error: "Brand unavailable" };
+  try {
+    await brandWorkspaceService.prepare(session.userId, id.data);
+    revalidatePath("/app", "layout");
+    return { success: "Director and Administrative Officer workspaces are ready for this brand." };
+  } catch (error) {
+    if (error instanceof AccessError || error instanceof BusinessError) return { error: error.message };
+    return { error: `Could not prepare this brand workspace. Reference: ${safeDiagnostic("operation_failed")}` };
   }
 }

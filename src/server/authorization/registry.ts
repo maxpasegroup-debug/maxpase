@@ -1,5 +1,20 @@
 import type { PermissionScope } from "@prisma/client";
 export const workforcePermissions: { key: string; name: string; scope: PermissionScope }[] = [
+  // Core organization capabilities are shared by role templates and operational
+  // workspaces. Keep them here so runtime role preparation, development seed,
+  // and explicit Boss provisioning consume the same definitions.
+  { key: "organization.read", name: "Read organization structure", scope: "GROUP" },
+  { key: "organization.manage", name: "Manage organization structure", scope: "GROUP" },
+  { key: "company.read", name: "Read company information", scope: "COMPANY" },
+  { key: "company.manage", name: "Manage company foundation", scope: "COMPANY" },
+  { key: "membership.read", name: "Read memberships", scope: "GROUP" },
+  { key: "membership.manage", name: "Manage memberships", scope: "GROUP" },
+  { key: "membership.scope.manage", name: "Manage membership authorization scope", scope: "GROUP" },
+  { key: "membership.assign_role", name: "Assign scoped membership roles", scope: "GROUP" },
+  ...["ownership", "brand", "product", "project", "goal"].flatMap(domain => [
+    { key: `${domain}.read`, name: `Read ${domain}`, scope: "GROUP" as const },
+    { key: `${domain}.manage`, name: `Manage ${domain}`, scope: "GROUP" as const }
+  ]),
   { key: "skillcity.administrative.read", name: "Skill City administrative desk read", scope: "GROUP" },
   { key: "skillcity.administrative.task.perform", name: "Update assigned administrative tasks", scope: "GROUP" },
   { key: "startup.application.read", name: "View Startup Skool application intake", scope: "GROUP" },

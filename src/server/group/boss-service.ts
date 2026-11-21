@@ -27,8 +27,10 @@ export function createBossService(client: PrismaClient = prisma) {
   }
   async function dashboard(userId: string, companyId?: string, rawFilters: unknown = {}) {
     const { ctx, root } = await authority(userId);
+    const groupProfile = await client.groupProfile.findUnique({ where: { organizationId: root.id }, select: { id: true, status: true } });
+    if (!groupProfile || groupProfile.status !== "ACTIVE") throw new AccessError("MAXPASE GROUP parent record unavailable");
     const filters = bossFilter.parse(rawFilters);
-    const companies = await boundedRead(take => client.companyProfile.findMany({ take, where: { organization: { parentId: root.id, type: "COMPANY", id: { in: ctx.organizationIds("company.read").filter(id => ctx.organizationIds("executive.read").includes(id) && ctx.organizationIds("organization.read").includes(id)) } } }, select: { id: true, organizationId: true, legalName: true, displayName: true, description: true, status: true, organization: { select: { slug: true } } }, orderBy: { displayName: "asc" } }));
+    const companies = await boundedRead(take => client.companyProfile.findMany({ take, where: { groupId: groupProfile.id, organization: { parentId: root.id, type: "COMPANY", id: { in: ctx.organizationIds("company.read").filter(id => ctx.organizationIds("executive.read").includes(id) && ctx.organizationIds("organization.read").includes(id)) } } }, select: { id: true, organizationId: true, legalName: true, displayName: true, description: true, status: true, organization: { select: { slug: true } } }, orderBy: { displayName: "asc" } }));
     if (companyId && !companies.some(c => c.organizationId === companyId)) throw new AccessError("Company context unavailable");
     const scope = { organizationId: companyId ?? root.id };
     const access = (id: string, db?: Prisma.TransactionClient) => createAccessContext(id, db ?? client, undefined, scope);

@@ -31,10 +31,11 @@ function Editor({ kind, row, options, close, initialOrganizationId }: { kind: Bu
       {fields[kind].filter(f => kind !== "ownership" || (f.key !== "ownerPersonId" || ownerType === "person") && (f.key !== "ownerOrgId" || ownerType === "organization")).map(f => {
         const source = f.source ? options[f.source] ?? [] : [];
         const choices = source.filter(o => !scope || !["brands", "products", "projects"].includes(f.source ?? "") || o.organizationId === scope);
-        let value = row?.[f.key] ?? (f.key === "organizationId" ? initialOrganizationId : undefined) ?? (f.key === "progress" ? 0 : "");
+        let value = row?.[f.key] ?? (f.key === "organizationId" ? initialOrganizationId : undefined) ?? (f.key === "status" && ["companies", "brands"].includes(kind) ? "INACTIVE" : undefined) ?? (f.key === "progress" ? 0 : "");
         if (f.type === "date" && value) value = String(value).slice(0,10);
         const isScope = f.key === "organizationId";
         const fixedGroup = !!row && f.key === "groupOrganizationId";
+        const fixedIdentity = !!row && ["companies", "brands"].includes(kind) && f.key === "slug";
         return <label key={f.key} className={f.type === "textarea" ? "wide-field" : ""}>{f.label}
           {fixedGroup && <input type="hidden" name={f.key} value={String(value)}/>}
           {f.source || f.options ? <select name={fixedGroup ? undefined : f.key} disabled={fixedGroup} required={f.required} defaultValue={String(value || (f.options?.[0] ?? ""))} onChange={isScope ? e => setScope(e.target.value) : undefined}>
@@ -42,7 +43,7 @@ function Editor({ kind, row, options, close, initialOrganizationId }: { kind: Bu
             {f.source && !!value && !choices.some(o => o.id === value) && <option value={String(value)}>Current assignment</option>}
             {choices.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
             {f.options?.map(o => <option key={o} value={o}>{label(o)}</option>)}
-          </select> : f.type === "textarea" ? <textarea name={f.key} rows={3} defaultValue={String(value)} maxLength={4000}/> : <input name={f.key} type={f.type ?? "text"} defaultValue={String(value)} required={f.required} min={f.min} max={f.max} step={f.type === "number" ? "any" : undefined} maxLength={f.type === "text" || !f.type ? 200 : undefined}/>}
+          </select> : f.type === "textarea" ? <textarea name={f.key} rows={3} defaultValue={String(value)} maxLength={4000}/> : <input name={f.key} type={f.type ?? "text"} defaultValue={String(value)} required={f.required} readOnly={fixedIdentity} min={f.min} max={f.max} step={f.type === "number" ? "any" : undefined} maxLength={f.type === "text" || !f.type ? 200 : undefined}/>}
         </label>;
       })}
       {state.error && <p className="error wide-field" role="alert">{state.error}</p>}

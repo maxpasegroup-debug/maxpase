@@ -4,7 +4,7 @@ import { workforcePermissions } from "@/server/authorization/registry";
 import { initializeGroupStructure } from "./structure";
 import { BOSS_EMAIL, validateBossConfiguration, type BossConfiguration } from "./identity";
 
-const capabilities = [...workforcePermissions.filter(p => p.scope !== "GLOBAL"), ...["boss.access", "audit.read", "organization.read", "organization.manage", "company.read", "company.manage", "brand.read", "brand.manage", "product.read", "product.manage", "ownership.read", "ownership.manage", "membership.read", "membership.manage", "membership.scope.manage", "membership.assign_role", "project.read", "project.manage", "goal.read", "goal.manage", "sia.approve_action"].map(key => ({ key, name: key.replaceAll(".", " "), scope: "GROUP" as const }))];
+const capabilities = [...workforcePermissions.filter(p => p.scope !== "GLOBAL"), ...["boss.access", "audit.read", "sia.approve_action"].map(key => ({ key, name: key.replaceAll(".", " "), scope: "GROUP" as const }))];
 
 export async function provisionBoss(client: PrismaClient, env: BossConfiguration) {
   validateBossConfiguration(env);

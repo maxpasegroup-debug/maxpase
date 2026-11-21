@@ -6,6 +6,7 @@ import { ancestry } from "@/server/authorization/business-scope";
 import { createBossService } from "./boss-service";
 import { operationalEvent } from "@/server/domain/operational-events";
 import { marketingDivisionSlug } from "./brand-marketing-scope";
+import { ensureBrandWorkspace, brandWorkspaceRolesForBrand, brandWorkspaceSlug } from "./brand-workspaces";
 
 const id = z.string().min(1).max(200);
 const reference = z.string().trim().min(8).max(200);
@@ -47,7 +48,40 @@ export function createHrEmploymentService(client: PrismaClient = prisma) {
     }
     const state = z.enum(["DRAFT", "ACTIVE", "ENDED"]).safeParse(query.status);
     const page = z.number().int().min(1).max(Number.MAX_SAFE_INTEGER).parse(query.page ?? 1);
-    return client.employment.findMany({ where: { companyId: { in: query.companyId ? [query.companyId] : ids }, ...(query.brandId || query.departmentId ? { assignments: { some: { ...(query.brandId ? { brandId: query.brandId } : {}), ...(query.departmentId ? { departmentId: query.departmentId } : {}) } } } : {}), ...(state.success ? { status: state.data } : {}), ...(query.search ? { person: { displayName: { contains: query.search.slice(0, 100), mode: "insensitive" } } } : {}) }, include: { person: { select: { id: true, displayName: true, email: true, status: true, users: { select: { id: true, email: true, status: true, emailVerifiedAt: true, emailAuthChallenges: { where: { purpose: "STAFF_INVITE" }, select: { status: true, createdAt: true }, orderBy: { createdAt: "desc" }, take: 1 } } } } }, company: { select: { name: true, slug: true } }, assignments: { select: { id: true, employmentId: true, brandId: true, departmentId: true, managerPersonId: true, designation: true, status: true, startDate: true, endDate: true, decisionReference: true, createdAt: true, updatedAt: true, brand: { select: { name: true, organizationId: true } }, department: { select: { name: true } }, manager: { select: { displayName: true } } }, orderBy: { createdAt: "desc" }, take: 100 } }, orderBy: [{ createdAt: "desc" }, { id: "desc" }], skip: (page - 1) * 50, take: 51 });
+    return client.employment.findMany({
+      where: {
+        companyId: { in: query.companyId ? [query.companyId] : ids },
+        ...(query.brandId || query.departmentId ? { assignments: { some: { ...(query.brandId ? { brandId: query.brandId } : {}), ...(query.departmentId ? { departmentId: query.departmentId } : {}) } } } : {}),
+        ...(state.success ? { status: state.data } : {}),
+        ...(query.search ? { person: { displayName: { contains: query.search.slice(0, 100), mode: "insensitive" } } } : {})
+      },
+      include: {
+        person: {
+          select: {
+            id: true, displayName: true, email: true, status: true,
+            users: { select: { id: true, email: true, status: true, emailVerifiedAt: true, emailAuthChallenges: { where: { purpose: "STAFF_INVITE" }, select: { status: true, createdAt: true }, orderBy: { createdAt: "desc" }, take: 1 } } },
+            memberships: {
+              where: { organization: { slug: { startsWith: "brand-workspace-" } } },
+              select: {
+                status: true, title: true,
+                organization: { select: { slug: true } },
+                roles: { select: { role: { select: { key: true, name: true } } } }
+              }
+            }
+          }
+        },
+        company: { select: { name: true, slug: true } },
+        assignments: {
+          select: {
+            id: true, employmentId: true, brandId: true, departmentId: true, managerPersonId: true, designation: true, status: true, startDate: true, endDate: true, decisionReference: true, createdAt: true, updatedAt: true,
+            brand: { select: { id: true, name: true, slug: true, organizationId: true } },
+            department: { select: { name: true } }, manager: { select: { displayName: true } }
+          },
+          orderBy: { createdAt: "desc" }, take: 100
+        }
+      },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }], skip: (page - 1) * 50, take: 51
+    });
   }
   async function get(actorId: string, employmentId: string) {
     const row = await client.employment.findUnique({ where: { id: employmentId }, include: { person: { select: { id: true, displayName: true, email: true, phone: true } }, company: { select: { name: true } }, assignments: { select: { id: true, employmentId: true, brandId: true, departmentId: true, managerPersonId: true, designation: true, status: true, startDate: true, endDate: true, decisionReference: true, createdAt: true, updatedAt: true, brand: { select: { id: true, name: true, slug: true } }, department: { select: { name: true } }, manager: { select: { displayName: true } } }, orderBy: { createdAt: "desc" } } } });
@@ -187,10 +221,32 @@ export function createHrEmploymentService(client: PrismaClient = prisma) {
         if (row.status !== "ACTIVE" || at < row.startDate) throw new AccessError("Active assignment and valid end date required");
         if (input.action === "transfer") {
           if (!input.nextBrandId || input.nextBrandId === row.brandId) throw new AccessError("Choose another brand");
-          const target = await db.brand.findFirst({ where: { id: input.nextBrandId, organizationId: row.employment.companyId, status: "ACTIVE" }, select: { id: true } });
+          const target = await db.brand.findFirst({ where: { id: input.nextBrandId, organizationId: row.employment.companyId, status: "ACTIVE" }, select: { id: true, slug: true } });
           if (!target || await db.hrAssignment.findFirst({ where: { employmentId: row.employmentId, brandId: target.id, status: { in: ["DRAFT", "ACTIVE"] } }, select: { id: true } })) throw new AccessError("Target brand unavailable");
-          // A destination brand requires fresh department and manager decisions.
-          await db.hrAssignment.create({ data: { employmentId: row.employmentId, brandId: target.id, departmentId: null, managerPersonId: null, designation: row.designation, status: "ACTIVE", startDate: at, decisionReference: input.decisionReference } });
+          let bossPersonId: string | null = null;
+          const oldBrand = await db.brand.findUnique({ where: { id: row.brandId }, select: { slug: true } });
+          const oldWorkspace = oldBrand ? await db.organization.findFirst({ where: { slug: brandWorkspaceSlug(oldBrand.slug), parentId: row.employment.companyId, type: "BUSINESS_UNIT" }, select: { id: true } }) : null;
+          const oldMembership = oldWorkspace ? await db.membership.findFirst({ where: { personId: row.employment.personId, organizationId: oldWorkspace.id, status: { in: ["ACTIVE", "SUSPENDED", "INVITED"] } }, include: { roles: { include: { role: { select: { key: true } } } } } }) : null;
+          if (oldMembership) {
+            const { ctx: groupBoss } = await boss.authority(actorId, db);
+            bossPersonId = groupBoss.user?.personId ?? null;
+            const sourceRole = oldMembership.roles.length === 1 && oldBrand ? brandWorkspaceRolesForBrand(oldBrand.slug).find(role => role.key === oldMembership.roles[0].role.key) : null;
+            const account = await db.user.findFirst({ where: { personId: row.employment.personId }, select: { id: true, status: true, emailVerifiedAt: true } });
+            if (!sourceRole || !account || account.status !== "ACTIVE" || !account.emailVerifiedAt || !["ACTIVE", "SUSPENDED"].includes(oldMembership.status)) throw new AccessError("Activate the employee before transferring brand access");
+            const targetWorkspace = await ensureBrandWorkspace(db, row.employment.companyId, target.id, target.slug, actorId, bossPersonId);
+            const targetRole = await db.role.findUnique({ where: { organizationId_key: { organizationId: targetWorkspace.organizationId, key: sourceRole.key } }, select: { id: true } });
+            if (!targetRole) throw new AccessError("The destination brand role is unavailable");
+            const existingTargetMembership = await db.membership.findUnique({ where: { personId_organizationId_scopeKey: { personId: row.employment.personId, organizationId: targetWorkspace.organizationId, scopeKey: "organization" } }, include: { roles: { include: { role: { select: { key: true } } } } } });
+            if (existingTargetMembership?.roles.length && (existingTargetMembership.roles.length !== 1 || existingTargetMembership.roles[0].role.key !== sourceRole.key)) throw new AccessError("Existing destination brand access needs Boss review");
+            const destinationMembership = await db.membership.upsert({ where: { personId_organizationId_scopeKey: { personId: row.employment.personId, organizationId: targetWorkspace.organizationId, scopeKey: "organization" } }, create: { personId: row.employment.personId, organizationId: targetWorkspace.organizationId, scopeKey: "organization", scope: "ORGANIZATION", status: oldMembership.status, title: sourceRole.name }, update: { status: oldMembership.status, title: sourceRole.name, endDate: null, scope: "ORGANIZATION" } });
+            if (!existingTargetMembership?.roles.length) await db.membershipRole.create({ data: { membershipId: destinationMembership.id, roleId: targetRole.id } });
+            await db.membership.update({ where: { id: oldMembership.id }, data: { status: "ENDED", endDate: at } });
+            await db.session.deleteMany({ where: { userId: account.id } });
+            await db.emailAuthChallenge.updateMany({ where: { userId: account.id, purpose: "STAFF_INVITE", status: { in: ["PENDING", "SENT"] } }, data: { status: "CANCELLED" } });
+            await operationalEvent(db, { actorUserId: actorId, actorPersonId: bossPersonId, organizationId: targetWorkspace.organizationId, action: "hr.brand_access_transferred", entityType: "Membership", entityId: destinationMembership.id, result: "SUCCESS", metadata: { fromBrandId: row.brandId, toBrandId: target.id, previousMembershipId: oldMembership.id, roleKey: sourceRole.key, sessionsRevoked: true } });
+          }
+          // Brand access is moved in the same transaction when the employee already has a brand workspace role.
+          await db.hrAssignment.create({ data: { employmentId: row.employmentId, brandId: target.id, departmentId: null, managerPersonId: bossPersonId, designation: row.designation, status: "ACTIVE", startDate: at, decisionReference: input.decisionReference } });
         }
         await db.hrAssignment.update({ where: { id: row.id }, data: { status: input.action === "transfer" ? "TRANSFERRED" : "ENDED", endDate: at, decisionReference: input.decisionReference } });
         const oldBrand = await db.brand.findUnique({ where: { id: row.brandId }, select: { slug: true, parentBrandId: true } });
@@ -203,6 +259,18 @@ export function createHrEmploymentService(client: PrismaClient = prisma) {
             await db.membership.updateMany({ where: { id: { in: access.map(item => item.id) } }, data: { status: "ENDED", endDate: at } });
             await operationalEvent(db, { actorUserId: actorId, actorPersonId: ctx.user!.personId, organizationId: oldDivision.id, action: "hr.brand_access_revoked", entityType: "HrAssignment", entityId: row.id, result: "SUCCESS", metadata: { membershipIds: access.map(item => item.id) } });
           }
+        }
+        const oldBrandScope = oldBrand ? await db.organization.findFirst({ where: { slug: brandWorkspaceSlug(oldBrand.slug), parentId: row.employment.companyId, type: "BUSINESS_UNIT" }, select: { id: true } }) : null;
+        const brandMembership = oldBrandScope ? await db.membership.findFirst({ where: { personId: row.employment.personId, organizationId: oldBrandScope.id, status: { in: ["ACTIVE", "SUSPENDED", "INVITED"] } }, select: { id: true } }) : null;
+        if (brandMembership && oldBrandScope) {
+          const { ctx: groupBoss } = await boss.authority(actorId, db);
+          await db.membership.update({ where: { id: brandMembership.id }, data: { status: "ENDED", endDate: at } });
+          const accountIds = (await db.user.findMany({ where: { personId: row.employment.personId }, select: { id: true } })).map(item => item.id);
+          if (accountIds.length) {
+            await db.session.deleteMany({ where: { userId: { in: accountIds } } });
+            await db.emailAuthChallenge.updateMany({ where: { userId: { in: accountIds }, purpose: "STAFF_INVITE", status: { in: ["PENDING", "SENT"] } }, data: { status: "CANCELLED" } });
+          }
+          await operationalEvent(db, { actorUserId: actorId, actorPersonId: groupBoss.user?.personId, organizationId: oldBrandScope.id, action: "hr.brand_access_revoked", entityType: "Membership", entityId: brandMembership.id, result: "SUCCESS", metadata: { brandId: row.brandId, sessionsRevoked: true } });
         }
       }
       await operationalEvent(db, { actorUserId: actorId, actorPersonId: ctx.user!.personId, organizationId: row.employment.companyId, action: `hr.assignment_${input.action}`, entityType: "HrAssignment", entityId: row.id, result: "SUCCESS", metadata: { decisionReference: input.decisionReference, nextBrandId: input.nextBrandId ?? null, previousDesignation: row.designation, designation: input.designation ?? row.designation } });
@@ -220,17 +288,18 @@ export function createHrEmploymentService(client: PrismaClient = prisma) {
       if (input.action === "end") {
         await db.hrAssignment.updateMany({ where: { employmentId: row.id, status: "ACTIVE" }, data: { status: "ENDED", endDate: at } });
         await db.hrAssignment.updateMany({ where: { employmentId: row.id, status: "DRAFT" }, data: { status: "ENDED" } });
-        const scopeIds = ctx.nodes.filter(node => ancestry(ctx.nodes, node.id).some(parent => parent.id === row.companyId)).map(node => node.id);
+        const brandWorkspaces = await db.organization.findMany({ where: { parentId: row.companyId, type: "BUSINESS_UNIT", slug: { startsWith: "brand-workspace-" } }, select: { id: true } });
+        const scopeIds = [...new Set([...ctx.nodes.filter(node => ancestry(ctx.nodes, node.id).some(parent => parent.id === row.companyId)).map(node => node.id), ...brandWorkspaces.map(workspace => workspace.id)])];
         const memberships = await db.membership.findMany({ where: { personId: row.personId, organizationId: { in: scopeIds }, status: { in: ["ACTIVE", "INVITED", "SUSPENDED"] } }, select: { id: true, organizationId: true } });
         for (const membership of memberships) await ctx.requireAccess("membership.manage", { organizationId: membership.organizationId });
         if (memberships.length) {
           await db.membership.updateMany({ where: { id: { in: memberships.map(member => member.id) } }, data: { status: "ENDED", endDate: at } });
           await operationalEvent(db, { actorUserId: actorId, actorPersonId: ctx.user!.personId, organizationId: row.companyId, action: "hr.company_access_revoked", entityType: "Employment", entityId: row.id, result: "SUCCESS", metadata: { membershipIds: memberships.map(member => member.id) } });
         }
-        const company = await db.organization.findUnique({ where: { id: row.companyId }, select: { slug: true } });
-        if (company?.slug === "aira-skill-city") {
-          const accountIds = (await db.user.findMany({ where: { personId: row.personId }, select: { id: true } })).map(item => item.id);
-          if (accountIds.length) await db.emailAuthChallenge.updateMany({ where: { userId: { in: accountIds }, purpose: "STAFF_INVITE", status: { in: ["PENDING", "SENT"] } }, data: { status: "CANCELLED" } });
+        const accountIds = (await db.user.findMany({ where: { personId: row.personId }, select: { id: true } })).map(item => item.id);
+        if (accountIds.length) {
+          await db.emailAuthChallenge.updateMany({ where: { userId: { in: accountIds }, purpose: "STAFF_INVITE", status: { in: ["PENDING", "SENT"] } }, data: { status: "CANCELLED" } });
+          await db.session.deleteMany({ where: { userId: { in: accountIds } } });
         }
       }
       await operationalEvent(db, { actorUserId: actorId, actorPersonId: ctx.user!.personId, organizationId: row.companyId, action: `hr.employment_${input.action}`, entityType: "Employment", entityId: row.id, result: "SUCCESS", metadata: { decisionReference: input.decisionReference, previousDesignation: row.designation, designation: input.designation ?? row.designation } });
@@ -248,7 +317,8 @@ export function createHrEmploymentService(client: PrismaClient = prisma) {
       }
 
       const at = new Date();
-      const scopeIds = ctx.nodes.filter(node => ancestry(ctx.nodes, node.id).some(parent => parent.id === row.companyId)).map(node => node.id);
+      const brandWorkspaces = await db.organization.findMany({ where: { parentId: row.companyId, type: "BUSINESS_UNIT", slug: { startsWith: "brand-workspace-" } }, select: { id: true } });
+      const scopeIds = [...new Set([...ctx.nodes.filter(node => ancestry(ctx.nodes, node.id).some(parent => parent.id === row.companyId)).map(node => node.id), ...brandWorkspaces.map(workspace => workspace.id)])];
       const memberships = await db.membership.findMany({ where: { personId: row.personId, organizationId: { in: scopeIds }, status: { in: ["ACTIVE", "INVITED", "SUSPENDED"] } }, select: { id: true, organizationId: true } });
       for (const membership of memberships) await ctx.requireAccess("membership.manage", { organizationId: membership.organizationId });
 
@@ -270,7 +340,10 @@ export function createHrEmploymentService(client: PrismaClient = prisma) {
         await db.membership.updateMany({ where: { id: { in: memberships.map(member => member.id) } }, data: { status: "ENDED", endDate: at } });
       }
       const userIds = (await db.user.findMany({ where: { personId: row.personId }, select: { id: true } })).map(user => user.id);
-      if (userIds.length) await db.emailAuthChallenge.updateMany({ where: { userId: { in: userIds }, purpose: "STAFF_INVITE", status: { in: ["PENDING", "SENT"] } }, data: { status: "CANCELLED" } });
+      if (userIds.length) {
+        await db.emailAuthChallenge.updateMany({ where: { userId: { in: userIds }, purpose: "STAFF_INVITE", status: { in: ["PENDING", "SENT"] } }, data: { status: "CANCELLED" } });
+        await db.session.deleteMany({ where: { userId: { in: userIds } } });
+      }
 
       if (input.mode === "permanent") {
         // Preserve the shared Person/User identity and operational audit trail; remove only this HR employment and its assignments.

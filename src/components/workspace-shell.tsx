@@ -40,6 +40,7 @@ export function WorkspaceShell({ boss, email, name, timezone, unread, companies,
   const page = department && Object.hasOwn(bossDepartments, department) ? bossDepartments[department].label : workspacePageLabel(path, view);
   const dialog = useRef<HTMLDialogElement>(null), menu = useRef<HTMLButtonElement>(null);
   const [open, setOpen] = useState(false);
+  if (path.startsWith("/app/brand/")) return <TimezoneContext.Provider value={timezone}>{children}</TimezoneContext.Provider>;
   const close = () => { dialog.current?.close(); setOpen(false); menu.current?.focus(); };
   useEffect(() => {
     const media = window.matchMedia("(min-width: 901px)");

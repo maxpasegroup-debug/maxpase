@@ -51,20 +51,17 @@ export function buildBossHierarchy(source: HierarchySource, options: { includeUn
     pending = unresolved;
   }
   const brandsById = new Map(source.brands.map(brand => [brand.id, brand]));
-  let pendingBrands = source.brands;
-  while (pendingBrands.length) {
-    let attached = 0;
-    const unresolved: Brand[] = [];
-    for (const brand of pendingBrands) {
-      const parentBrand = brand.parentBrandId ? brandsById.get(brand.parentBrandId) : null;
-      if (brand.parentBrandId && (!parentBrand || parentBrand.organizationId !== brand.organizationId)) continue;
-      const parent = nodes.get(brand.parentBrandId ? `brand:${brand.parentBrandId}` : brand.organizationId);
-      if (!parent || !(brand.parentBrandId ? parent.kind === "BRAND" : parent.kind === "COMPANY")) { unresolved.push(brand); continue; }
-      const node: HierarchyNode = { id: `brand:${brand.id}`, kind: "BRAND", name: brand.name, status: brand.status, detail: brand.website || undefined, recordId: brand.id, organizationId: brand.organizationId, slug: brand.slug, website: brand.website, description: brand.description, href: `/app/boss/brands/${encodeURIComponent(brand.id)}`, children: [] };
-      parent.children.push(node); nodes.set(node.id, node); attached++;
-    }
-    if (!attached) break;
-    pendingBrands = unresolved;
+  // Present every brand directly under its owning company. Keep legacy parent
+  // links as descriptive metadata instead of making the Boss navigate a deeper
+  // company/brand tree to find a company-owned brand.
+  for (const brand of source.brands) {
+    const company = nodes.get(brand.organizationId);
+    if (company?.kind !== "COMPANY") continue;
+    const parentBrand = brand.parentBrandId ? brandsById.get(brand.parentBrandId) : null;
+    if (brand.parentBrandId && (!parentBrand || parentBrand.organizationId !== brand.organizationId)) continue;
+    const detail = [parentBrand ? `Legacy grouping: ${parentBrand.name}` : undefined, brand.website || undefined].filter(Boolean).join(" · ") || undefined;
+    const node: HierarchyNode = { id: `brand:${brand.id}`, kind: "BRAND", name: brand.name, status: brand.status, detail, recordId: brand.id, organizationId: brand.organizationId, slug: brand.slug, website: brand.website, description: brand.description, href: `/app/boss/brands/${encodeURIComponent(brand.id)}`, children: [] };
+    company.children.push(node); nodes.set(node.id, node);
   }
   for (const product of source.products) {
     const brand = product.brandId ? nodes.get(`brand:${product.brandId}`) : undefined;

@@ -10,6 +10,8 @@ import { setHumanMembershipRole, validateMembershipAuthority } from "@/server/au
 import { createExecutionService } from "./execution-service";
 import { validateProductDivision, protectCanonicalDivision } from "./company-structure";
 import { airaProductDrafts, assertControlledProductDraft, isControlledAiraProduct } from "@/server/group/product-drafts";
+import { groupIdentity } from "@/server/group/identity";
+import { ensureBrandWorkspace } from "@/server/group/brand-workspaces";
 
 export class BusinessError extends Error {}
 type DB = Prisma.TransactionClient;
@@ -38,7 +40,7 @@ export function createBusinessService(client: PrismaClient = prisma, createAcces
       const where = { organizationId: { in: ids } };
       switch (kind) {
         case "groups": return boundedRead(take => db.groupProfile.findMany({ take, where, include: { organization: { select: { slug: true, parentId: true } } }, orderBy: { name: "asc" } }));
-        case "companies": return boundedRead(take => db.companyProfile.findMany({ take, where, include: { organization: { select: { slug: true, parentId: true } } }, orderBy: { displayName: "asc" } }));
+        case "companies": return boundedRead(take => db.companyProfile.findMany({ take, where, include: { organization: { select: { slug: true, parentId: true } } }, orderBy: { displayName: "asc" } }).then(rows => rows.map(row => ({ ...row, groupOrganizationId: row.organization.parentId }))));
         case "organizations": return boundedRead(take => db.organization.findMany({ take, where: { id: { in: ids } }, orderBy: { name: "asc" } }));
         case "relationships": return boundedRead(take => db.companyRelationship.findMany({ take, where: { fromCompany: where, toCompany: where }, include: { fromCompany: { select: { displayName: true } }, toCompany: { select: { displayName: true } } } }));
         case "ownership": return boundedRead(take => db.ownershipRelationship.findMany({ take, where: { company: where, OR: [{ ownerOrgId: null }, { ownerOrgId: { in: ctx.ids("organization.read") } }] }, include: { company: { select: { displayName: true } }, ownerPerson: { select: { displayName: true } }, ownerOrg: { select: { name: true } } } }));
@@ -101,17 +103,22 @@ export function createBusinessService(client: PrismaClient = prisma, createAcces
         case "companies": {
           const { groupOrganizationId, legalName, shortName, companyType, country, region, identifiers, ...data } = input.companyInput.parse(raw);
           let groupId: string | null = null;
+          if (!recordId && !groupOrganizationId) throw new BusinessError("Every registered company must be created under MAXPASE GROUP");
           if (!recordId && groupOrganizationId) {
             await getOrg(groupOrganizationId);
-            const group = await db.groupProfile.findUnique({ where: { organizationId: groupOrganizationId } });
-            if (!group) throw new BusinessError("A company parent must be a group");
+            const [group, groupOrganization] = await Promise.all([
+              db.groupProfile.findUnique({ where: { organizationId: groupOrganizationId } }),
+              db.organization.findUnique({ where: { id: groupOrganizationId }, select: { slug: true, type: true, parentId: true, status: true } })
+            ]);
+            if (!group || group.status !== "ACTIVE" || groupOrganization?.slug !== groupIdentity.slug || groupOrganization.type !== "GROUP" || groupOrganization.parentId || groupOrganization.status !== "ACTIVE") throw new BusinessError("New registered companies must be created directly under the active MAXPASE GROUP root");
             groupId = group.id;
-          } else if (!recordId && !ctx.grants.some(g => g.key === key && g.scope === "GLOBAL")) throw new BusinessError("Global company.manage required for a standalone company");
+          }
           const profile = { legalName, displayName: data.name, shortName, companyType, country, region, identifiers, description: data.description, status: data.status, metadata: data.metadata };
           if (recordId) {
             const existing = await company(recordId);
             organizationId = existing.organizationId;
             const org = await db.organization.findUniqueOrThrow({ where: { id: organizationId } });
+            if (data.slug !== org.slug) throw new BusinessError("Company identity slugs are stable and cannot be changed here");
             if (existing.status === "ARCHIVED" && data.status !== "ARCHIVED") throw new BusinessError("Archived company reactivation requires controlled review");
             if (groupOrganizationId !== undefined && (groupOrganizationId ?? null) !== org.parentId) throw new BusinessError("Moving a company between groups requires a future controlled migration");
             if (data.status === "ARCHIVED" && existing.status !== "ARCHIVED") {
@@ -228,6 +235,19 @@ export function createBusinessService(client: PrismaClient = prisma, createAcces
           }
           if (kind === "brands") {
             const d = input.brandInput.parse(raw);
+            const [companyProfile, groupRoot] = await Promise.all([
+              db.companyProfile.findUnique({ where: { organizationId: org.id }, select: { groupId: true, status: true } }),
+              db.organization.findUnique({ where: { slug: groupIdentity.slug }, select: { id: true, type: true, parentId: true, status: true, group: { select: { id: true, status: true } } } })
+            ]);
+            if (!companyProfile || !groupRoot || groupRoot.type !== "GROUP" || groupRoot.parentId || groupRoot.status !== "ACTIVE" || groupRoot.group?.status !== "ACTIVE" || org.type !== "COMPANY" || org.parentId !== groupRoot.id || companyProfile.groupId !== groupRoot.group.id || org.status === "ARCHIVED" || companyProfile.status === "ARCHIVED") throw new BusinessError("Brands must belong to a non-archived registered company under MAXPASE GROUP");
+            const prior = recordId ? await db.brand.findUnique({ where: { id: recordId } }) : null;
+            if (recordId && (!prior || prior.organizationId !== org.id)) throw new BusinessError("Brand ownership is stable; open the owning company to manage this brand");
+            if (recordId && d.slug !== prior!.slug) throw new BusinessError("Brand identity slugs are stable and cannot be changed here");
+            if (recordId && prior!.parentBrandId !== (d.parentBrandId ?? null)) throw new BusinessError("Existing parent-brand groupings are stable here; review a dedicated hierarchy migration before changing one");
+            if (!recordId) {
+              if (d.parentBrandId) throw new BusinessError("Create brands directly under their registered company. Existing parent-brand relationships remain as legacy groupings.");
+            }
+            if (d.status === "ACTIVE" && (org.status !== "ACTIVE" || companyProfile.status !== "ACTIVE")) throw new BusinessError("Activate the registered company before activating one of its brands");
             const parent = d.parentBrandId ? await db.brand.findUnique({ where: { id: d.parentBrandId } }) : null;
             if (d.parentBrandId && (!parent || parent.organizationId !== org.id)) throw new BusinessError("Related resource belongs to a different organization");
             if (parent) ctx.requireAccess("brand.read", parent.organizationId);
@@ -246,11 +266,12 @@ export function createBusinessService(client: PrismaClient = prisma, createAcces
             if (recordId && d.status === "ARCHIVED") {
               const old = await db.brand.findUniqueOrThrow({ where: { id: recordId } });
               if (old.status !== "ARCHIVED") {
-                const linked = await Promise.all([db.product.count({ where: { brandId: recordId } }), db.project.count({ where: { brandId: recordId } }), db.program.count({ where: { brandId: recordId } }), db.brand.count({ where: { parentBrandId: recordId } })]);
-                if (linked.some(Boolean)) throw new BusinessError("Brand has linked work; archive requires a separate controlled review");
+                const linked = await Promise.all([db.product.count({ where: { brandId: recordId } }), db.project.count({ where: { brandId: recordId } }), db.program.count({ where: { brandId: recordId } }), db.brand.count({ where: { parentBrandId: recordId } }), db.hrAssignment.count({ where: { brandId: recordId, status: { in: ["ACTIVE", "DRAFT"] } } })]);
+                if (linked.some(Boolean)) throw new BusinessError("Brand has linked work or current employee assignments; close or transfer them before archiving");
               }
             }
             resource = recordId ? await db.brand.update({ where: { id: recordId }, data: d }) : await db.brand.create({ data: d });
+            await ensureBrandWorkspace(db, org.id, resource.id, d.slug, userId, ctx.user.personId);
           }
           else {
             const d = input.productInput.parse(raw);

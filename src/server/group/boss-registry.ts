@@ -11,17 +11,21 @@ export function createBossRegistry(client: PrismaClient = prisma) {
     const { ctx, root } = await boss.authority(userId);
     const row = await client.companyProfile.findUnique({ where: { organizationId }, include: { organization: { select: { parentId: true, slug: true, status: true } } } });
     if (!row || row.organization.parentId !== root.id) throw new AccessError("Company unavailable");
+    const groupProfile = await client.groupProfile.findUnique({ where: { organizationId: root.id }, select: { id: true } });
+    if (!groupProfile || row.groupId !== groupProfile.id) throw new AccessError("Company does not belong to the MAXPASE GROUP parent record");
     await ctx.requireAccess("company.read", { organizationId });
     await ctx.requireAccess("organization.read", { organizationId });
-    const brands = (await ctx.decide("brand.read", { organizationId })).allowed ? await client.brand.findMany({ where: { organizationId, parentBrandId: null, status: { not: "ARCHIVED" } }, select: { id: true, name: true, status: true, website: true, _count: { select: { childBrands: true } } }, orderBy: { name: "asc" }, take: 100 }) : null;
+    const brands = (await ctx.decide("brand.read", { organizationId })).allowed ? await client.brand.findMany({ where: { organizationId, status: { not: "ARCHIVED" } }, select: { id: true, name: true, status: true, website: true, parentBrand: { select: { name: true } } }, orderBy: { name: "asc" }, take: 200 }) : null;
     const units = await client.organization.findMany({ where: { parentId: organizationId, type: { in: ["DIVISION", "BUSINESS_UNIT"] }, id: { in: ctx.organizationIds("organization.read") } }, select: { id: true, name: true, status: true }, orderBy: { name: "asc" }, take: 100 });
     return { row, brands, units, canManageCompany: (await ctx.decide("company.manage", { organizationId })).allowed, canManageBrands: (await ctx.decide("brand.manage", { organizationId })).allowed };
   }
   async function brand(userId: string, brandId: string) {
     const { ctx, root } = await boss.authority(userId);
-    const row = await client.brand.findUnique({ where: { id: brandId }, include: { organization: { select: { parentId: true, type: true, slug: true, status: true, company: { select: { displayName: true, status: true } } } } } });
+    const row = await client.brand.findUnique({ where: { id: brandId }, include: { organization: { select: { parentId: true, type: true, slug: true, status: true, company: { select: { groupId: true, displayName: true, status: true } } } } } });
     if (!row || row.organization.type !== "COMPANY") throw new AccessError("Brand unavailable");
     if (row.organization.parentId !== root.id) throw new AccessError("Brand unavailable");
+    const groupProfile = await client.groupProfile.findUnique({ where: { organizationId: root.id }, select: { id: true } });
+    if (!groupProfile || row.organization.company?.groupId !== groupProfile.id) throw new AccessError("Brand company does not belong to the MAXPASE GROUP parent record");
     await ctx.requireAccess("brand.read", { organizationId: row.organizationId });
     await ctx.requireAccess("company.read", { organizationId: row.organizationId });
     const parent = row.parentBrandId ? await client.brand.findFirst({ where: { id: row.parentBrandId, organizationId: row.organizationId }, select: { id: true, name: true, slug: true, status: true } }) : null;
@@ -64,9 +68,11 @@ export function createBossRegistry(client: PrismaClient = prisma) {
   async function remove(userId: string, kind: "company" | "brand", id: string, mode: "archive" | "delete") {
     return client.$transaction(async (db: Prisma.TransactionClient) => {
       const { ctx, root } = await boss.authority(userId, db);
+      const groupProfile = await db.groupProfile.findUnique({ where: { organizationId: root.id }, select: { id: true } });
+      if (!groupProfile) throw new AccessError("MAXPASE GROUP parent record unavailable");
       if (kind === "company") {
         const row = await db.companyProfile.findUnique({ where: { id }, include: { organization: true } });
-        if (!row || row.organization.parentId !== root.id) throw new AccessError("Company unavailable");
+        if (!row || row.organization.parentId !== root.id || row.groupId !== groupProfile.id) throw new AccessError("Company unavailable");
         await ctx.requireAccess("company.manage", { organizationId: row.organizationId });
         await ctx.requireAccess("organization.manage", { organizationId: row.organizationId });
         const [children, brands, products, memberships] = await Promise.all([
@@ -81,13 +87,19 @@ export function createBossRegistry(client: PrismaClient = prisma) {
       } else {
         const row = await db.brand.findUnique({ where: { id }, include: { organization: true } });
         if (!row || row.organization.parentId !== root.id || row.organization.type !== "COMPANY") throw new AccessError("Brand unavailable");
+        const company = await db.companyProfile.findUnique({ where: { organizationId: row.organizationId }, select: { groupId: true } });
+        if (company?.groupId !== groupProfile.id) throw new AccessError("Brand company does not belong to the MAXPASE GROUP parent record");
         await ctx.requireAccess("brand.manage", { organizationId: row.organizationId });
-        const [products, projects, programs, children] = await Promise.all([db.product.count({ where: { brandId: id } }), db.project.count({ where: { brandId: id } }), db.program.count({ where: { brandId: id } }), db.brand.count({ where: { parentBrandId: id } })]);
+        const [products, projects, programs, children, assignments, currentAssignments] = await Promise.all([
+          db.product.count({ where: { brandId: id } }), db.project.count({ where: { brandId: id } }), db.program.count({ where: { brandId: id } }),
+          db.brand.count({ where: { parentBrandId: id } }), db.hrAssignment.count({ where: { brandId: id } }),
+          db.hrAssignment.count({ where: { brandId: id, status: { in: ["ACTIVE", "DRAFT"] } } })
+        ]);
         if (mode === "delete") {
-          if (products || projects || programs || children) throw new AccessError("Brand has linked work or child brands. Review dependents first.");
+          if (products || projects || programs || children || assignments) throw new AccessError("Brand has linked work or employee history. Preserve its identity and archive it after current assignments are closed.");
           await db.brand.delete({ where: { id } });
         } else {
-          if (products || projects || programs || children) throw new AccessError("Close or archive linked products, projects, programmes and child brands first");
+          if (products || projects || programs || children || currentAssignments) throw new AccessError("Close or transfer linked work and active employee assignments before archiving this brand");
           if (row.status === "ARCHIVED") throw new AccessError("Brand already archived");
           await db.brand.update({ where: { id }, data: { status: "ARCHIVED" } });
         }

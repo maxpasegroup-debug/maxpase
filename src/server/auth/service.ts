@@ -36,7 +36,7 @@ export function createAuthenticationService(client: PrismaClient = prisma, now =
       const user = await db.user.findUnique({ where: { id: userId }, include: { person: { select: { status: true, metadata: true } } } });
       if (!user || user.status !== "ACTIVE" || user.person && user.person.status !== "ACTIVE" || passwordHash !== undefined && user.passwordHash !== passwordHash) throw new Error("Inactive account");
       const accountRealm = accountPortalRealm(user.person?.metadata);
-      if (accountRealm && portal !== accountRealm) throw new AccessError("Account realm unavailable");
+      if (accountRealm === "brand" ? !!portal : accountRealm && portal !== accountRealm) throw new AccessError("Account realm unavailable");
       const portalScope = portal ? await requirePortalAccess(db, userId, portal, portal === "labs") : null;
       if (portal === "jobs") {
         if (proof && "kind" in proof) {
@@ -81,7 +81,8 @@ export function createAuthenticationService(client: PrismaClient = prisma, now =
         candidate = await client.user.findUnique({ where: { id: candidate.id }, include: { person: { select: { status: true, metadata: true } } } });
       } catch (error) { if (!(error instanceof AccessError)) throw error; }
     }
-    if (!candidate?.passwordHash || !valid || candidate.status !== "ACTIVE" || candidate.person && candidate.person.status !== "ACTIVE" || accountPortalRealm(candidate.person?.metadata) && portal !== accountPortalRealm(candidate.person?.metadata) || boss && JSON.parse(candidate.person?.metadata ?? "{}").credentialKind !== "BOSS_PIN" || portal === "labs" && JSON.parse(candidate.person?.metadata ?? "{}").credentialKind !== "STAFF_PASSWORD" || portal === "startup" && accountPortalRealm(candidate.person?.metadata) === "startup" && !candidate.emailVerifiedAt) {
+    const candidateRealm = accountPortalRealm(candidate?.person?.metadata);
+    if (!candidate?.passwordHash || !valid || candidate.status !== "ACTIVE" || candidate.person && candidate.person.status !== "ACTIVE" || (candidateRealm === "brand" ? !!portal : candidateRealm && portal !== candidateRealm) || boss && JSON.parse(candidate.person?.metadata ?? "{}").credentialKind !== "BOSS_PIN" || portal === "labs" && JSON.parse(candidate.person?.metadata ?? "{}").credentialKind !== "STAFF_PASSWORD" || portal === "startup" && candidateRealm === "startup" && !candidate.emailVerifiedAt) {
       await client.auditEvent.create({ data: buildAuditEventData({ action: "auth.login", entityType: "User", result: "DENIED", metadata: { accountReference: securityKey("account", parsed.data.email) } }) });
       return null;
     }
@@ -127,7 +128,7 @@ export function createAuthenticationService(client: PrismaClient = prisma, now =
     if (portal === "skillcity" && (!session?.user.emailVerifiedAt || payload.verifiedEmail !== session.user.email || payload.verifiedAt !== session.user.emailVerifiedAt.toISOString())) return null;
     const accountRealm = accountPortalRealm(session?.user.person?.metadata);
     if (portal === "startup" && accountRealm === "startup" && (!session?.user.emailVerifiedAt || payload.verifiedEmail !== session.user.email || payload.verifiedAt !== session.user.emailVerifiedAt.toISOString())) return null;
-    if (accountRealm && portal !== accountRealm) return null;
+    if (accountRealm === "brand" ? !!portal : accountRealm && portal !== accountRealm) return null;
     return session ? { userId: session.userId, sessionId: session.id, email: session.user.email, personId: session.user.personId, needsPinChange: portal === "labs" && JSON.parse(session.user.person?.metadata ?? "{}").labsPinChangeRequired === true, needsJobsPinActivation: portal === "jobs" && !session.user.jobsPinHash } : null;
   }
   async function revoke(token: string, secret: string, portal?: PortalId) {

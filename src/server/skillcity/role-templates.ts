@@ -56,6 +56,12 @@ export function createSkillCityRoleTemplates(client: PrismaClient = prisma) {
   async function ensureForAppointment(bossUserId: string, companyId: string, scopeSlug: string, roleKey: string) {
     const template = templates.find(item => item.scope === scopeSlug && item.key === roleKey);
     if (!template) throw new AccessError("This employee role is not configured for the selected work area");
+    const definitions = new Map(workforcePermissions.map(permission => [permission.key, permission]));
+    const missing = template.permissions.find(key => {
+      const definition = definitions.get(key);
+      return !definition || definition.scope === "GLOBAL";
+    });
+    if (missing) throw new AccessError(`Employee role "${template.name}" (${template.key}) cannot be prepared: capability "${missing}" is missing from the organization-scoped workforce registry`);
     return client.$transaction(async db => {
       await createBossService(client).authority(bossUserId, db);
       const company = await db.organization.findUnique({ where: { id: companyId }, select: { id: true, slug: true, type: true, status: true } });
@@ -76,23 +82,24 @@ export function createSkillCityRoleTemplates(client: PrismaClient = prisma) {
       let role = await db.role.findUnique({ where: { organizationId_key: { organizationId: scope.id, key: template.key } }, select: { id: true, name: true, principalType: true, status: true } });
       if (role && (role.name !== template.name || role.principalType !== "HUMAN" || role.status !== "ACTIVE")) throw new AccessError("The configured role conflicts with the approved employee role");
       if (role && await db.membershipRole.count({ where: { roleId: role.id } }) > 0) {
-        const current = await db.rolePermission.findMany({ where: { roleId: role.id }, select: { permission: { select: { key: true } } } });
+        const current = await db.rolePermission.findMany({ where: { roleId: role.id }, select: { permission: { select: { key: true, scope: true } } } });
         const currentKeys = current.map(item => item.permission.key).sort();
         const expectedKeys = [...template.permissions].sort();
         if (currentKeys.length !== expectedKeys.length || currentKeys.some((key, index) => key !== expectedKeys[index])) throw new AccessError("This role is already assigned and needs a Boss review before its permissions can change");
+        const mismatchedScope = current.find(item => definitions.get(item.permission.key)?.scope !== item.permission.scope);
+        if (mismatchedScope) throw new AccessError(`Employee role "${template.name}" (${template.key}) has a stored capability scope mismatch for "${mismatchedScope.permission.key}"; review this role before appointment`);
         return { organizationId: scope.id, roleId: role.id, roleName: template.name };
       }
       if (!role) role = await db.role.create({ data: { organizationId: scope.id, key: template.key, name: template.name, principalType: "HUMAN", category: "Skill City staff", status: "ACTIVE" }, select: { id: true, name: true, principalType: true, status: true } });
-      const definitions = new Map(workforcePermissions.map(permission => [permission.key, permission]));
       const expected = new Set<string>(template.permissions);
       const assigned = await db.rolePermission.findMany({ where: { roleId: role.id }, select: { permissionId: true, permission: { select: { key: true } } } });
       const extras = assigned.filter(item => !expected.has(item.permission.key)).map(item => item.permissionId);
       if (extras.length) await db.rolePermission.deleteMany({ where: { roleId: role.id, permissionId: { in: extras } } });
       for (const key of template.permissions) {
-        const definition = definitions.get(key);
-        if (!definition || definition.scope === "GLOBAL") throw new AccessError("A required employee capability is unavailable");
+        const definition = definitions.get(key)!;
         const permission = await db.permission.upsert({ where: { key }, create: definition, update: {} });
-        if (permission.scope === "GLOBAL") throw new AccessError("A global capability cannot be assigned to a staff dashboard");
+        if (permission.scope === "GLOBAL") throw new AccessError(`Employee role "${template.name}" (${template.key}) cannot receive global capability "${key}"`);
+        if (permission.scope !== definition.scope) throw new AccessError(`Employee role "${template.name}" (${template.key}) has a stored capability scope mismatch for "${key}"; expected ${definition.scope} but found ${permission.scope}`);
         await db.rolePermission.upsert({ where: { roleId_permissionId: { roleId: role.id, permissionId: permission.id } }, create: { roleId: role.id, permissionId: permission.id }, update: {} });
       }
       await operationalEvent(db, { actorUserId: bossUserId, actorPersonId: ctx.user!.personId, organizationId: scope.id, action: "staff.role_template_prepared_for_appointment", entityType: "Role", entityId: role.id, result: "SUCCESS", metadata: { roleKey: template.key, roleName: template.name } });
