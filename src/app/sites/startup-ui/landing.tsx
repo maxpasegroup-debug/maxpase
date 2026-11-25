@@ -9,7 +9,6 @@ import { ScrollTrigger } from "gsap/ScrollTrigger";
 import Lenis from "lenis";
 import "lenis/dist/lenis.css";
 import "./startup.css";
-import { StartupSiaAssistant } from "./sia-assistant";
 import { StartupApplyButton } from "./startup-apply-dialog";
 
 const sans = localFont({ src: [
@@ -17,14 +16,6 @@ const sans = localFont({ src: [
   { path: "../fonts/instrument-sans-italic-latin.woff2", weight: "400 700", style: "italic" }
 ], display: "swap" });
 const display = localFont({ src: "../fonts/anton-latin.woff2", weight: "400", variable: "--aira-condensed", display: "swap" });
-
-const nav = [
-  ["Discover", "discover"],
-  ["Learn", "learn"],
-  ["Build", "build"],
-  ["Launch", "launch"],
-  ["About", "about"]
-] as const;
 
 const discoverSteps = [
   ["Find a problem", "Notice a situation people already work around. The school is a place to practise that attention. It does not promise a company."],
@@ -65,7 +56,6 @@ const brands = [
 export function StartupLanding({
   home,
   login,
-  signup,
   name,
   description,
   ecosystem,
@@ -74,7 +64,6 @@ export function StartupLanding({
 }: {
   home: string;
   login: string;
-  signup: string;
   name: string;
   description: string;
   image: string;
@@ -83,7 +72,6 @@ export function StartupLanding({
   faqs: readonly (readonly [string, string])[];
 }) {
   const root = useRef<HTMLElement>(null);
-  const [menu, setMenu] = useState(false);
   const [discover, setDiscover] = useState(0);
   const [theme, setTheme] = useState(0);
 
@@ -140,19 +128,6 @@ export function StartupLanding({
         start: 0,
         end: "max",
         onUpdate: self => page.querySelector(".ax-nav")?.classList.toggle("is-scrolled", self.scroll() > 20)
-      });
-      nav.forEach(([, id]) => {
-        ScrollTrigger.create({
-          trigger: `#${id}`,
-          start: "top 42%",
-          end: "bottom 42%",
-          onToggle: self => {
-            page.querySelectorAll<HTMLElement>("[data-nav]").forEach(link => {
-              if (!self.isActive) return;
-              link.classList.toggle("is-active", link.dataset.nav === id);
-            });
-          }
-        });
       });
       if (reduced) return;
       gsap.from(".ax-hero-copy > *", { y: 28, opacity: 0, duration: 0.8, stagger: 0.08, ease: "power2.out" });
@@ -211,36 +186,17 @@ export function StartupLanding({
   return (
     <main ref={root} className={`ax ${sans.className} ${display.variable}`}>
       <header className="ax-nav">
-        <Link className="ax-brand" href={home}>
-          <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M9 1.2 10.7 7.3 16.8 9 10.7 10.7 9 16.8 7.3 10.7 1.2 9 7.3 7.3Z" fill="currentColor" /></svg>
-          {name}
-        </Link>
-        <nav aria-label={`${name} navigation`}>
-          {nav.map(([label, id]) => (
-            <a key={id} href={`#${id}`} data-nav={id} onClick={() => setMenu(false)}>{label}</a>
-          ))}
-        </nav>
+        <Link className="ax-brand ax-wordmark" href={home}>AIRA STARTUP SKOOL</Link>
         <div className="ax-nav-end">
-          <StartupApplyButton label="Join Now" />
-          <button className="ax-menu" type="button" aria-label="Menu" aria-expanded={menu} onClick={() => setMenu(value => !value)}>
-            <span /><span /><span />
-          </button>
+          <Link className="ax-login" href={login}>Log in</Link>
         </div>
       </header>
-      {menu && (
-        <div className="ax-sheet">
-          {nav.map(([label, id]) => (
-            <a key={id} href={`#${id}`} onClick={() => setMenu(false)}>{label}</a>
-          ))}
-          <StartupApplyButton label="Join Now" className="ax-pill" />
-        </div>
-      )}
 
       <section className="ax-hero">
         <div className="ax-hero-copy">
           <p>{name}</p>
-          <h1>Explore beyond the ordinary</h1>
-            <StartupApplyButton label="Join Now" className="ax-pill ax-start" />
+          <h1>Not an entrepreneur? Become one.</h1>
+          <StartupApplyButton label="Apply now" className="ax-pill ax-start" />
         </div>
         <div className="ax-guide">
           <div className="ax-guide-bob">
@@ -339,7 +295,7 @@ export function StartupLanding({
           <h2>Your idea deserves to enter the world.</h2>
           <p>Learn how to validate your idea, present your product, connect with customers and take your first steps into the market. The school does not promise a company, funding, or revenue.</p>
           <p className="ax-now">Your journey starts now.</p>
-            <StartupApplyButton label="Join Now" />
+            <StartupApplyButton label="Apply now" />
         </div>
         <div className="ax-launch-art" aria-hidden="true">
           <article>
@@ -399,7 +355,7 @@ export function StartupLanding({
         <h2>Your next big idea starts here.</h2>
         <p>Explore AIRA Startup Skool and take your first step towards building something meaningful.</p>
         <div className="ax-actions">
-            <StartupApplyButton label="Join Now" />
+            <StartupApplyButton label="Apply now" />
           <a className="ax-pill ax-pill-ghost" href="#programs">Explore programs</a>
         </div>
       </section>
@@ -421,7 +377,6 @@ export function StartupLanding({
           {brands.map(([label, href]) => <a key={label} href={href}>{label}</a>)}
         </nav>
       </footer>
-      <StartupSiaAssistant context="landing" journey={signup} />
     </main>
   );
 }

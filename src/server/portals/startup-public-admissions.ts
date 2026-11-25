@@ -9,6 +9,9 @@ const answerSchema = z.object({
   fullName: z.string().trim().max(120).optional(),
   mobile: z.union([z.string().trim().regex(/^\+[1-9]\d{7,14}$/), z.literal("")]).optional(),
   email: z.union([z.email().max(254), z.literal("")]).optional(),
+  country: z.string().regex(/^[A-Z]{2}$/).optional(),
+  education: z.enum(["SECONDARY", "HIGHER_SECONDARY", "DIPLOMA", "UNDERGRADUATE", "POSTGRADUATE", "OTHER"]).optional(),
+  dateOfBirth: z.iso.date().refine(value => value <= new Date().toISOString().slice(0, 10), "Date of birth cannot be in the future").optional(),
   state: z.string().trim().max(100).optional(),
   city: z.string().trim().max(100).optional(),
   district: z.string().trim().max(100).optional(),
@@ -292,6 +295,9 @@ function toApplicantData(input: StartupPublicAnswers) {
     ...(input.fullName !== undefined ? { fullName: input.fullName || null } : {}),
     ...(input.mobile !== undefined ? { mobile: input.mobile ? normalizeMobile(input.mobile) : null } : {}),
     ...(input.email !== undefined ? { email: input.email || null } : {}),
+    ...(input.country !== undefined ? { country: input.country } : {}),
+    ...(input.education !== undefined ? { education: input.education } : {}),
+    ...(input.dateOfBirth !== undefined ? { dateOfBirth: new Date(`${input.dateOfBirth}T00:00:00.000Z`) } : {}),
     ...(input.state !== undefined ? { state: input.state } : {}), ...(input.city !== undefined ? { city: input.city } : {}), ...(input.district !== undefined ? { district: input.district } : {}),
     ...(input.preferredCentre !== undefined ? { preferredCentre: input.preferredCentre || null } : {}),
     ...(input.programPreference !== undefined ? { programPreference: input.programPreference || null } : {}),
@@ -301,10 +307,10 @@ function toApplicantData(input: StartupPublicAnswers) {
     ...(input.referralInfo !== undefined ? { referralSnapshot: JSON.stringify({ version: 1, applicantProvided: input.referralInfo }) } : {})
   };
 }
-function answersFrom(row: { fullName: string | null; mobile: string | null; email: string | null; state: string | null; city: string | null; district: string | null; preferredCentre: string | null; programPreference: string | null; entrepreneurialStage: string | null; businessInterest: string | null; goals: string | null; referralSnapshot: string | null }): StartupPublicAnswers {
+function answersFrom(row: { fullName: string | null; mobile: string | null; email: string | null; country: string | null; education: string | null; dateOfBirth: Date | null; state: string | null; city: string | null; district: string | null; preferredCentre: string | null; programPreference: string | null; entrepreneurialStage: string | null; businessInterest: string | null; goals: string | null; referralSnapshot: string | null }): StartupPublicAnswers {
   let referralInfo = "";
   try { referralInfo = JSON.parse(row.referralSnapshot ?? "{}").applicantProvided ?? ""; } catch { /* legacy or corrupt snapshot is omitted from applicant form */ }
-  return answerSchema.parse({ fullName: row.fullName ?? "", mobile: row.mobile ?? "", email: row.email ?? "", state: row.state ?? "", city: row.city ?? "", district: row.district ?? "", preferredCentre: row.preferredCentre ?? "", programPreference: row.programPreference ?? undefined, entrepreneurialStage: row.entrepreneurialStage ?? "", businessInterest: row.businessInterest ?? "", goals: row.goals ?? "", referralInfo });
+  return answerSchema.parse({ fullName: row.fullName ?? "", mobile: row.mobile ?? "", email: row.email ?? "", country: row.country ?? undefined, education: row.education ?? undefined, dateOfBirth: row.dateOfBirth?.toISOString().slice(0, 10), state: row.state ?? "", city: row.city ?? "", district: row.district ?? "", preferredCentre: row.preferredCentre ?? "", programPreference: row.programPreference ?? undefined, entrepreneurialStage: row.entrepreneurialStage ?? "", businessInterest: row.businessInterest ?? "", goals: row.goals ?? "", referralInfo });
 }
 function receipt(row: { reference: string; fullName: string | null; programPreference: string | null; status: string; submittedAt: Date | null }, duplicate: boolean) {
   if (!row.submittedAt) throw new StartupPublicUnavailable();

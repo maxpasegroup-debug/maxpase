@@ -40,7 +40,7 @@
   left: 0;
   right: 0;
   display: grid;
-  grid-template-columns: auto 1fr auto;
+  grid-template-columns: 1fr auto;
   align-items: center;
   gap: 20px;
   padding: 18px 4vw;
@@ -53,6 +53,11 @@
 .ax-nav nav { display: flex; justify-content: center; gap: 22px; font-size: 14px; }
 .ax-nav nav a.is-active { color: var(--aira-gold); }
 .ax-nav-end { display: flex; align-items: center; gap: 10px; }
+.ax-wordmark { width: fit-content; color: var(--aira-ivory); font-weight: 750; letter-spacing: .045em; animation: ax-wordmark-arrive .75s ease-out both; }
+.ax-wordmark:hover { color: var(--aira-gold); }
+.ax a.ax-login { display: inline-flex; align-items: center; justify-content: center; min-height: 46px; min-width: 106px; padding: 0 22px; border: 1px solid var(--aira-gold); border-radius: 999px; background: var(--aira-deep-burgundy); color: var(--aira-ivory); font-size: 14px; font-weight: 700; box-shadow: 0 0 0 1px rgba(212,175,98,.22), 0 0 24px rgba(212,175,98,.35); transition: box-shadow .2s ease, background .2s ease; }
+.ax a.ax-login:hover { background: var(--aira-ruby); box-shadow: 0 0 0 2px rgba(212,175,98,.35), 0 0 34px rgba(212,175,98,.55); }
+@keyframes ax-wordmark-arrive { from { opacity: 0; transform: translateY(-8px); letter-spacing: .16em; } to { opacity: 1; transform: translateY(0); letter-spacing: .045em; } }
 .ax-menu { display: none; width: 44px; height: 44px; border: 0; background: transparent; cursor: pointer; }
 .ax-menu span { display: block; height: 2px; margin: 5px 8px; background: currentColor; }
 .ax-sheet {
@@ -85,7 +90,7 @@
 }
 .ax-hero-copy > p { margin: 0 0 18px; color: var(--aira-ivory); font-size: 14px; letter-spacing: 0.04em; }
 .ax-hero h1 {
-  max-width: 8ch;
+  max-width: 11ch;
   margin: 0;
   font-size: clamp(58px, 6.6vw, 108px);
   font-weight: 500;
@@ -485,6 +490,8 @@
 
 @media (max-width: 430px) {
   .ax-nav-end > a.ax-pill { display: none; }
+  .ax a.ax-login { min-width: 82px; min-height: 42px; padding-inline: 14px; }
+  .ax-wordmark { font-size: 12px; letter-spacing: 0; }
 }
 
 @media (max-width: 600px) {
@@ -517,6 +524,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .ax-wordmark { animation: none; }
   .ax-float, .ax-theme, .ax-program-grid article { transition: none; }
   .ax-theme:hover, .ax-program-grid article:hover { transform: none; }
   .ax-guide-bob { animation: none; }

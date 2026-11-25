@@ -15,7 +15,7 @@ const startupFaqs = [
   ["What does the work focus on?", "Entrepreneurship, practical learning and founder projects. The school helps you turn an idea into focused work. It does not promise a company, funding or revenue."],
   ["How do I take part?", "Start with the application through the signup journey. Reading this page alone does not create an account or a founder project."],
   ["Who currently operates this site?", "The existing portal is operated within AIRA Skill City Private Limited. A proposed standalone entity change has not yet been verified in this system."],
-  ["How do I begin an application?", "Create an account, verify your email, and answer SIA's guided application questions. A person reviews your application."],
+  ["How do I begin an application?", "Select Apply now, provide your details, and verify your mobile number. A person reviews your application. An account is a separate step."],
   ["Does applying guarantee a place?", "No. Your application status appears in your account. Programme enrolment is a separate decision."],
   ["Can I pay when I apply?", "No. Final terms, applicable tax, and any payment instructions are provided only after the required approvals."]
 ] as const;
@@ -37,7 +37,7 @@ export default async function PortalLanding({ params }: { params: Promise<{ site
   }
   if (site.id === "startup") {
     const local = paths.home.startsWith("/sites/");
-    return <StartupLanding home={paths.home} login={paths.login} signup={local ? "/sites/startup/apply" : "/apply"} name={site.name} description={site.description} image={site.image} ecosystem={local ? "/sites/skillcity" : "https://airaskillcity.com"} focus={site.focus} faqs={startupFaqs} />;
+    return <StartupLanding home={paths.home} login={paths.login} name={site.name} description={site.description} image={site.image} ecosystem={local ? "/sites/skillcity" : "https://airaskillcity.com"} focus={site.focus} faqs={startupFaqs} />;
   }
   const local = paths.home.startsWith("/sites/");
   return <div className={`${display.variable} ${text.variable}`}>

@@ -23,11 +23,11 @@ runInNewContext(compiled, { module: moduleTarget, exports: moduleTarget.exports,
   "next/font/local": { __esModule: true, default: () => ({ className: "test-font", variable: "test-display" }) },
   "lenis/dist/lenis.css": {},
   "./startup.css": {},
-  "./startup-apply-dialog": { StartupApplyButton: ({ label }: { label?: string }) => createElement("button", null, label ?? "Join Now") },
+  "./startup-apply-dialog": { StartupApplyButton: ({ label }: { label?: string }) => createElement("button", null, label ?? "Apply now") },
   "lucide-react": { ArrowDown: Icon, ArrowRight: Icon, ArrowUpRight: Icon },
   "./sia-assistant": { StartupSiaAssistant: () => createElement("span", null, "SIA guidance") }
 } as Record<string, unknown>)[name] ?? localRequire(name) });
-const StartupLanding = (moduleTarget.exports as { StartupLanding: ComponentType<{ home: string; login: string; signup: string; name: string; description: string; image: string; ecosystem: string; focus: readonly string[]; faqs: readonly (readonly [string, string])[] }> }).StartupLanding;
+const StartupLanding = (moduleTarget.exports as { StartupLanding: ComponentType<{ home: string; login: string; name: string; description: string; image: string; ecosystem: string; focus: readonly string[]; faqs: readonly (readonly [string, string])[] }> }).StartupLanding;
 const publicAppCompiled = transpileModule(readFileSync("src/app/sites/startup-ui/public-application.tsx", "utf8"), { compilerOptions: { module: ModuleKind.CommonJS, jsx: JsxEmit.ReactJSX, esModuleInterop: true } }).outputText;
 const publicAppTarget = { exports: {} };
 const PublicIcon = () => createElement("span", null);
@@ -76,10 +76,14 @@ describe("Startup Skool application entry", () => {
   it("offers a guided application without presenting proposed fees or automatic admission", () => {
     const site = siteById("startup")!;
     const paths = portalPaths(site, true);
-    const html = renderToStaticMarkup(createElement(StartupLanding, { home: paths.home, login: paths.login, signup: "/apply", name: site.name, description: site.description, image: site.image, ecosystem: "https://airaskillcity.com", focus: site.focus, faqs: [] }));
+    const html = renderToStaticMarkup(createElement(StartupLanding, { home: paths.home, login: paths.login, name: site.name, description: site.description, image: site.image, ecosystem: "https://airaskillcity.com", focus: site.focus, faqs: [] }));
     expect(html).not.toContain("/apply");
-    expect(html).toContain("SIA guidance");
-    expect(html.match(/Join Now/g)?.length).toBeGreaterThan(0);
+    expect(html).not.toContain("SIA guidance");
+    expect(html).not.toContain("Join Now");
+    expect(html).toContain("Not an entrepreneur? Become one.");
+    expect(html).toContain("AIRA STARTUP SKOOL</a>");
+    expect(html).toContain("Log in</a>");
+    expect(html.match(/Apply now/g)?.length).toBeGreaterThan(0);
     expect(html).toContain("AIRA Skill City Private Limited");
     expect(html).not.toContain("₹35,000");
     expect(html).not.toContain("Pay now");
@@ -101,5 +105,7 @@ describe("Startup Skool application entry", () => {
     expect(startupPublicSubmissionInput.safeParse({ ...submitted, mobile: "9876543210" }).success).toBe(false);
     expect(startupPublicSubmissionInput.safeParse({ ...submitted, consent: false }).success).toBe(false);
     expect(startupPublicSubmissionInput.safeParse({ ...submitted, programPreference: "MBA" }).success).toBe(false);
+    expect(startupPublicSubmissionInput.safeParse({ ...submitted, education: "UNDERGRADUATE", dateOfBirth: "2001-01-20", country: "IN", city: "Kochi" }).success).toBe(true);
+    expect(startupPublicSubmissionInput.safeParse({ ...submitted, education: "SECRET", dateOfBirth: "2999-01-20", country: "India" }).success).toBe(false);
   });
 });

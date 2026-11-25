@@ -4,8 +4,8 @@ import Link from "next/link";
 import { ArrowLeft, ArrowRight, LockKeyhole } from "lucide-react";
 import { portalLoginAction, type PortalLoginState } from "../actions";
 import type { PortalSite } from "@/server/portals/sites";
-import { StartupSiaAssistant } from "../../startup-ui/sia-assistant";
 import { SkillCityLogo } from "@/components/skillcity-logo";
+import { StartupApplyButton } from "../../startup-ui/startup-apply-dialog";
 
 export function PortalLoginForm({ site, home, versionId, signup, staff = false }: { site: PortalSite; home: string; versionId?: string; signup?: string; staff?: boolean }) {
   const [state, action, pending] = useActionState(portalLoginAction, {} as PortalLoginState);
@@ -33,9 +33,8 @@ export function PortalLoginForm({ site, home, versionId, signup, staff = false }
       </form>
       {labs && <p>{staff ? "Use the password you set through your reviewed employee invitation." : "Customers use their six-digit PIN."} <Link href={staff ? loginPath : `${loginPath}?mode=staff`}>{staff ? "Customer sign-in" : "Employee sign-in"}</Link></p>}
       {(site.id === "skillcity" || labs && staff) && <p><Link href={`${loginPath.replace(/\/login$/, "")}/recover`}>Forgot your staff password?</Link></p>}
-      {signup && <div className="startup-login-cta"><p>New to Startup Skool?</p><Link className="portal-button" href={signup}>Book your entrepreneur journey with SIA<ArrowRight size={18} /></Link><small>Create an account, then send an application for human review.</small></div>}
+      {signup && site.id === "startup" && <div className="startup-login-cta"><p>New to Startup Skool?</p><StartupApplyButton label="Apply now" className="portal-button"/><small>Your application will be reviewed by the admissions team.</small></div>}
     </section>
     <Link className="portal-back" href={home}><ArrowLeft size={16} />Back to {site.name}</Link>
-    {site.id === "startup" && <StartupSiaAssistant context="login" journey={signup} />}
   </main>;
 }

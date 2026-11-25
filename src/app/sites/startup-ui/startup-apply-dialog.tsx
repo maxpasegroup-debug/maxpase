@@ -4,12 +4,15 @@ import { useEffect, useState } from "react";
 import { ArrowRight, X } from "lucide-react";
 import "./startup-apply-dialog.css";
 
-type Form = { fullName: string; mobile: string; email: string; city: string; district: string; state: string };
+type Form = { fullName: string; mobile: string; email: string; education: string; dateOfBirth: string; country: string; city: string; district: string; state: string };
 type Draft = { answers?: Partial<Form>; verified?: boolean; reference?: string | null; submittedAt?: string | null; status?: string };
 type Challenge = { challengeId: string; expiresAt: string; resendAfter: string };
 type Receipt = { reference: string; status: string };
-const empty: Form = { fullName: "", mobile: "+91", email: "", city: "", district: "", state: "" };
+const empty: Form = { fullName: "", mobile: "+91", email: "", education: "", dateOfBirth: "", country: "IN", city: "", district: "", state: "" };
 const states = ["Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar", "Chhattisgarh", "Goa", "Gujarat", "Haryana", "Himachal Pradesh", "Jharkhand", "Karnataka", "Kerala", "Madhya Pradesh", "Maharashtra", "Manipur", "Meghalaya", "Mizoram", "Nagaland", "Odisha", "Punjab", "Rajasthan", "Sikkim", "Tamil Nadu", "Telangana", "Tripura", "Uttar Pradesh", "Uttarakhand", "West Bengal", "Andaman and Nicobar Islands", "Chandigarh", "Dadra and Nagar Haveli and Daman and Diu", "Delhi", "Jammu and Kashmir", "Ladakh", "Lakshadweep", "Puducherry"];
+const keralaCities = ["Alappuzha", "Ernakulam", "Kannur", "Kasaragod", "Kochi", "Kollam", "Kottayam", "Kozhikode", "Malappuram", "Palakkad", "Pathanamthitta", "Thiruvananthapuram", "Thrissur", "Wayanad"];
+const regionNames = new Intl.DisplayNames(["en"], { type: "region" });
+const countries = Array.from({ length: 26 * 26 }, (_, index) => String.fromCharCode(65 + Math.floor(index / 26), 65 + index % 26)).map(code => ({ code, name: regionNames.of(code) ?? code })).filter(row => row.name !== row.code).sort((a, b) => a.code === "IN" ? -1 : b.code === "IN" ? 1 : a.name.localeCompare(b.name));
 const endpoint = "/api/startup/public-application/";
 async function request<T>(action: string, method: "GET" | "POST" | "PATCH", body?: unknown): Promise<T> {
   const response = await fetch(endpoint + action, { method, credentials: "same-origin", cache: "no-store", headers: body === undefined ? undefined : { "Content-Type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body) });
@@ -18,7 +21,7 @@ async function request<T>(action: string, method: "GET" | "POST" | "PATCH", body
   return data as T;
 }
 
-export function StartupApplyButton({ label = "Join Now", className = "ax-pill" }: { label?: string; className?: string }) {
+export function StartupApplyButton({ label = "Apply now", className = "ax-pill" }: { label?: string; className?: string }) {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<Form>(empty);
   const [loading, setLoading] = useState(false);
@@ -30,6 +33,8 @@ export function StartupApplyButton({ label = "Join Now", className = "ax-pill" }
   const [verified, setVerified] = useState(false);
   const [consent, setConsent] = useState(false);
   const [receipt, setReceipt] = useState<Receipt | null>(null);
+  const [stateChoice, setStateChoice] = useState("");
+  const [cityChoice, setCityChoice] = useState("");
 
   useEffect(() => {
     if (!open) return;
@@ -42,6 +47,10 @@ export function StartupApplyButton({ label = "Join Now", className = "ax-pill" }
         catch { draft = await request<Draft>("draft", "POST", {}); }
         if (!alive) return;
         setForm({ ...empty, ...(draft.answers ?? {}) });
+        const savedState = draft.answers?.state ?? "";
+        const savedCity = draft.answers?.city ?? "";
+        setStateChoice(states.includes(savedState) ? savedState : savedState ? "OTHER" : "");
+        setCityChoice(keralaCities.includes(savedCity) ? savedCity : savedCity ? "OTHER" : "");
         if (draft.reference && draft.submittedAt) { setReceipt({ reference: draft.reference, status: draft.status ?? "SUBMITTED" }); setStep("done"); }
       } catch (cause) { if (alive) setError(cause instanceof Error ? cause.message : "The application service is unavailable."); }
       finally { if (alive) setLoading(false); }
@@ -63,6 +72,9 @@ export function StartupApplyButton({ label = "Join Now", className = "ax-pill" }
     const mobile = form.mobile.replace(/[\s()-]/g, "");
     if (!/^\+[1-9]\d{7,14}$/.test(mobile)) return "Enter a valid mobile number with country code, such as +919876543210.";
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) return "Enter a valid email address.";
+    if (!form.education) return "Choose your education level.";
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(form.dateOfBirth) || Number.isNaN(Date.parse(form.dateOfBirth)) || form.dateOfBirth > new Date().toISOString().slice(0, 10)) return "Enter a valid date of birth.";
+    if (!form.country) return "Choose your country.";
     if (form.city.trim().length < 2 || form.district.trim().length < 2 || !form.state) return "Enter your city and district, then choose your state.";
     return "";
   }
@@ -106,21 +118,26 @@ export function StartupApplyButton({ label = "Join Now", className = "ax-pill" }
     {open && <div className="startup-apply-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) close(); }}>
       <section className="startup-apply-dialog" role="dialog" aria-modal="true" aria-labelledby="startup-apply-title">
         <button type="button" className="startup-apply-close" aria-label="Close application" onClick={close}><X size={20}/></button>
-        <p className="startup-apply-eyebrow">AIRA STARTUP SKOOL · SIA APPLICATION</p>
-        <h2 id="startup-apply-title">{step === "done" ? "Application received" : step === "verify" ? "Verify your mobile" : "Let’s get started."}</h2>
+        <p className="startup-apply-eyebrow">AIRA STARTUP SKOOL · APPLICATION</p>
+        <h2 id="startup-apply-title">{step === "done" ? "Application received" : step === "verify" ? "Verify your mobile" : "Your first step starts here."}</h2>
         {step === "details" && <>
           <p className="startup-apply-lead">Share a few details. The admissions team will review your application.</p>
           {loading ? <p role="status">Opening your secure application…</p> : <div className="startup-apply-grid">
             <label>Full name<input autoComplete="name" value={form.fullName} onChange={e=>update("fullName",e.target.value)} /></label>
             <label>Contact number<input autoComplete="tel" inputMode="tel" value={form.mobile} onChange={e=>update("mobile",e.target.value)} /></label>
             <label>Email<input autoComplete="email" type="email" value={form.email} onChange={e=>update("email",e.target.value)} /></label>
-            <label>City<input autoComplete="address-level2" value={form.city} onChange={e=>update("city",e.target.value)} /></label>
+            <label>Education<select value={form.education} onChange={e=>update("education",e.target.value)}><option value="">Choose your education</option><option value="SECONDARY">Secondary school</option><option value="HIGHER_SECONDARY">Higher secondary</option><option value="DIPLOMA">Diploma</option><option value="UNDERGRADUATE">Undergraduate</option><option value="POSTGRADUATE">Postgraduate</option><option value="OTHER">Other</option></select></label>
+            <label>Date of birth<input type="date" value={form.dateOfBirth} max={new Date().toISOString().slice(0,10)} onChange={e=>update("dateOfBirth",e.target.value)} /></label>
+            <label>Country<select value={form.country} onChange={e=>{setForm(current => ({...current,country:e.target.value,state:"",city:"",district:""}));setStateChoice("");setCityChoice("")}}><option value="">Choose your country</option>{countries.map(row=><option key={row.code} value={row.code}>{row.name}</option>)}</select></label>
+            <label>State or region<select value={stateChoice} onChange={e=>{setStateChoice(e.target.value);setCityChoice("");setForm(current => ({...current,state:e.target.value === "OTHER" ? "" : e.target.value,city:""}))}}><option value="">Choose your state or region</option>{form.country === "IN" && states.map(state=><option key={state}>{state}</option>)}<option value="OTHER">Other region</option></select></label>
+            {stateChoice === "OTHER" && <label>Enter your state or region<input autoComplete="address-level1" value={form.state} onChange={e=>update("state",e.target.value)} /></label>}
+            <label>City<select value={cityChoice} onChange={e=>{setCityChoice(e.target.value);update("city",e.target.value === "OTHER" ? "" : e.target.value)}}><option value="">Choose your city</option>{form.country === "IN" && form.state === "Kerala" && keralaCities.map(city=><option key={city}>{city}</option>)}<option value="OTHER">Other city</option></select></label>
+            {cityChoice === "OTHER" && <label>Enter your city<input autoComplete="address-level2" value={form.city} onChange={e=>update("city",e.target.value)} /></label>}
             <label>District<input autoComplete="address-level2" value={form.district} onChange={e=>update("district",e.target.value)} /></label>
-            <label>State<select value={form.state} onChange={e=>update("state",e.target.value)}><option value="">Choose your state</option>{states.map(state=><option key={state}>{state}</option>)}</select></label>
           </div>}
           {error && <p className="startup-apply-error" role="alert">{error}</p>}
           <button className="startup-apply-primary" type="button" disabled={busy||loading} onClick={()=>void sendCode()}>{busy?"Sending code…":"Continue to verification"} <ArrowRight size={16}/></button>
-          <small className="startup-apply-note">We’ll verify your mobile number before sending this for review. Applying does not guarantee admission.</small>
+          <small className="startup-apply-note">We’ll verify your mobile number before sending this for review. This application does not create a login account or guarantee admission.</small>
         </>}
         {step === "verify" && <>
           <p className="startup-apply-lead">Enter the six-digit code sent to <strong>{form.mobile}</strong>. The code expires in 10 minutes.</p>
