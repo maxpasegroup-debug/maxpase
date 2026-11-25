@@ -5,7 +5,6 @@ import { ArrowLeft, ArrowRight, LockKeyhole } from "lucide-react";
 import { portalLoginAction, type PortalLoginState } from "../actions";
 import type { PortalSite } from "@/server/portals/sites";
 import { SkillCityLogo } from "@/components/skillcity-logo";
-import { StartupApplyButton } from "../../startup-ui/startup-apply-dialog";
 
 export function PortalLoginForm({ site, home, versionId, signup, staff = false }: { site: PortalSite; home: string; versionId?: string; signup?: string; staff?: boolean }) {
   const [state, action, pending] = useActionState(portalLoginAction, {} as PortalLoginState);
@@ -33,7 +32,7 @@ export function PortalLoginForm({ site, home, versionId, signup, staff = false }
       </form>
       {labs && <p>{staff ? "Use the password you set through your reviewed employee invitation." : "Customers use their six-digit PIN."} <Link href={staff ? loginPath : `${loginPath}?mode=staff`}>{staff ? "Customer sign-in" : "Employee sign-in"}</Link></p>}
       {(site.id === "skillcity" || labs && staff) && <p><Link href={`${loginPath.replace(/\/login$/, "")}/recover`}>Forgot your staff password?</Link></p>}
-      {signup && site.id === "startup" && <div className="startup-login-cta"><p>New to Startup Skool?</p><StartupApplyButton label="Apply now" className="portal-button"/><small>Your application will be reviewed by the admissions team.</small></div>}
+      {signup && site.id === "startup" && <div className="startup-login-cta"><p>New to Startup Skool?</p><Link href="/apply" className="portal-button">Apply now<ArrowRight size={18}/></Link><small>Your application will be reviewed by the admissions team.</small></div>}
     </section>
     <Link className="portal-back" href={home}><ArrowLeft size={16} />Back to {site.name}</Link>
   </main>;

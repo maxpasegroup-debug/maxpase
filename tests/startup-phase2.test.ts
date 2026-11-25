@@ -23,7 +23,6 @@ runInNewContext(compiled, { module: moduleTarget, exports: moduleTarget.exports,
   "next/font/local": { __esModule: true, default: () => ({ className: "test-font", variable: "test-display" }) },
   "lenis/dist/lenis.css": {},
   "./startup.css": {},
-  "./startup-apply-dialog": { StartupApplyButton: ({ label }: { label?: string }) => createElement("button", null, label ?? "Apply now") },
   "lucide-react": { ArrowDown: Icon, ArrowRight: Icon, ArrowUpRight: Icon },
   "./sia-assistant": { StartupSiaAssistant: () => createElement("span", null, "SIA guidance") }
 } as Record<string, unknown>)[name] ?? localRequire(name) });
@@ -37,6 +36,14 @@ runInNewContext(publicAppCompiled, { module: publicAppTarget, exports: publicApp
   "./public-application.css": {}, "lucide-react": { ArrowLeft: PublicIcon, ArrowRight: PublicIcon, Sparkles: PublicIcon }
 } as Record<string, unknown>)[name] ?? localRequire(name) });
 const PublicStartupApplication = (publicAppTarget.exports as { PublicStartupApplication: ComponentType }).PublicStartupApplication;
+const applicationCompiled = transpileModule(readFileSync("src/app/sites/startup-ui/startup-application.tsx", "utf8"), { compilerOptions: { module: ModuleKind.CommonJS, jsx: JsxEmit.ReactJSX, esModuleInterop: true } }).outputText;
+const applicationTarget = { exports: {} };
+runInNewContext(applicationCompiled, { module: applicationTarget, exports: applicationTarget.exports, require: (name: string) => ({
+  "next/link": { __esModule: true, default: ({ href, children, className }: { href: string; children: ReactNode; className?: string }) => createElement("a", { href, className }, children) },
+  "react": localRequire("react"), "react/jsx-runtime": localRequire("react/jsx-runtime"),
+  "./startup-application.css": {}, "lucide-react": { ArrowRight: PublicIcon }
+} as Record<string, unknown>)[name] ?? localRequire(name) });
+const StartupApplicationPage = (applicationTarget.exports as { StartupApplicationPage: ComponentType<{ home: string; login: string }> }).StartupApplicationPage;
 
 const previousSecret = process.env.AUTH_SECRET;
 beforeAll(() => { process.env.AUTH_SECRET = randomBytes(32).toString("base64url"); });
@@ -77,7 +84,7 @@ describe("Startup Skool application entry", () => {
     const site = siteById("startup")!;
     const paths = portalPaths(site, true);
     const html = renderToStaticMarkup(createElement(StartupLanding, { home: paths.home, login: paths.login, name: site.name, description: site.description, image: site.image, ecosystem: "https://airaskillcity.com", focus: site.focus, faqs: [] }));
-    expect(html).not.toContain("/apply");
+    expect(html).toContain('href="/apply"');
     expect(html).not.toContain("SIA guidance");
     expect(html).not.toContain("Join Now");
     expect(html).toContain("Not an entrepreneur? Become one.");
@@ -87,6 +94,15 @@ describe("Startup Skool application entry", () => {
     expect(html).toContain("AIRA Skill City Private Limited");
     expect(html).not.toContain("₹35,000");
     expect(html).not.toContain("Pay now");
+  });
+
+  it("renders the application as a page without modal controls", () => {
+    const html = renderToStaticMarkup(createElement(StartupApplicationPage, { home: "/", login: "/login" }));
+    expect(html).toContain("startup-application-page");
+    expect(html).toContain("Make your first move.");
+    expect(html).toContain('href="/login"');
+    expect(html).not.toContain('role="dialog"');
+    expect(html).not.toContain("Close application");
   });
 
   it("renders the public SIA application connected to secure draft-backed actions", () => {

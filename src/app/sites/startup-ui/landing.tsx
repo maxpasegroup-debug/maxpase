@@ -9,7 +9,6 @@ import { ScrollTrigger } from "gsap/ScrollTrigger";
 import Lenis from "lenis";
 import "lenis/dist/lenis.css";
 import "./startup.css";
-import { StartupApplyButton } from "./startup-apply-dialog";
 
 const sans = localFont({ src: [
   { path: "../fonts/instrument-sans-latin.woff2", weight: "400 700", style: "normal" },
@@ -196,7 +195,7 @@ export function StartupLanding({
         <div className="ax-hero-copy">
           <p>{name}</p>
           <h1>Not an entrepreneur? Become one.</h1>
-          <StartupApplyButton label="Apply now" className="ax-pill ax-start" />
+          <Link href="/apply" className="ax-pill ax-start">Apply now</Link>
         </div>
         <div className="ax-guide">
           <div className="ax-guide-bob">
@@ -295,7 +294,7 @@ export function StartupLanding({
           <h2>Your idea deserves to enter the world.</h2>
           <p>Learn how to validate your idea, present your product, connect with customers and take your first steps into the market. The school does not promise a company, funding, or revenue.</p>
           <p className="ax-now">Your journey starts now.</p>
-            <StartupApplyButton label="Apply now" />
+            <Link href="/apply" className="ax-pill">Apply now</Link>
         </div>
         <div className="ax-launch-art" aria-hidden="true">
           <article>
@@ -355,7 +354,7 @@ export function StartupLanding({
         <h2>Your next big idea starts here.</h2>
         <p>Explore AIRA Startup Skool and take your first step towards building something meaningful.</p>
         <div className="ax-actions">
-            <StartupApplyButton label="Apply now" />
+            <Link href="/apply" className="ax-pill">Apply now</Link>
           <a className="ax-pill ax-pill-ghost" href="#programs">Explore programs</a>
         </div>
       </section>
