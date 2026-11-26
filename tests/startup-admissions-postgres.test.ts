@@ -5,6 +5,7 @@ import { workforcePermissions } from "@/server/authorization/registry";
 import { provisionBoss } from "@/server/group/provision";
 import { createStartupPublicAdmissions } from "@/server/portals/startup-public-admissions";
 import { createStartupAdmissionsDesk } from "@/server/skillcity/startup-admissions-desk";
+import { createSkillCityAdministrativeDesk } from "@/server/skillcity/administrative-desk";
 import { createStartupApplications } from "@/server/portals/startup-applications";
 import { createStartupAdmissionIntakes } from "@/server/group/startup-admission-intakes";
 
@@ -19,6 +20,7 @@ const publicAdmissions = createStartupPublicAdmissions(db, {
   nodeEnv: "test", now: () => clock
 });
 const desk = createStartupAdmissionsDesk(db);
+const administrativeDesk = createSkillCityAdministrativeDesk(db);
 const leadership = createStartupApplications(db);
 let bossUserId = "", companyId = "", startupDivisionId = "", brandId = "", officerUserId = "";
 let applicantId = "", applicantCookie = "", appReference = "";
@@ -45,7 +47,7 @@ beforeAll(async () => {
   officerUserId = officer.id;
   await db.employment.create({ data: { personId: person.id, companyId, status: "ACTIVE", startDate: clock, designation: "Administrative Officer", contactEmail: officer.email } });
   const role = await db.role.create({ data: { organizationId: companyId, key: "aira-administrative-officer", name: "Administrative Officer", principalType: "HUMAN", category: "Synthetic test role" } });
-  const requiredPermissions = ["organization.read", "startup.application.read", "startup.application.triage"];
+  const requiredPermissions = ["organization.read", "company.read", "skillcity.administrative.read", "labs.billing.status.read", "startup.application.read", "startup.application.triage"];
   for (const key of requiredPermissions) {
     const permission = workforcePermissions.find(item => item.key === key) ?? { key, name: key, scope: "GROUP" as const };
     const savedPermission = await db.permission.upsert({ where: { key }, create: permission, update: {} });
@@ -93,6 +95,10 @@ describe("Startup Skool PostgreSQL admissions acceptance", () => {
     expect(await db.user.count()).toBe(beforeUsers);
     expect((await publicAdmissions.submit(applicantCookie, { ...answers, consent: true })).duplicate).toBe(true);
     expect(await publicAdmissions.status(applicantCookie, { reference: receipt.reference })).toMatchObject({ reference: appReference, status: "SUBMITTED" });
+
+    const aoIntake = await administrativeDesk.workspace(officerUserId);
+    expect(aoIntake.startupApplications).toEqual(expect.arrayContaining([expect.objectContaining({ id: `public:${applicantId}`, source: "PUBLIC", status: "SUBMITTED", assigned: false })]));
+    expect((await desk.pageForBoss(bossUserId, brandId)).cases.map(item => item.id)).toContain(`public:${applicantId}`);
 
     await desk.assignBoss(bossUserId, brandId, { caseId: `public:${applicantId}`, assignedUserId: officerUserId, reason: "Assign synthetic application to the test officer." });
     const inbox = await desk.page(officerUserId);

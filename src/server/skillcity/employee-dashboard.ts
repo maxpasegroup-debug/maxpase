@@ -129,7 +129,12 @@ export function createSkillCityEmployeeDashboard(client: PrismaClient = prisma) 
       const division = divisions.find(d => d.slug === target.divisionSlug);
       if (division && await can("aira.crm.manage", division.id)) crm.push({ slug: target.slug, label: target.label, owners: await advisorCrm.eligibleOwners(userId, target.slug), pipeline: await advisorCrm.list(userId, target.slug) });
     }
-    return { view, available, companyId, name: "Director", data: { divisions: divisionRows, decisions, staff, crm, canManageLabsCustomers: !!labs && await can("labs.customer.manage", labs.id), inviteDeliveryReady: staffInvite.deliveryReady() } };
+    const startupDivision = divisions.find(d => d.slug === "aira-startup-school");
+    const startupAdmissions = startupDivision && await can("startup.application.read", startupDivision.id) && await can("program.manage", startupDivision.id) ? {
+      pending: (await client.startupPublicApplicant.count({ where: { organizationId: companyId, submittedAt: { not: null }, status: { in: ["SUBMITTED", "IN_REVIEW"] } } })) +
+        (await client.executiveRecord.count({ where: { organizationId: startupDivision.id, kind: "STARTUP_APPLICATION", sourceKey: { startsWith: "startup:application:" }, status: { in: ["SUBMITTED", "IN_REVIEW"] } } })),
+    } : null;
+    return { view, available, companyId, name: "Director", data: { divisions: divisionRows, decisions, staff, crm, startupAdmissions, canManageLabsCustomers: !!labs && await can("labs.customer.manage", labs.id), inviteDeliveryReady: staffInvite.deliveryReady() } };
   }
   return { dashboard };
 }

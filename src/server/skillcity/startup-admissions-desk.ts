@@ -29,7 +29,7 @@ export function createStartupAdmissionsDesk(client: PrismaClient = prisma) {
     const personId = ctx.user?.personId;
     if (!company || company.slug !== "aira-skill-city" || company.type !== "COMPANY" || company.status !== "ACTIVE" || !startup || !personId) throw new AccessError("Startup admissions workspace unavailable");
     const canRead = await ctx.decide("startup.application.read", { organizationId: startup.id });
-    const isOfficer = ctx.grants.some(g => g.organizationId === startup.id && g.roleName === "Startup Skool Administrative Officer");
+    const isOfficer = ctx.grants.some(g => (g.organizationId === startup.id && g.roleName === "Startup Skool Administrative Officer") || (g.organizationId === companyId && g.roleName === "Administrative Officer"));
     const managerRole = ctx.grants.some(g => [companyId, startup.id].includes(g.organizationId ?? "") && ["Director", "Division Director"].includes(g.roleName ?? ""));
     const canManage = managerRole && (await ctx.decide("program.manage", { organizationId: startup.id })).allowed;
     if (!canRead.allowed && !isOfficer && !canManage) throw new AccessError("Startup admissions access is not authorized");
@@ -65,8 +65,8 @@ export function createStartupAdmissionsDesk(client: PrismaClient = prisma) {
   }
 
   async function officerOptions(scope: Scope) {
-    const memberships = await client.membership.findMany({ where: { organizationId: scope.divisionId, status: "ACTIVE", projectId: null, roles: { some: { role: { organizationId: scope.divisionId, key: "startup-admissions-officer", name: "Startup Skool Administrative Officer", status: "ACTIVE" } } }, person: { status: "ACTIVE", employments: { some: { companyId: scope.companyId, status: "ACTIVE" } }, users: { some: { status: "ACTIVE", emailVerifiedAt: { not: null } } } } }, select: { person: { select: { displayName: true, users: { where: { status: "ACTIVE", emailVerifiedAt: { not: null } }, select: { id: true }, take: 1 } } }, roles: { where: { role: { key: "startup-admissions-officer", status: "ACTIVE" } }, select: { roleId: true }, take: 1 } }, orderBy: { person: { displayName: "asc" } }, take: 100 });
-    return memberships.flatMap(m => m.person.users.map(u => ({ id: u.id, name: m.person.displayName })));
+    const memberships = await client.membership.findMany({ where: { organizationId: { in: [scope.divisionId, scope.companyId] }, status: "ACTIVE", projectId: null, roles: { some: { role: { status: "ACTIVE", OR: [{ organizationId: scope.divisionId, key: "startup-admissions-officer", name: "Startup Skool Administrative Officer" }, { organizationId: scope.companyId, key: "aira-administrative-officer", name: "Administrative Officer" }] } } }, person: { status: "ACTIVE", employments: { some: { companyId: scope.companyId, status: "ACTIVE" } }, users: { some: { status: "ACTIVE", emailVerifiedAt: { not: null } } } } }, select: { person: { select: { displayName: true, users: { where: { status: "ACTIVE", emailVerifiedAt: { not: null } }, select: { id: true }, take: 1 } } } }, orderBy: { person: { displayName: "asc" } }, take: 100 });
+    return [...new Map(memberships.flatMap(m => m.person.users.map(u => [u.id, { id: u.id, name: m.person.displayName }] as const))).values()];
   }
 
   async function allCases(scope: Scope, rawFilters: Filters = {}) {
