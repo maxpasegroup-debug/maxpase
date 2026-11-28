@@ -17,6 +17,10 @@
 .startup-apply-progress span{height:4px;flex:1;border-radius:99px;background:#e8dfd9}
 .startup-apply-progress .is-current{background:#8b1025}
 .startup-apply-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:17px}
+.startup-apply-span{grid-column:1/-1}
+.startup-phone-row{display:grid;grid-template-columns:minmax(0,44%) minmax(0,1fr);gap:8px;min-width:0}
+.startup-whatsapp-check{display:flex;align-items:center;gap:9px;font-weight:500;line-height:1.4}
+.startup-apply-grid .startup-whatsapp-check input[type=checkbox]{width:18px;min-height:18px;height:18px;flex:none;accent-color:#8b1025}
 .startup-apply-grid label,.startup-apply-code{display:grid;gap:8px;min-width:0;color:#39232c;font-size:13px;font-weight:700}
 .startup-apply-grid :is(input,select),.startup-apply-code input{width:100%;min-width:0;min-height:48px;padding:0 13px;border:1px solid #d9c9bf;border-radius:10px;background:#fff;color:#25151d;color-scheme:light;font:inherit}
 .startup-apply-grid :is(input,select):focus,.startup-apply-code input:focus{border-color:#8b1025;box-shadow:0 0 0 3px rgba(139,16,37,.12)}

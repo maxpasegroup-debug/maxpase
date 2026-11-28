@@ -3759,6 +3759,7 @@ model StartupPublicApplicant {
   possessionSecretHash  String
   fullName              String?
   mobile                String?
+  whatsapp              String?
   normalizedMobile      String?
   email                 String?
   country               String?

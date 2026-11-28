@@ -63,6 +63,8 @@ describe("Startup Skool application entry", () => {
     const publicApi = await middleware(new NextRequest("https://airastartupskool.com/api/startup/public-application/draft", { method: "POST", headers: { host: "airastartupskool.com", origin: "https://airastartupskool.com" } }));
     expect(publicApi.status).toBe(200);
     expect(publicApi.headers.get("x-middleware-rewrite")).toBeNull();
+    const removedOtp = await middleware(new NextRequest("https://airastartupskool.com/api/startup/public-application/otp-send", { method: "POST", headers: { host: "airastartupskool.com", origin: "https://airastartupskool.com" } }));
+    expect(removedOtp.status).toBe(404);
     const crossBrandApi = await middleware(new NextRequest("https://airalabs.online/api/startup/public-application/draft", { method: "POST", headers: { host: "airalabs.online", origin: "https://airalabs.online" } }));
     expect(crossBrandApi.status).toBe(404);
   });
@@ -103,6 +105,8 @@ describe("Startup Skool application entry", () => {
     expect(html).toContain('href="/login"');
     expect(html).not.toContain('role="dialog"');
     expect(html).not.toContain("Close application");
+    expect(html).not.toContain("Continue to verification");
+    expect(html).not.toContain("Send code");
   });
 
   it("renders the public SIA application connected to secure draft-backed actions", () => {
@@ -114,14 +118,16 @@ describe("Startup Skool application entry", () => {
     expect(html).not.toContain("Create an account");
   });
 
-  it("accepts resumable partial drafts but requires complete verified application data and consent at submission", () => {
+  it("accepts resumable partial drafts but requires complete application data and consent at submission", () => {
     expect(startupPublicDraftInput.safeParse({ fullName: "", mobile: "", programPreference: "" }).success).toBe(true);
-    const submitted = { fullName: "Asha Menon", mobile: "+919876543210", email: "", state: "Kerala", district: "Kochi", programPreference: "PBA_30_DAYS", entrepreneurialStage: "Exploring a first venture", businessInterest: "A local service for small businesses", goals: "Learn to validate and grow the idea", consent: true };
+    const submitted = { fullName: "Asha Menon", mobile: "+919876543210", whatsapp: "+919876543210", email: "asha@example.test", education: "UNDERGRADUATE", dateOfBirth: "2001-01-20", country: "IN", state: "Kerala", city: "Kochi", consent: true };
     expect(startupPublicSubmissionInput.safeParse(submitted).success).toBe(true);
     expect(startupPublicSubmissionInput.safeParse({ ...submitted, mobile: "9876543210" }).success).toBe(false);
     expect(startupPublicSubmissionInput.safeParse({ ...submitted, consent: false }).success).toBe(false);
+    expect(startupPublicSubmissionInput.safeParse({ ...submitted, email: "" }).success).toBe(false);
+    expect(startupPublicSubmissionInput.safeParse({ ...submitted, whatsapp: "" }).success).toBe(false);
+    expect(startupPublicSubmissionInput.safeParse({ ...submitted, country: "" }).success).toBe(false);
     expect(startupPublicSubmissionInput.safeParse({ ...submitted, programPreference: "MBA" }).success).toBe(false);
-    expect(startupPublicSubmissionInput.safeParse({ ...submitted, education: "UNDERGRADUATE", dateOfBirth: "2001-01-20", country: "IN", city: "Kochi" }).success).toBe(true);
     expect(startupPublicSubmissionInput.safeParse({ ...submitted, education: "SECRET", dateOfBirth: "2999-01-20", country: "India" }).success).toBe(false);
   });
 });

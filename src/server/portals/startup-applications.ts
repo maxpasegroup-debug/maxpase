@@ -7,6 +7,7 @@ import { requirePortalAccess } from "./policy";
 import { requireStartupStaffAccess } from "./startup-staff-access";
 import { createBossService } from "@/server/group/boss-service";
 import { assertStartupPilotEnrollmentReady } from "./startup-pilot-register";
+import { STARTUP_MANUAL_CONSENT_VERSION, STARTUP_OTP_CONSENT_VERSION } from "./startup-public-admissions";
 
 const tiers = ["PBA_30_DAYS", "PBA_180_DAYS", "STARTER", "PRO", "EXTRAORDINARY"] as const;
 export const startupApplicationInput = z.object({ tier: z.enum(tiers), idea: z.string().trim().min(20).max(1500), goal: z.string().trim().min(20).max(1500), experience: z.string().trim().min(10).max(1000), location: z.string().trim().min(2).max(120), timeCommitment: z.string().trim().min(5).max(250), consent: z.literal(true), referralToken: z.string().regex(/^[A-Za-z0-9_-]{32,100}$/).optional() }).strict();
@@ -128,7 +129,7 @@ export function createStartupApplications(client: PrismaClient = prisma) {
     const access = await requireStartupStaffAccess(client, userId);
       const [rows, publicRows] = await Promise.all([
       client.executiveRecord.findMany({ where: { organizationId: access.divisionId, kind, status: { in: [...statuses] } }, select: { id: true, status: true, version: true, payload: true, createdAt: true, owner: { select: { displayName: true } }, history: { select: { fromStatus: true, toStatus: true, reason: true, createdAt: true }, orderBy: { createdAt: "desc" }, take: 5 } }, orderBy: { createdAt: "asc" }, take: 50 }),
-      client.startupPublicApplicant.findMany({ where: { organizationId: access.companyId, status: { in: [...statuses] }, submittedAt: { not: null } }, select: { id: true, fullName: true, email: true, mobile: true, state: true, district: true, preferredCentre: true, programPreference: true, entrepreneurialStage: true, businessInterest: true, goals: true, referralSnapshot: true, consentVersion: true, phoneVerifiedAt: true, status: true, version: true, submittedAt: true, events: { select: { action: true, reason: true, createdAt: true }, orderBy: { createdAt: "desc" }, take: 5 } }, orderBy: { submittedAt: "asc" }, take: 50 })
+      client.startupPublicApplicant.findMany({ where: { organizationId: access.companyId, status: { in: [...statuses] }, submittedAt: { not: null } }, select: { id: true, fullName: true, email: true, mobile: true, state: true, city: true, district: true, preferredCentre: true, programPreference: true, entrepreneurialStage: true, businessInterest: true, goals: true, referralSnapshot: true, consentVersion: true, phoneVerifiedAt: true, status: true, version: true, submittedAt: true, events: { select: { action: true, reason: true, createdAt: true }, orderBy: { createdAt: "desc" }, take: 5 } }, orderBy: { submittedAt: "asc" }, take: 50 })
     ]);
     const authenticated = rows.map(row => ({ ...row, source: "AUTHENTICATED" as const, payload: parsePayload(row.payload) }));
     const publicSia = publicRows.map(row => {
@@ -137,7 +138,7 @@ export function createStartupApplications(client: PrismaClient = prisma) {
       return {
         id: `public:${row.id}`, source: "PUBLIC_SIA" as const, status: row.status, version: row.version,
         createdAt: row.submittedAt!, owner: { displayName: row.fullName ?? "Public applicant" },
-        payload: { tier: row.programPreference ?? "PBA_30_DAYS", idea: row.businessInterest ?? "", goal: row.goals ?? "", experience: row.entrepreneurialStage ?? "", location: [row.district, row.state].filter(Boolean).join(", "), timeCommitment: "Not collected for public SIA applications", mobile: row.mobile, email: row.email, preferredCentre: row.preferredCentre, referral, phoneVerified: !!row.phoneVerifiedAt, consentVersion: row.consentVersion },
+        payload: { tier: row.programPreference ?? "NOT_SELECTED", idea: row.businessInterest ?? "", goal: row.goals ?? "", experience: row.entrepreneurialStage ?? "", location: [row.city ?? row.district, row.state].filter(Boolean).join(", "), timeCommitment: "Not collected for public applications", mobile: row.mobile, email: row.email, preferredCentre: row.preferredCentre, referral, phoneVerified: !!row.phoneVerifiedAt, consentVersion: row.consentVersion },
         history: row.events.map(event => ({ fromStatus: null, toStatus: event.action, reason: event.reason ?? "", createdAt: event.createdAt }))
       };
     });
@@ -154,13 +155,14 @@ export function createStartupApplications(client: PrismaClient = prisma) {
       const actor = await db.user.findUniqueOrThrow({ where: { id: userId }, select: { personId: true } });
       if (input.id.startsWith("public:")) {
         const publicId = input.id.slice("public:".length);
-        const row = await db.startupPublicApplicant.findFirst({ where: { id: publicId, organizationId: companyId, status: { in: ["SUBMITTED", "IN_REVIEW", "CLARIFICATION_REQUIRED", "RETURNED_TO_AO"] }, submittedAt: { not: null }, phoneVerifiedAt: { not: null }, consentVersion: "startup-public-sia-v1" }, select: { id: true, version: true, status: true } });
+        const row = await db.startupPublicApplicant.findFirst({ where: { id: publicId, organizationId: companyId, status: { in: ["SUBMITTED", "IN_REVIEW", "CLARIFICATION_REQUIRED", "RETURNED_TO_AO"] }, submittedAt: { not: null }, consentedAt: { not: null }, OR: [{ consentVersion: STARTUP_MANUAL_CONSENT_VERSION }, { consentVersion: STARTUP_OTP_CONSENT_VERSION, phoneVerifiedAt: { not: null } }] }, select: { id: true, version: true, status: true, consentVersion: true } });
         if (!row || row.version !== input.version || !canTransitionStartupApplication(row.status, input.decision)) throw new AccessError("Public application decision unavailable or already recorded");
+        if (row.consentVersion === STARTUP_MANUAL_CONSENT_VERSION && row.status === "SUBMITTED") throw new AccessError("The assigned AO must complete contact review and forward this application before a leadership decision");
         if (["CLARIFICATION_REQUIRED", "RETURNED_TO_AO"].includes(input.decision)) {
           const assignment = await db.startupAdmissionAssignment.findFirst({ where: { applicantId: row.id, status: "ACTIVE" }, select: { id: true } });
           if (!assignment) throw new AccessError("Assign an active Administrative Officer before returning this application for follow-up");
         }
-        const changed = await db.startupPublicApplicant.updateMany({ where: { id: row.id, organizationId: companyId, version: input.version, status: row.status, submittedAt: { not: null }, phoneVerifiedAt: { not: null } }, data: { status: input.decision, version: { increment: 1 } } });
+        const changed = await db.startupPublicApplicant.updateMany({ where: { id: row.id, organizationId: companyId, version: input.version, status: row.status, submittedAt: { not: null }, consentedAt: { not: null }, OR: [{ consentVersion: STARTUP_MANUAL_CONSENT_VERSION }, { consentVersion: STARTUP_OTP_CONSENT_VERSION, phoneVerifiedAt: { not: null } }] }, data: { status: input.decision, version: { increment: 1 } } });
         if (changed.count !== 1) throw new AccessError("Application changed. Refresh before deciding");
         await db.startupApplicationEvent.create({ data: { applicantId: row.id, actorUserId: userId, action: `PUBLIC_APPLICATION_${input.decision}`, reason: input.reason, metadata: JSON.stringify({ version: input.version + 1 }) } });
         await operationalEvent(db, { actorUserId: userId, actorPersonId: actor.personId, organizationId: divisionId, action: `startup.public_application.${input.decision.toLowerCase()}`, entityType: "StartupPublicApplicant", entityId: row.id, result: "SUCCESS", metadata: { previousStatus: row.status, nextStatus: input.decision, version: input.version + 1 } });

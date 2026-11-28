@@ -8,6 +8,7 @@ import { createStartupAdmissionIntakes } from "@/server/group/startup-admission-
 const answerSchema = z.object({
   fullName: z.string().trim().max(120).optional(),
   mobile: z.union([z.string().trim().regex(/^\+[1-9]\d{7,14}$/), z.literal("")]).optional(),
+  whatsapp: z.union([z.string().trim().regex(/^\+[1-9]\d{7,14}$/), z.literal("")]).optional(),
   email: z.union([z.email().max(254), z.literal("")]).optional(),
   country: z.string().regex(/^[A-Z]{2}$/).optional(),
   education: z.enum(["SECONDARY", "HIGHER_SECONDARY", "DIPLOMA", "UNDERGRADUATE", "POSTGRADUATE", "OTHER"]).optional(),
@@ -26,7 +27,10 @@ const sendOtpSchema = z.object({ mobile: z.string().trim().regex(/^\+[1-9]\d{7,1
 const verifySchema = z.object({ challengeId: z.uuid(), code: z.string().regex(/^\d{6}$/) }).strict();
 const submitSchema = answerSchema.extend({
   fullName: z.string().trim().min(2).max(120), mobile: z.string().trim().regex(/^\+[1-9]\d{7,14}$/),
-  email: z.union([z.email().max(254), z.literal("")]), state: z.string().trim().min(2).max(100), city: z.string().trim().min(2).max(100).optional(), district: z.string().trim().min(2).max(100),
+  whatsapp: z.string().trim().regex(/^\+[1-9]\d{7,14}$/), email: z.email().max(254),
+  country: z.string().regex(/^[A-Z]{2}$/), education: z.enum(["SECONDARY", "HIGHER_SECONDARY", "DIPLOMA", "UNDERGRADUATE", "POSTGRADUATE", "OTHER"]),
+  dateOfBirth: z.iso.date().refine(value => value <= new Date().toISOString().slice(0, 10), "Date of birth cannot be in the future"),
+  state: z.string().trim().min(2).max(100), city: z.string().trim().min(2).max(100), district: z.string().trim().max(100).optional(),
   programPreference: z.enum(["PBA_30_DAYS", "PBA_180_DAYS"]).optional(), entrepreneurialStage: z.string().trim().min(3).max(500).optional(),
   businessInterest: z.string().trim().min(8).max(1500).optional(), goals: z.string().trim().min(8).max(1500).optional(), consent: z.literal(true)
 }).strict();
@@ -37,7 +41,9 @@ export type StartupPublicAnswers = z.infer<typeof answerSchema>;
 export class StartupPublicUnavailable extends Error { constructor(message = "The public application service is unavailable.") { super(message); } }
 export class StartupPublicAccessError extends Error { constructor(message = "The application draft is unavailable.") { super(message); } }
 
-const CONSENT_VERSION = "startup-public-sia-v1";
+export const STARTUP_MANUAL_CONSENT_VERSION = "startup-public-manual-v2";
+export const STARTUP_OTP_CONSENT_VERSION = "startup-public-sia-v1";
+const CONSENT_VERSION = STARTUP_MANUAL_CONSENT_VERSION;
 const DRAFT_TTL_MS = 30 * 86400_000;
 const POST_EXPIRY_RETENTION_MS = 30 * 86400_000;
 const OTP_TTL_MS = 10 * 60_000;
@@ -94,7 +100,7 @@ export function createStartupPublicAdmissions(client: PrismaClient = prisma, opt
   const consume = createSecurityLimiter(client, now);
   const intakes = createStartupAdmissionIntakes(client);
 
-  function keys() { return { possession: secret(env, "AUTH_SECRET"), otp: secret(env, "STARTUP_PUBLIC_OTP_SECRET") }; }
+  function keys() { return { possession: secret(env, "AUTH_SECRET") }; }
   function provider() {
     if (options.sendOtp) return { sender: options.sendOtp, simulatedCode: null as string | null, name: "CUSTOM" };
     const simulator = simulatorSender(env, nodeEnv);
@@ -195,7 +201,7 @@ export function createStartupPublicAdmissions(client: PrismaClient = prisma, opt
 
   async function sendOtp(cookieValue: string | undefined, raw: unknown, addressKey: string) {
     const input = sendOtpSchema.parse(raw);
-    const { row, keysValue } = await owned(cookieValue);
+    const { row } = await owned(cookieValue);
     if (row.status !== "DRAFT") throw new StartupPublicAccessError("This application is no longer a draft.");
     const delivery = provider();
     const mobile = normalizeMobile(input.mobile);
@@ -210,7 +216,7 @@ export function createStartupPublicAdmissions(client: PrismaClient = prisma, opt
     const phoneChanged = row.mobile !== mobile;
     const challenge = await client.$transaction(async db => {
       await db.startupOtpChallenge.updateMany({ where: { applicantId: row.id, status: { in: ["PENDING", "SENT"] } }, data: { status: "CANCELLED" } });
-      const saved = await db.startupOtpChallenge.create({ data: { id, applicantId: row.id, mobile, otpHash: digest(`startup-public-otp:${id}:${code}`, keysValue.otp), provider: delivery.name, status: "PENDING", expiresAt } });
+      const saved = await db.startupOtpChallenge.create({ data: { id, applicantId: row.id, mobile, otpHash: digest(`startup-public-otp:${id}:${code}`, secret(env, "STARTUP_PUBLIC_OTP_SECRET")), provider: delivery.name, status: "PENDING", expiresAt } });
       const changed = await db.startupPublicApplicant.updateMany({ where: { id: row.id, status: "DRAFT", version: row.version }, data: { mobile, normalizedMobile: mobile, ...(phoneChanged ? { phoneVerifiedAt: null } : {}), version: { increment: 1 } } });
       if (changed.count !== 1) throw new StartupPublicAccessError("Draft changed. Refresh and retry.");
       return saved;
@@ -228,14 +234,14 @@ export function createStartupPublicAdmissions(client: PrismaClient = prisma, opt
 
   async function verifyOtp(cookieValue: string | undefined, raw: unknown, addressKey: string) {
     const input = verifySchema.parse(raw);
-    const { row, keysValue } = await owned(cookieValue);
+    const { row } = await owned(cookieValue);
     await consume("startup:public:otp:verify:global", 120, 60);
     await consume(securityKey("startup:public:otp:verify:owner", row.id), 10, 900);
     await consume(securityKey("startup:public:otp:verify:ip", addressKey), 30, 900);
     const outcome = await client.$transaction(async db => {
       const challenge = await db.startupOtpChallenge.findFirst({ where: { id: input.challengeId, applicantId: row.id, mobile: row.mobile ?? "", status: "SENT", consumedAt: null }, select: { id: true, mobile: true, otpHash: true, attempts: true, expiresAt: true } });
       if (!challenge || !row.mobile || challenge.mobile !== row.mobile || challenge.expiresAt <= now() || challenge.attempts >= 5) return { error: "Invalid or expired code. Request a new code." as const };
-      const correct = safeEqualHex(challenge.otpHash, digest(`startup-public-otp:${challenge.id}:${input.code}`, keysValue.otp));
+      const correct = safeEqualHex(challenge.otpHash, digest(`startup-public-otp:${challenge.id}:${input.code}`, secret(env, "STARTUP_PUBLIC_OTP_SECRET")));
       if (!correct) {
         const failed = await db.startupOtpChallenge.updateMany({ where: { id: challenge.id, status: "SENT", consumedAt: null, attempts: { lt: 5 } }, data: { attempts: { increment: 1 }, ...(challenge.attempts >= 4 ? { status: "LOCKED" } : {}) } });
         return { error: failed.count !== 1 || challenge.attempts >= 4 ? "Too many attempts. Request a new code." as const : "Invalid or expired code." as const };
@@ -251,13 +257,15 @@ export function createStartupPublicAdmissions(client: PrismaClient = prisma, opt
     return outcome;
   }
 
-  async function submit(cookieValue: string | undefined, raw: unknown, referralToken?: string) {
+  async function submit(cookieValue: string | undefined, raw: unknown, referralToken?: string, addressKey = "unknown") {
     const input = submitSchema.parse(raw);
     const { row, keysValue } = await owned(cookieValue);
     if (["SUBMITTED", "IN_REVIEW", "CLARIFICATION_REQUIRED", "RETURNED_TO_AO", "APPROVED", "REJECTED"].includes(row.status) && row.submittedAt) return receipt(row, true);
     if (row.status !== "DRAFT" || row.expiresAt <= now()) throw new StartupPublicAccessError("This application draft has expired.");
-    if (!row.phoneVerifiedAt || row.normalizedMobile !== normalizeMobile(input.mobile)) throw new StartupPublicAccessError("Verify the mobile number on this application before submitting.");
-    if (row.mobile !== input.mobile) throw new StartupPublicAccessError("The verified mobile number changed. Verify it again.");
+    await consume("startup:public:submit:global", 100, 3600);
+    await consume(securityKey("startup:public:submit:ip", addressKey), 10, 3600);
+    await consume(securityKey("startup:public:submit:mobile", normalizeMobile(input.mobile)), 3, 86400);
+    await consume(securityKey("startup:public:submit:email", input.email.toLowerCase()), 3, 86400);
     if (input.programPreference) {
       const availability = await intakes.publicAvailability(now());
       if (!availability.programs.some(program => program.code === input.programPreference)) throw new StartupPublicAccessError("This PBA intake is not currently open. Please check back when applications reopen.");
@@ -265,14 +273,14 @@ export function createStartupPublicAdmissions(client: PrismaClient = prisma, opt
     const referral = await resolveReferral(client, referralToken, row.organizationId);
     const snapshot = JSON.stringify({ version: 1, ...(input.referralInfo ? { applicantProvided: input.referralInfo } : {}), ...(referral ? { verifiedReferral: referral } : {}) });
     const updated = await client.$transaction(async db => {
-      const changed = await db.startupPublicApplicant.updateMany({ where: { id: row.id, organizationId: row.organizationId, possessionSecretHash: row.possessionSecretHash, status: "DRAFT", version: row.version, phoneVerifiedAt: { not: null }, expiresAt: { gt: now() } }, data: { ...toApplicantData(input), mobile: input.mobile, normalizedMobile: normalizeMobile(input.mobile), consentVersion: CONSENT_VERSION, consentedAt: now(), referralSnapshot: snapshot, status: "SUBMITTED", submittedAt: now(), version: { increment: 1 } } });
+      const changed = await db.startupPublicApplicant.updateMany({ where: { id: row.id, organizationId: row.organizationId, possessionSecretHash: row.possessionSecretHash, status: "DRAFT", version: row.version, expiresAt: { gt: now() } }, data: { ...toApplicantData(input), mobile: input.mobile, normalizedMobile: normalizeMobile(input.mobile), phoneVerifiedAt: null, consentVersion: CONSENT_VERSION, consentedAt: now(), referralSnapshot: snapshot, status: "SUBMITTED", submittedAt: now(), version: { increment: 1 } } });
       if (changed.count !== 1) {
         const current = await db.startupPublicApplicant.findFirst({ where: { id: row.id, possessionSecretHash: row.possessionSecretHash, status: "SUBMITTED", submittedAt: { not: null } } });
         if (current) return current;
         throw new StartupPublicAccessError("Application changed. Refresh and retry.");
       }
       const current = await db.startupPublicApplicant.findUniqueOrThrow({ where: { id: row.id } });
-      await db.startupApplicationEvent.create({ data: { applicantId: row.id, action: "PUBLIC_APPLICATION_SUBMITTED", reason: "Applicant submitted the public SIA application", metadata: JSON.stringify({ consentVersion: CONSENT_VERSION, referralAttached: !!referral }) } });
+      await db.startupApplicationEvent.create({ data: { applicantId: row.id, action: "PUBLIC_APPLICATION_SUBMITTED", reason: "Applicant submitted the public application for manual AO review", metadata: JSON.stringify({ consentVersion: CONSENT_VERSION, referralAttached: !!referral, contactVerification: "PENDING_AO_REVIEW" }) } });
       return current;
     });
     void keysValue;
@@ -283,7 +291,7 @@ export function createStartupPublicAdmissions(client: PrismaClient = prisma, opt
     const input = z.object({ reference: z.string().regex(/^SIA-[A-F0-9]{18}$/) }).strict().parse(raw);
     const { row } = await owned(cookieValue);
     const submitted = await client.startupPublicApplicant.findFirst({ where: { id: row.id, reference: input.reference, status: { in: ["SUBMITTED", "IN_REVIEW", "CLARIFICATION_REQUIRED", "RETURNED_TO_AO", "APPROVED", "REJECTED"] }, submittedAt: { not: null } }, select: { reference: true, fullName: true, programPreference: true, status: true, submittedAt: true } });
-    if (!submitted) throw new StartupPublicAccessError("Application status could not be found for this verified draft.");
+    if (!submitted) throw new StartupPublicAccessError("Application status could not be found for this application.");
     return { reference: submitted.reference, applicantName: submitted.fullName, program: submitted.programPreference, status: submitted.status, submittedAt: submitted.submittedAt };
   }
 
@@ -294,6 +302,7 @@ function toApplicantData(input: StartupPublicAnswers) {
   return {
     ...(input.fullName !== undefined ? { fullName: input.fullName || null } : {}),
     ...(input.mobile !== undefined ? { mobile: input.mobile ? normalizeMobile(input.mobile) : null } : {}),
+    ...(input.whatsapp !== undefined ? { whatsapp: input.whatsapp || null } : {}),
     ...(input.email !== undefined ? { email: input.email || null } : {}),
     ...(input.country !== undefined ? { country: input.country } : {}),
     ...(input.education !== undefined ? { education: input.education } : {}),
@@ -307,10 +316,10 @@ function toApplicantData(input: StartupPublicAnswers) {
     ...(input.referralInfo !== undefined ? { referralSnapshot: JSON.stringify({ version: 1, applicantProvided: input.referralInfo }) } : {})
   };
 }
-function answersFrom(row: { fullName: string | null; mobile: string | null; email: string | null; country: string | null; education: string | null; dateOfBirth: Date | null; state: string | null; city: string | null; district: string | null; preferredCentre: string | null; programPreference: string | null; entrepreneurialStage: string | null; businessInterest: string | null; goals: string | null; referralSnapshot: string | null }): StartupPublicAnswers {
+function answersFrom(row: { fullName: string | null; mobile: string | null; whatsapp: string | null; email: string | null; country: string | null; education: string | null; dateOfBirth: Date | null; state: string | null; city: string | null; district: string | null; preferredCentre: string | null; programPreference: string | null; entrepreneurialStage: string | null; businessInterest: string | null; goals: string | null; referralSnapshot: string | null }): StartupPublicAnswers {
   let referralInfo = "";
   try { referralInfo = JSON.parse(row.referralSnapshot ?? "{}").applicantProvided ?? ""; } catch { /* legacy or corrupt snapshot is omitted from applicant form */ }
-  return answerSchema.parse({ fullName: row.fullName ?? "", mobile: row.mobile ?? "", email: row.email ?? "", country: row.country ?? undefined, education: row.education ?? undefined, dateOfBirth: row.dateOfBirth?.toISOString().slice(0, 10), state: row.state ?? "", city: row.city ?? "", district: row.district ?? "", preferredCentre: row.preferredCentre ?? "", programPreference: row.programPreference ?? undefined, entrepreneurialStage: row.entrepreneurialStage ?? "", businessInterest: row.businessInterest ?? "", goals: row.goals ?? "", referralInfo });
+  return answerSchema.parse({ fullName: row.fullName ?? "", mobile: row.mobile ?? "", whatsapp: row.whatsapp ?? "", email: row.email ?? "", country: row.country ?? undefined, education: row.education ?? undefined, dateOfBirth: row.dateOfBirth?.toISOString().slice(0, 10), state: row.state ?? "", city: row.city ?? "", district: row.district ?? "", preferredCentre: row.preferredCentre ?? "", programPreference: row.programPreference ?? undefined, entrepreneurialStage: row.entrepreneurialStage ?? "", businessInterest: row.businessInterest ?? "", goals: row.goals ?? "", referralInfo });
 }
 function receipt(row: { reference: string; fullName: string | null; programPreference: string | null; status: string; submittedAt: Date | null }, duplicate: boolean) {
   if (!row.submittedAt) throw new StartupPublicUnavailable();

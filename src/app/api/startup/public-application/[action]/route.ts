@@ -58,11 +58,9 @@ export async function POST(request: NextRequest, context: { params: Promise<{ ac
       return result;
     }
     const input = await body(request);
-    if (action === "otp-send") return response(await startupPublicAdmissions.sendOtp(cookieValue, input, address), 201);
-    if (action === "otp-verify") return response(await startupPublicAdmissions.verifyOtp(cookieValue, input, address));
     if (action === "submit") {
       const referral = jar.get("nicejobs_startup_ref")?.value;
-      return response(await startupPublicAdmissions.submit(cookieValue, input, referral), 201);
+      return response(await startupPublicAdmissions.submit(cookieValue, input, referral, address), 201);
     }
     if (action === "status") return response(await startupPublicAdmissions.status(cookieValue, input));
     return response({ error: "Not found." }, 404);

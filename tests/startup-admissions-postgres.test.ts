@@ -60,7 +60,7 @@ beforeAll(async () => {
 afterAll(() => postgres.dispose(), 30000);
 
 describe("Startup Skool PostgreSQL admissions acceptance", () => {
-  it("persists a public SIA application through OTP, status lookup, AO work and leadership review", async () => {
+  it("persists a manual public application through status lookup, AO work and leadership review", async () => {
     const beforeUsers = await db.user.count();
     const draft = await publicAdmissions.createDraft(undefined, "acceptance-public-applicant");
     applicantCookie = draft.cookie;
@@ -69,29 +69,21 @@ describe("Startup Skool PostgreSQL admissions acceptance", () => {
     await expect(publicAdmissions.readDraft(`${applicantId}.${randomBytes(32).toString("base64url")}`)).rejects.toThrow();
 
     const answers = {
-      fullName: "Synthetic SIA Applicant", mobile: "+919876500001", email: "applicant@startup-test.invalid",
-      state: "Test State", district: "Test District", programPreference: "PBA_30_DAYS" as const,
+      fullName: "Synthetic SIA Applicant", mobile: "+919876500001", whatsapp: "+919876500001", email: "applicant@startup-test.invalid", education: "UNDERGRADUATE" as const, dateOfBirth: "2001-01-20", country: "IN",
+      state: "Test State", city: "Test City", district: "Test District", programPreference: "PBA_30_DAYS" as const,
       entrepreneurialStage: "I have a business idea", businessInterest: "A local service business idea for this database acceptance run",
       goals: "Test how I can validate my business idea with customers", preferredCentre: "Synthetic test centre", referralInfo: "synthetic acceptance referral"
     };
     await publicAdmissions.updateDraft(applicantCookie, answers, "acceptance-public-applicant");
     expect((await publicAdmissions.readDraft(applicantCookie)).answers).toMatchObject({ fullName: answers.fullName, programPreference: answers.programPreference });
-    const challenge = await publicAdmissions.sendOtp(applicantCookie, { mobile: answers.mobile }, "acceptance-public-applicant");
-    expect(await db.startupOtpChallenge.count({ where: { applicantId, status: "SENT" } })).toBe(1);
-    for (let attempt = 0; attempt < 5; attempt++) await expect(publicAdmissions.verifyOtp(applicantCookie, { challengeId: challenge.challengeId, code: "000000" }, "acceptance-public-applicant")).rejects.toThrow(/invalid|too many/i);
-    expect(await db.startupOtpChallenge.findUniqueOrThrow({ where: { id: challenge.challengeId }, select: { attempts: true, status: true } })).toMatchObject({ attempts: 5, status: "LOCKED" });
-    await expect(publicAdmissions.sendOtp(applicantCookie, { mobile: answers.mobile }, "acceptance-public-applicant")).rejects.toThrow();
-    // Challenge.createdAt uses the database clock; leave a small skew allowance beyond the 60-second cooldown.
-    clock = new Date(clock.getTime() + 70_000);
-    const replacement = await publicAdmissions.sendOtp(applicantCookie, { mobile: answers.mobile }, "acceptance-public-applicant");
-    await publicAdmissions.verifyOtp(applicantCookie, { challengeId: replacement.challengeId, code: otpCode }, "acceptance-public-applicant");
-    expect((await publicAdmissions.readDraft(applicantCookie)).verified).toBe(true);
+    expect((await publicAdmissions.readDraft(applicantCookie)).verified).toBe(false);
+    expect(await db.startupOtpChallenge.count({ where: { applicantId } })).toBe(0);
 
     const open = await createStartupAdmissionIntakes(db).publicAvailability(clock);
     expect(open.programs.map(item => item.code)).toContain("PBA_30_DAYS");
     const receipt = await publicAdmissions.submit(applicantCookie, { ...answers, consent: true });
     expect(receipt).toMatchObject({ applicantName: answers.fullName, status: "SUBMITTED", duplicate: false });
-    expect(await db.startupPublicApplicant.count({ where: { id: applicantId, status: "SUBMITTED", consentVersion: "startup-public-sia-v1", phoneVerifiedAt: { not: null } } })).toBe(1);
+    expect(await db.startupPublicApplicant.count({ where: { id: applicantId, status: "SUBMITTED", consentVersion: "startup-public-manual-v2", phoneVerifiedAt: null, whatsapp: answers.whatsapp } })).toBe(1);
     expect(await db.user.count()).toBe(beforeUsers);
     expect((await publicAdmissions.submit(applicantCookie, { ...answers, consent: true })).duplicate).toBe(true);
     expect(await publicAdmissions.status(applicantCookie, { reference: receipt.reference })).toMatchObject({ reference: appReference, status: "SUBMITTED" });
@@ -106,6 +98,8 @@ describe("Startup Skool PostgreSQL admissions acceptance", () => {
     await expect(desk.page("unassigned-synthetic-user")).rejects.toThrow();
     const otherBrandId = (await db.brand.findUniqueOrThrow({ where: { organizationId_slug: { organizationId: companyId, slug: "aira-labs" } }, select: { id: true } })).id;
     await expect(leadership.reviewForBoss(bossUserId, otherBrandId, { id: `public:${applicantId}`, version: 0, decision: "APPROVED", reason: "Cross-brand review must be denied." })).rejects.toThrow();
+    await expect(leadership.reviewForBoss(bossUserId, brandId, { id: `public:${applicantId}`, version: 2, decision: "APPROVED", reason: "AO review has not happened." })).rejects.toThrow();
+    await expect(desk.forward(officerUserId, { caseId: `public:${applicantId}`, outcome: "READY_FOR_LEADERSHIP_REVIEW", reviewNote: "No recorded contact attempt exists yet.", contactVerified: "yes", programReviewed: "yes", locationReviewed: "yes" })).rejects.toThrow(/contact attempt/i);
     await desk.addFollowup(officerUserId, { caseId: `public:${applicantId}`, contactMethod: "CALL", outcome: "CONTACTED", note: "Synthetic acceptance contact attempt recorded.", nextFollowUpAt: new Date(clock.getTime() + 86400000).toISOString() });
     expect(await db.startupAdmissionFollowUp.count({ where: { applicantId, actorUserId: officerUserId, status: "OPEN" } })).toBe(1);
     const savedFollowup = await db.startupAdmissionFollowUp.findFirstOrThrow({ where: { applicantId, actorUserId: officerUserId }, select: { id: true, note: true } });
