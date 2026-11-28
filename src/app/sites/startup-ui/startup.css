@@ -560,10 +560,24 @@
 .startup-review-row button { color: #74152c; }
 .startup-chat-review form { margin-top: 16px; }
 .startup-chat-disclaimer { display: flex; align-items: flex-start; gap: 8px; margin: 20px 0 0; color: #706763; font-size: .88rem; }
-.ax-whatsapp-admissions { position: fixed; right: max(20px, env(safe-area-inset-right)); bottom: max(20px, env(safe-area-inset-bottom)); z-index: 40; display: inline-flex; align-items: center; gap: 10px; min-height: 48px; padding: 10px 17px; border: 1px solid #d4af62; border-radius: 999px; background: #570713; color: #fff; box-shadow: 0 8px 28px #17101455; font-size: 14px; font-weight: 700; text-decoration: none; }
-.ax-whatsapp-admissions svg { width: 24px; height: 24px; flex: none; }
+.ax-whatsapp-admissions { position: fixed; right: max(20px, env(safe-area-inset-right)); bottom: max(20px, env(safe-area-inset-bottom)); z-index: 40; display: grid; place-items: center; width: 52px; height: 52px; padding: 0; border: 1px solid #d4af62; border-radius: 50%; background: #570713; color: #fff; box-shadow: 0 8px 28px #17101455; cursor: pointer; }
+.ax-whatsapp-admissions svg { width: 25px; height: 25px; }
 .ax-whatsapp-admissions:hover { background: #8b1025; }
 .ax-whatsapp-admissions:focus-visible { outline: 3px solid #d4af62; outline-offset: 3px; }
-@media (max-width: 600px) { .ax-whatsapp-admissions { right: max(12px, env(safe-area-inset-right)); bottom: max(12px, env(safe-area-inset-bottom)); padding: 10px 13px; } }
+.ax-whatsapp-dialog { width: min(420px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); padding: 28px; border: 1px solid #d4af62; border-radius: 20px; background: #fffaf3; color: #171014; box-shadow: 0 24px 64px #17101466; }
+.ax-whatsapp-dialog::backdrop { background: #171014a8; }
+.ax-whatsapp-dialog form { display: grid; gap: 14px; }
+.ax-whatsapp-dialog h2, .ax-whatsapp-dialog p { margin: 0; }
+.ax-whatsapp-dialog h2 { color: #570713; font-size: clamp(24px, 5vw, 30px); line-height: 1.15; }
+.ax-whatsapp-dialog p { line-height: 1.5; }
+.ax-whatsapp-dialog .ax-whatsapp-eyebrow { color: #8b1025; font-size: 12px; font-weight: 800; letter-spacing: .08em; }
+.ax-whatsapp-dialog label { margin-top: 8px; font-weight: 700; }
+.ax-whatsapp-dialog input { width: 100%; min-height: 48px; padding: 10px 12px; border: 1px solid #b99d8b; border-radius: 10px; background: #fff; color: #171014; font: inherit; }
+.ax-whatsapp-dialog input:focus-visible, .ax-whatsapp-dialog button:focus-visible { outline: 3px solid #d4af62; outline-offset: 2px; }
+.ax-whatsapp-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 10px; margin-top: 8px; }
+.ax-whatsapp-actions button { min-height: 44px; padding: 10px 14px; border: 1px solid #570713; border-radius: 10px; background: transparent; color: #570713; font: inherit; font-weight: 700; cursor: pointer; }
+.ax-whatsapp-actions button[type=submit] { background: #570713; color: #fff; }
+.ax-whatsapp-actions button:hover { background: #8b1025; color: #fff; }
+@media (max-width: 600px) { .ax-whatsapp-admissions { right: max(12px, env(safe-area-inset-right)); bottom: max(12px, env(safe-area-inset-bottom)); } .ax-whatsapp-dialog { padding: 22px; } }
 @media (max-width: 640px) { .startup-conversation { padding: 16px; } .startup-chat-note, .startup-chat-reply { max-width: 96%; } .startup-chat-controls { align-items: stretch; flex-direction: column; } .startup-chat-controls .startup-primary { justify-content: center; } }
 @media (prefers-reduced-motion: reduce) { .startup-progress span { transition: none; } }

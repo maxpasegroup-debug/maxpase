@@ -27,6 +27,7 @@ runInNewContext(compiled, { module: moduleTarget, exports: moduleTarget.exports,
   "./sia-assistant": { StartupSiaAssistant: () => createElement("span", null, "SIA guidance") }
 } as Record<string, unknown>)[name] ?? localRequire(name) });
 const StartupLanding = (moduleTarget.exports as { StartupLanding: ComponentType<{ home: string; login: string; name: string; description: string; image: string; ecosystem: string; focus: readonly string[]; faqs: readonly (readonly [string, string])[] }> }).StartupLanding;
+const startupWhatsAppLink = (moduleTarget.exports as { startupWhatsAppLink: (name: string) => string }).startupWhatsAppLink;
 const publicAppCompiled = transpileModule(readFileSync("src/app/sites/startup-ui/public-application.tsx", "utf8"), { compilerOptions: { module: ModuleKind.CommonJS, jsx: JsxEmit.ReactJSX, esModuleInterop: true } }).outputText;
 const publicAppTarget = { exports: {} };
 const PublicIcon = () => createElement("span", null);
@@ -87,8 +88,11 @@ describe("Startup Skool application entry", () => {
     const paths = portalPaths(site, true);
     const html = renderToStaticMarkup(createElement(StartupLanding, { home: paths.home, login: paths.login, name: site.name, description: site.description, image: site.image, ecosystem: "https://airaskillcity.com", focus: site.focus, faqs: [] }));
     expect(html).toContain('href="/apply"');
-    expect(html).toContain("https://wa.me/918590540657?text=");
+    expect(html).toContain('class="ax-whatsapp-admissions"');
     expect(html).toContain("Chat with AIRA Startup Skool admissions on WhatsApp");
+    expect(html).toContain('name="name"');
+    expect(html).toContain("Continue to WhatsApp");
+    expect(startupWhatsAppLink("  Asha Menon  ")).toBe(`https://wa.me/918590540657?text=${encodeURIComponent("Hey, I am Asha Menon. I am interested in AIRA STARTUP SKOOL's PBA program. Let's connect.")}`);
     expect(html).not.toContain("SIA guidance");
     expect(html).not.toContain("Join Now");
     expect(html).toContain("Not an entrepreneur? Become one.");
