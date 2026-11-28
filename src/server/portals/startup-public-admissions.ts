@@ -21,7 +21,8 @@ const answerSchema = z.object({
   entrepreneurialStage: z.string().trim().max(500).optional(),
   businessInterest: z.string().trim().max(1500).optional(),
   goals: z.string().trim().max(1500).optional(),
-  referralInfo: z.string().trim().max(160).optional()
+  referralInfo: z.string().trim().max(160).optional(),
+  discoverySource: z.enum(["FACEBOOK", "INSTAGRAM", "WHATSAPP", "GOOGLE", "FRIENDS"]).optional()
 }).strict();
 const sendOtpSchema = z.object({ mobile: z.string().trim().regex(/^\+[1-9]\d{7,14}$/) }).strict();
 const verifySchema = z.object({ challengeId: z.uuid(), code: z.string().regex(/^\d{6}$/) }).strict();
@@ -32,7 +33,8 @@ const submitSchema = answerSchema.extend({
   dateOfBirth: z.iso.date().refine(value => value <= new Date().toISOString().slice(0, 10), "Date of birth cannot be in the future"),
   state: z.string().trim().min(2).max(100), city: z.string().trim().min(2).max(100), district: z.string().trim().max(100).optional(),
   programPreference: z.enum(["PBA_30_DAYS", "PBA_180_DAYS"]).optional(), entrepreneurialStage: z.string().trim().min(3).max(500).optional(),
-  businessInterest: z.string().trim().min(8).max(1500).optional(), goals: z.string().trim().min(8).max(1500).optional(), consent: z.literal(true)
+  businessInterest: z.string().trim().min(8).max(1500).optional(), goals: z.string().trim().min(8).max(1500).optional(),
+  discoverySource: z.enum(["FACEBOOK", "INSTAGRAM", "WHATSAPP", "GOOGLE", "FRIENDS"]), consent: z.literal(true)
 }).strict();
 export const startupPublicDraftInput = answerSchema;
 export const startupPublicSubmissionInput = submitSchema;
@@ -176,12 +178,12 @@ export function createStartupPublicAdmissions(client: PrismaClient = prisma, opt
     const mobileChanged = input.mobile !== undefined && (input.mobile || null) !== row.mobile;
     if (mobileChanged) {
       await client.$transaction(async db => {
-        const changed = await db.startupPublicApplicant.updateMany({ where: { id: row.id, status: "DRAFT", version: row.version }, data: { ...toApplicantData(input), normalizedMobile: input.mobile ? normalizeMobile(input.mobile) : null, phoneVerifiedAt: null, version: { increment: 1 } } });
+        const changed = await db.startupPublicApplicant.updateMany({ where: { id: row.id, status: "DRAFT", version: row.version }, data: { ...toApplicantData(input, row.referralSnapshot), normalizedMobile: input.mobile ? normalizeMobile(input.mobile) : null, phoneVerifiedAt: null, version: { increment: 1 } } });
         if (changed.count !== 1) throw new StartupPublicAccessError("Draft changed. Refresh and retry.");
         await db.startupOtpChallenge.updateMany({ where: { applicantId: row.id, status: { in: ["PENDING", "SENT"] } }, data: { status: "CANCELLED" } });
       });
     } else {
-      const changed = await client.startupPublicApplicant.updateMany({ where: { id: row.id, status: "DRAFT", version: row.version, expiresAt: { gt: now() } }, data: { ...toApplicantData(input), version: { increment: 1 } } });
+      const changed = await client.startupPublicApplicant.updateMany({ where: { id: row.id, status: "DRAFT", version: row.version, expiresAt: { gt: now() } }, data: { ...toApplicantData(input, row.referralSnapshot), version: { increment: 1 } } });
       if (changed.count !== 1) throw new StartupPublicAccessError("Draft changed. Refresh and retry.");
     }
     void keysValue;
@@ -271,7 +273,7 @@ export function createStartupPublicAdmissions(client: PrismaClient = prisma, opt
       if (!availability.programs.some(program => program.code === input.programPreference)) throw new StartupPublicAccessError("This PBA intake is not currently open. Please check back when applications reopen.");
     }
     const referral = await resolveReferral(client, referralToken, row.organizationId);
-    const snapshot = JSON.stringify({ version: 1, ...(input.referralInfo ? { applicantProvided: input.referralInfo } : {}), ...(referral ? { verifiedReferral: referral } : {}) });
+    const snapshot = JSON.stringify({ version: 1, discoverySource: input.discoverySource, ...(input.referralInfo ? { applicantProvided: input.referralInfo } : {}), ...(referral ? { verifiedReferral: referral } : {}) });
     const updated = await client.$transaction(async db => {
       const changed = await db.startupPublicApplicant.updateMany({ where: { id: row.id, organizationId: row.organizationId, possessionSecretHash: row.possessionSecretHash, status: "DRAFT", version: row.version, expiresAt: { gt: now() } }, data: { ...toApplicantData(input), mobile: input.mobile, normalizedMobile: normalizeMobile(input.mobile), phoneVerifiedAt: null, consentVersion: CONSENT_VERSION, consentedAt: now(), referralSnapshot: snapshot, status: "SUBMITTED", submittedAt: now(), version: { increment: 1 } } });
       if (changed.count !== 1) {
@@ -298,7 +300,18 @@ export function createStartupPublicAdmissions(client: PrismaClient = prisma, opt
   return { createDraft, readDraft, updateDraft, deleteDraft, sendOtp, verifyOtp, submit, status, pruneExpired };
 }
 
-function toApplicantData(input: StartupPublicAnswers) {
+function referralAnswers(snapshot: string | null) {
+  try {
+    const parsed = JSON.parse(snapshot ?? "{}");
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+    return {
+      ...(typeof parsed.applicantProvided === "string" ? { applicantProvided: parsed.applicantProvided } : {}),
+      ...(submitSchema.shape.discoverySource.safeParse(parsed.discoverySource).success ? { discoverySource: parsed.discoverySource as string } : {})
+    };
+  } catch { return {}; }
+}
+function toApplicantData(input: StartupPublicAnswers, priorSnapshot: string | null = null) {
+  const referral = referralAnswers(priorSnapshot);
   return {
     ...(input.fullName !== undefined ? { fullName: input.fullName || null } : {}),
     ...(input.mobile !== undefined ? { mobile: input.mobile ? normalizeMobile(input.mobile) : null } : {}),
@@ -313,13 +326,12 @@ function toApplicantData(input: StartupPublicAnswers) {
     ...(input.entrepreneurialStage !== undefined ? { entrepreneurialStage: input.entrepreneurialStage || null } : {}),
     ...(input.businessInterest !== undefined ? { businessInterest: input.businessInterest || null } : {}),
     ...(input.goals !== undefined ? { goals: input.goals || null } : {}),
-    ...(input.referralInfo !== undefined ? { referralSnapshot: JSON.stringify({ version: 1, applicantProvided: input.referralInfo }) } : {})
+    ...(input.referralInfo !== undefined || input.discoverySource !== undefined ? { referralSnapshot: JSON.stringify({ version: 1, ...referral, ...(input.referralInfo !== undefined ? { applicantProvided: input.referralInfo } : {}), ...(input.discoverySource !== undefined ? { discoverySource: input.discoverySource } : {}) }) } : {})
   };
 }
 function answersFrom(row: { fullName: string | null; mobile: string | null; whatsapp: string | null; email: string | null; country: string | null; education: string | null; dateOfBirth: Date | null; state: string | null; city: string | null; district: string | null; preferredCentre: string | null; programPreference: string | null; entrepreneurialStage: string | null; businessInterest: string | null; goals: string | null; referralSnapshot: string | null }): StartupPublicAnswers {
-  let referralInfo = "";
-  try { referralInfo = JSON.parse(row.referralSnapshot ?? "{}").applicantProvided ?? ""; } catch { /* legacy or corrupt snapshot is omitted from applicant form */ }
-  return answerSchema.parse({ fullName: row.fullName ?? "", mobile: row.mobile ?? "", whatsapp: row.whatsapp ?? "", email: row.email ?? "", country: row.country ?? undefined, education: row.education ?? undefined, dateOfBirth: row.dateOfBirth?.toISOString().slice(0, 10), state: row.state ?? "", city: row.city ?? "", district: row.district ?? "", preferredCentre: row.preferredCentre ?? "", programPreference: row.programPreference ?? undefined, entrepreneurialStage: row.entrepreneurialStage ?? "", businessInterest: row.businessInterest ?? "", goals: row.goals ?? "", referralInfo });
+  const referral = referralAnswers(row.referralSnapshot);
+  return answerSchema.parse({ fullName: row.fullName ?? "", mobile: row.mobile ?? "", whatsapp: row.whatsapp ?? "", email: row.email ?? "", country: row.country ?? undefined, education: row.education ?? undefined, dateOfBirth: row.dateOfBirth?.toISOString().slice(0, 10), state: row.state ?? "", city: row.city ?? "", district: row.district ?? "", preferredCentre: row.preferredCentre ?? "", programPreference: row.programPreference ?? undefined, entrepreneurialStage: row.entrepreneurialStage ?? "", businessInterest: row.businessInterest ?? "", goals: row.goals ?? "", referralInfo: referral.applicantProvided ?? "", discoverySource: referral.discoverySource });
 }
 function receipt(row: { reference: string; fullName: string | null; programPreference: string | null; status: string; submittedAt: Date | null }, duplicate: boolean) {
   if (!row.submittedAt) throw new StartupPublicUnavailable();

@@ -6,11 +6,11 @@ import { ArrowRight } from "lucide-react";
 import { getCountries, getCountryCallingCode, parsePhoneNumberFromString, type CountryCode } from "libphonenumber-js";
 import "./startup-application.css";
 
-type Form = { fullName: string; mobile: string; whatsapp: string; email: string; education: string; dateOfBirth: string; country: string; city: string; state: string };
+type Form = { fullName: string; mobile: string; whatsapp: string; email: string; education: string; dateOfBirth: string; country: string; city: string; state: string; discoverySource: string };
 type Draft = { answers?: Partial<Form>; reference?: string | null; submittedAt?: string | null; status?: string };
 type Receipt = { reference: string; status: string };
 type FieldIssue = { field: keyof Form | "consent"; message: string };
-const empty: Form = { fullName: "", mobile: "", whatsapp: "", email: "", education: "", dateOfBirth: "", country: "IN", city: "", state: "" };
+const empty: Form = { fullName: "", mobile: "", whatsapp: "", email: "", education: "", dateOfBirth: "", country: "IN", city: "", state: "", discoverySource: "" };
 const states = ["Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar", "Chhattisgarh", "Goa", "Gujarat", "Haryana", "Himachal Pradesh", "Jharkhand", "Karnataka", "Kerala", "Madhya Pradesh", "Maharashtra", "Manipur", "Meghalaya", "Mizoram", "Nagaland", "Odisha", "Punjab", "Rajasthan", "Sikkim", "Tamil Nadu", "Telangana", "Tripura", "Uttar Pradesh", "Uttarakhand", "West Bengal", "Andaman and Nicobar Islands", "Chandigarh", "Dadra and Nagar Haveli and Daman and Diu", "Delhi", "Jammu and Kashmir", "Ladakh", "Lakshadweep", "Puducherry"];
 const keralaCities = ["Alappuzha", "Ernakulam", "Kannur", "Kasaragod", "Kochi", "Kollam", "Kottayam", "Kozhikode", "Malappuram", "Palakkad", "Pathanamthitta", "Thiruvananthapuram", "Thrissur", "Wayanad"];
 const regionNames = new Intl.DisplayNames(["en"], { type: "region" });
@@ -109,6 +109,7 @@ export function StartupApplicationPage({ home, login }: { home: string; login: s
     if (!form.country) { setFieldIssue({ field: "country", message: "Choose your country of residence." }); return; }
     if (form.state.trim().length < 2) { setFieldIssue({ field: "state", message: "Choose or enter your state or region." }); return; }
     if (form.city.trim().length < 2) { setFieldIssue({ field: "city", message: "Choose or enter your city." }); return; }
+    if (!form.discoverySource) { setFieldIssue({ field: "discoverySource", message: "Choose how you heard about AIRA Startup Skool." }); return; }
     if (!consent) { setFieldIssue({ field: "consent", message: "Please agree to the application review notice." }); return; }
     setBusy(true); setError(""); setFieldIssue(null);
     try { const mobile = mobileNumber()!; const result = await request<Receipt>("submit", "POST", { ...form, mobile, whatsapp: sameWhatsApp ? mobile : form.whatsapp.trim(), consent: true }); setReceipt(result); setStep("done"); }
@@ -147,6 +148,7 @@ export function StartupApplicationPage({ home, login }: { home: string; login: s
             {stateChoice === "OTHER" && <label>Enter your state or region<input autoComplete="address-level1" value={form.state} onChange={e=>update("state",e.target.value)} required {...fieldProps("state")}/>{fieldMessage("state")}</label>}
             <label>City<select value={cityChoice} onChange={e=>{setCityChoice(e.target.value);update("city",e.target.value === "OTHER" ? "" : e.target.value)}} required {...fieldProps("city")}><option value="">Choose your city</option>{form.country === "IN" && form.state === "Kerala" && keralaCities.map(city=><option key={city}>{city}</option>)}<option value="OTHER">Other city</option></select>{cityChoice !== "OTHER" && fieldMessage("city")}</label>
             {cityChoice === "OTHER" && <label>Enter your city<input autoComplete="address-level2" value={form.city} onChange={e=>update("city",e.target.value)} required {...fieldProps("city")}/>{fieldMessage("city")}</label>}
+            <label className="startup-discovery-field">How did you hear about AIRA Startup Skool?<select value={form.discoverySource} onChange={e=>update("discoverySource",e.target.value)} required {...fieldProps("discoverySource")}><option value="">Choose one</option><option value="FACEBOOK">Facebook</option><option value="INSTAGRAM">Instagram</option><option value="WHATSAPP">WhatsApp</option><option value="GOOGLE">Google</option><option value="FRIENDS">Friends</option></select>{fieldMessage("discoverySource")}</label>
           </div>}
           {step === "location" && <><label className="startup-apply-consent"><input type="checkbox" checked={consent} onChange={e=>{setConsent(e.target.checked);setFieldIssue(null)}} required {...fieldProps("consent")}/> I agree that AIRA Startup Skool may use my details to review my application and contact me.</label>{fieldMessage("consent")}</>}
           {error && <p className="startup-apply-error" role="alert">{error}</p>}

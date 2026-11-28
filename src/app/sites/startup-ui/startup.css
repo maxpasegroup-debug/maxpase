@@ -560,5 +560,10 @@
 .startup-review-row button { color: #74152c; }
 .startup-chat-review form { margin-top: 16px; }
 .startup-chat-disclaimer { display: flex; align-items: flex-start; gap: 8px; margin: 20px 0 0; color: #706763; font-size: .88rem; }
+.ax-whatsapp-admissions { position: fixed; right: max(20px, env(safe-area-inset-right)); bottom: max(20px, env(safe-area-inset-bottom)); z-index: 40; display: inline-flex; align-items: center; gap: 10px; min-height: 48px; padding: 10px 17px; border: 1px solid #d4af62; border-radius: 999px; background: #570713; color: #fff; box-shadow: 0 8px 28px #17101455; font-size: 14px; font-weight: 700; text-decoration: none; }
+.ax-whatsapp-admissions svg { width: 24px; height: 24px; flex: none; }
+.ax-whatsapp-admissions:hover { background: #8b1025; }
+.ax-whatsapp-admissions:focus-visible { outline: 3px solid #d4af62; outline-offset: 3px; }
+@media (max-width: 600px) { .ax-whatsapp-admissions { right: max(12px, env(safe-area-inset-right)); bottom: max(12px, env(safe-area-inset-bottom)); padding: 10px 13px; } }
 @media (max-width: 640px) { .startup-conversation { padding: 16px; } .startup-chat-note, .startup-chat-reply { max-width: 96%; } .startup-chat-controls { align-items: stretch; flex-direction: column; } .startup-chat-controls .startup-primary { justify-content: center; } }
 @media (prefers-reduced-motion: reduce) { .startup-progress span { transition: none; } }

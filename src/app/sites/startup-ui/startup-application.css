@@ -22,6 +22,7 @@
 .startup-apply-steps .startup-apply-progress{margin:0 0 8px}
 .startup-apply-steps>small{color:#776a70;font-size:11px}
 .startup-apply-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:17px}
+.startup-apply-grid .startup-discovery-field{grid-column:1/-1}
 .startup-apply-span{grid-column:1/-1}
 .startup-phone-block{display:grid;align-content:start;gap:8px;min-width:0;color:#39232c;font-size:13px;font-weight:700}
 .startup-phone-row{display:grid;grid-template-columns:82px minmax(0,1fr);gap:8px;min-width:0}

@@ -72,7 +72,7 @@ describe("Startup Skool PostgreSQL admissions acceptance", () => {
       fullName: "Synthetic SIA Applicant", mobile: "+919876500001", whatsapp: "+919876500001", email: "applicant@startup-test.invalid", education: "UNDERGRADUATE" as const, dateOfBirth: "2001-01-20", country: "IN",
       state: "Test State", city: "Test City", district: "Test District", programPreference: "PBA_30_DAYS" as const,
       entrepreneurialStage: "I have a business idea", businessInterest: "A local service business idea for this database acceptance run",
-      goals: "Test how I can validate my business idea with customers", preferredCentre: "Synthetic test centre", referralInfo: "synthetic acceptance referral"
+      goals: "Test how I can validate my business idea with customers", preferredCentre: "Synthetic test centre", referralInfo: "synthetic acceptance referral", discoverySource: "FACEBOOK" as const
     };
     await publicAdmissions.updateDraft(applicantCookie, answers, "acceptance-public-applicant");
     expect((await publicAdmissions.readDraft(applicantCookie)).answers).toMatchObject({ fullName: answers.fullName, programPreference: answers.programPreference });
@@ -84,6 +84,7 @@ describe("Startup Skool PostgreSQL admissions acceptance", () => {
     const receipt = await publicAdmissions.submit(applicantCookie, { ...answers, consent: true });
     expect(receipt).toMatchObject({ applicantName: answers.fullName, status: "SUBMITTED", duplicate: false });
     expect(await db.startupPublicApplicant.count({ where: { id: applicantId, status: "SUBMITTED", consentVersion: "startup-public-manual-v2", phoneVerifiedAt: null, whatsapp: answers.whatsapp } })).toBe(1);
+    expect(JSON.parse((await db.startupPublicApplicant.findUniqueOrThrow({ where: { id: applicantId }, select: { referralSnapshot: true } })).referralSnapshot ?? "{}")).toMatchObject({ discoverySource: "FACEBOOK", applicantProvided: answers.referralInfo });
     expect(await db.user.count()).toBe(beforeUsers);
     expect((await publicAdmissions.submit(applicantCookie, { ...answers, consent: true })).duplicate).toBe(true);
     expect(await publicAdmissions.status(applicantCookie, { reference: receipt.reference })).toMatchObject({ reference: appReference, status: "SUBMITTED" });

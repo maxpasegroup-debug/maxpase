@@ -87,6 +87,8 @@ describe("Startup Skool application entry", () => {
     const paths = portalPaths(site, true);
     const html = renderToStaticMarkup(createElement(StartupLanding, { home: paths.home, login: paths.login, name: site.name, description: site.description, image: site.image, ecosystem: "https://airaskillcity.com", focus: site.focus, faqs: [] }));
     expect(html).toContain('href="/apply"');
+    expect(html).toContain("https://wa.me/918590540657?text=");
+    expect(html).toContain("Chat with AIRA Startup Skool admissions on WhatsApp");
     expect(html).not.toContain("SIA guidance");
     expect(html).not.toContain("Join Now");
     expect(html).toContain("Not an entrepreneur? Become one.");
@@ -122,13 +124,15 @@ describe("Startup Skool application entry", () => {
 
   it("accepts resumable partial drafts but requires complete application data and consent at submission", () => {
     expect(startupPublicDraftInput.safeParse({ fullName: "", mobile: "", programPreference: "" }).success).toBe(true);
-    const submitted = { fullName: "Asha Menon", mobile: "+919876543210", whatsapp: "+919876543210", email: "asha@example.test", education: "UNDERGRADUATE", dateOfBirth: "2001-01-20", country: "IN", state: "Kerala", city: "Kochi", consent: true };
+    const submitted = { fullName: "Asha Menon", mobile: "+919876543210", whatsapp: "+919876543210", email: "asha@example.test", education: "UNDERGRADUATE", dateOfBirth: "2001-01-20", country: "IN", state: "Kerala", city: "Kochi", discoverySource: "FACEBOOK", consent: true };
     expect(startupPublicSubmissionInput.safeParse(submitted).success).toBe(true);
     expect(startupPublicSubmissionInput.safeParse({ ...submitted, mobile: "9876543210" }).success).toBe(false);
     expect(startupPublicSubmissionInput.safeParse({ ...submitted, consent: false }).success).toBe(false);
     expect(startupPublicSubmissionInput.safeParse({ ...submitted, email: "" }).success).toBe(false);
     expect(startupPublicSubmissionInput.safeParse({ ...submitted, whatsapp: "" }).success).toBe(false);
     expect(startupPublicSubmissionInput.safeParse({ ...submitted, country: "" }).success).toBe(false);
+    expect(startupPublicSubmissionInput.safeParse({ ...submitted, discoverySource: "" }).success).toBe(false);
+    expect(startupPublicSubmissionInput.safeParse({ ...submitted, discoverySource: "UNKNOWN" }).success).toBe(false);
     expect(startupPublicSubmissionInput.safeParse({ ...submitted, programPreference: "MBA" }).success).toBe(false);
     expect(startupPublicSubmissionInput.safeParse({ ...submitted, education: "SECRET", dateOfBirth: "2999-01-20", country: "India" }).success).toBe(false);
   });
