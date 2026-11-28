@@ -107,6 +107,8 @@ describe("Startup Skool application entry", () => {
     expect(html).not.toContain("Close application");
     expect(html).not.toContain("Continue to verification");
     expect(html).not.toContain("Send code");
+    expect(html).toContain("1 · Your details");
+    expect(html).toContain("2 · Location &amp; apply");
   });
 
   it("renders the public SIA application connected to secure draft-backed actions", () => {

@@ -16,13 +16,31 @@
 .startup-apply-progress{display:flex;gap:7px;margin:0 0 22px}
 .startup-apply-progress span{height:4px;flex:1;border-radius:99px;background:#e8dfd9}
 .startup-apply-progress .is-current{background:#8b1025}
+.startup-apply-steps{margin:0 0 22px}
+.startup-step-labels{display:flex;justify-content:space-between;gap:12px;margin:0 0 10px;color:#776a70;font-size:12px;font-weight:600}
+.startup-step-labels [aria-current=step]{color:#75112f;font-weight:800}
+.startup-apply-steps .startup-apply-progress{margin:0 0 8px}
+.startup-apply-steps>small{color:#776a70;font-size:11px}
 .startup-apply-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:17px}
 .startup-apply-span{grid-column:1/-1}
-.startup-phone-row{display:grid;grid-template-columns:minmax(0,44%) minmax(0,1fr);gap:8px;min-width:0}
-.startup-whatsapp-check{display:flex;align-items:center;gap:9px;font-weight:500;line-height:1.4}
+.startup-phone-block{display:grid;align-content:start;gap:8px;min-width:0;color:#39232c;font-size:13px;font-weight:700}
+.startup-phone-row{display:grid;grid-template-columns:82px minmax(0,1fr);gap:8px;min-width:0}
+.startup-dial-picker{position:relative;display:flex;align-items:center;justify-content:center;min-height:48px;border:1px solid #d9c9bf;border-radius:10px;background:#fff;color:#25151d}
+.startup-dial-picker select{position:absolute;inset:0;z-index:1;width:100%;height:100%;opacity:0;cursor:pointer}
+.startup-dial-picker>span{display:flex;align-items:center;gap:5px;pointer-events:none;white-space:nowrap}
+.startup-dial-picker>span span{font-size:17px;line-height:1}
+.startup-dial-picker:focus-within{outline:3px solid #d4af62;outline-offset:3px}
+.startup-whatsapp-check{display:flex;align-items:center;gap:9px;font-weight:500;line-height:1.4;cursor:pointer}
 .startup-apply-grid .startup-whatsapp-check input[type=checkbox]{width:18px;min-height:18px;height:18px;flex:none;accent-color:#8b1025}
 .startup-apply-grid label,.startup-apply-code{display:grid;gap:8px;min-width:0;color:#39232c;font-size:13px;font-weight:700}
+.startup-apply-grid .startup-whatsapp-check{display:flex;font-size:12px;color:#55464d}
 .startup-apply-grid :is(input,select),.startup-apply-code input{width:100%;min-width:0;min-height:48px;padding:0 13px;border:1px solid #d9c9bf;border-radius:10px;background:#fff;color:#25151d;color-scheme:light;font:inherit}
+.startup-apply-grid .startup-dial-picker select{padding:0;min-height:0;border:0}
+.startup-birth-field{grid-column:1/-1}
+.startup-birth-field input{max-width:260px}
+.startup-birth-field small{color:#675861;font-size:12px;font-weight:500}
+.startup-field-error{color:#a20e27;font-size:12px;font-weight:600;line-height:1.35}
+.startup-apply-grid [aria-invalid=true]{border-color:#a20e27}
 .startup-apply-grid :is(input,select):focus,.startup-apply-code input:focus{border-color:#8b1025;box-shadow:0 0 0 3px rgba(139,16,37,.12)}
 .startup-apply-primary{width:100%;min-height:52px;margin-top:22px;padding:0 18px;display:flex;align-items:center;justify-content:center;gap:9px;border:0;border-radius:11px;background:#8b1025;color:#fff;font:inherit;font-size:15px;font-weight:700;cursor:pointer}
 .startup-apply-primary:hover:not(:disabled){background:#570713}
